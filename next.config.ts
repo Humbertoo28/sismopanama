@@ -15,7 +15,7 @@ const csp = [
   "script-src 'self' 'unsafe-inline'",
   "style-src-elem 'self'",
   "style-src-attr 'unsafe-inline'",
-  "img-src 'self' data: https://*.tile.openstreetmap.org",
+  "img-src 'self' data: blob: https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org",
   "font-src 'self'",
   "connect-src 'self'",
   "worker-src 'self'",

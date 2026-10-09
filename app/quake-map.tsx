@@ -22,12 +22,66 @@ const dateTime = new Intl.DateTimeFormat("es-PA", {
   hour: "2-digit", minute: "2-digit", hour12: true,
 });
 
+export type MapLayerMode = "satellite" | "esri" | "streets";
+
+const TILE_CONFIG: Record<
+  MapLayerMode,
+  {
+    url: string;
+    options: {
+      subdomains?: string[];
+      maxZoom: number;
+      attribution: string;
+    };
+    overlayUrl?: string;
+  }
+> = {
+  satellite: {
+    // Google Híbrido: fotos satelitales nítidas + nombres de ciudades, carreteras y límites de Panamá
+    url: "https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+    options: {
+      subdomains: ["0", "1", "2", "3"],
+      maxZoom: 20,
+      attribution: "Imágenes satelitales &copy; Google",
+    },
+  },
+  esri: {
+    // Esri World Imagery (satelital puro de alta resolución) con límites de referencia
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    options: {
+      maxZoom: 19,
+      attribution: "Tiles &copy; Esri &mdash; Maxar, Earthstar Geographics",
+    },
+    overlayUrl:
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+  },
+  streets: {
+    // Esri World Street Map (mapa callejero y relieve topográfico)
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    options: {
+      maxZoom: 19,
+      attribution: "Tiles &copy; Esri",
+    },
+  },
+};
+
 const STEP_MS = 900;
 const RECENT_MS = 3 * 3_600_000;
 export default function QuakeMap({ events, mainshock, focus, alert, replayKey, onSelect, onReplay }: Props) {
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
+  const [mapMode, setMapMode] = useState<MapLayerMode>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sismo_map_mode") as MapLayerMode | null;
+      if (saved && (saved === "satellite" || saved === "esri" || saved === "streets")) {
+        return saved;
+      }
+    }
+    return "satellite";
+  });
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
+  const overlayLayerRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const focusedRef = useRef<Props["focus"]>(null);
   const popIn = useRef(true);
@@ -36,6 +90,29 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
   useEffect(() => {
     latest.current = { events, mainshock, onSelect, onReplay };
   });
+
+  // Respaldo de detección de Leaflet si onReady ya ocurrió antes
+  useEffect(() => {
+    if (ready || typeof window === "undefined") return;
+    const interval = window.setInterval(() => {
+      if ((window as any).L) {
+        setReady(true);
+        window.clearInterval(interval);
+      }
+    }, 150);
+    return () => window.clearInterval(interval);
+  }, [ready]);
+
+  const handleModeChange = (mode: MapLayerMode) => {
+    setMapMode(mode);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("sismo_map_mode", mode);
+      } catch {
+        // Ignorar si localStorage está bloqueado
+      }
+    }
+  };
 
   useEffect(() => {
     if (!ready || mapRef.current) return;
@@ -46,16 +123,12 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       minZoom: 6, maxBounds: PANAMA_MAP_BOUNDS, maxBoundsViscosity: 0.9,
     }).setView([8.46, -80.4], window.innerWidth < 760 ? 6 : 7);
     L.control.zoom({ position: "topright" }).addTo(map);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
-    }).addTo(map);
 
-    // Panamá resaltado: se atenúa todo lo que queda fuera de su contorno y se dibuja el borde.
+    // Panamá resaltado: se atenúa suavemente lo que queda fuera de su contorno y se dibuja el borde.
     const rings = PANAMA_RINGS.map(ring => ring.map(([lng, lat]) => [lat, lng]));
     const world = [[-85, -200], [-85, 200], [85, 200], [85, -200]];
-    L.polygon([world, ...rings], { className: "panama-mask", stroke: false, fillColor: "#072357", fillOpacity: 0.5, interactive: false }).addTo(map);
-    const outline = L.polygon(rings, { className: "panama-outline", color: "#ffffff", weight: 2.5, fill: false, interactive: false }).addTo(map);
+    L.polygon([world, ...rings], { className: "panama-mask", stroke: false, fillColor: "#072357", fillOpacity: 0.35, interactive: false }).addTo(map);
+    const outline = L.polygon(rings, { className: "panama-outline", color: "#ffffff", weight: 2.2, fill: false, interactive: false }).addTo(map);
     outline.getElement()?.setAttribute("pathLength", "1");
 
     // De cerca el contorno simplificado ya no coincide con la costa del mapa: se desvanece.
@@ -71,9 +144,39 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
+      tileLayerRef.current = null;
+      overlayLayerRef.current = null;
       markers.clear();
     };
   }, [ready]);
+
+  // Actualización dinámica de la capa satelital o callejera
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (!ready || !map || !L) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+      tileLayerRef.current = null;
+    }
+    if (overlayLayerRef.current) {
+      map.removeLayer(overlayLayerRef.current);
+      overlayLayerRef.current = null;
+    }
+
+    const cfg = TILE_CONFIG[mapMode];
+    const baseTile = L.tileLayer(cfg.url, cfg.options).addTo(map);
+    if (baseTile.bringToBack) {
+      baseTile.bringToBack();
+    }
+    tileLayerRef.current = baseTile;
+
+    if (cfg.overlayUrl) {
+      const overlayTile = L.tileLayer(cfg.overlayUrl, { maxZoom: 19 }).addTo(map);
+      overlayLayerRef.current = overlayTile;
+    }
+  }, [mapMode, ready]);
 
   useEffect(() => {
     const L = (window as any).L;
@@ -210,9 +313,40 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
 
   return (
     <>
-      <Script src="/leaflet.js" strategy="afterInteractive" onReady={() => setReady(true)} />
+      <Script
+        src="/leaflet.js"
+        strategy="afterInteractive"
+        onLoad={() => setReady(true)}
+        onReady={() => setReady(true)}
+      />
       <div id="leaflet-map" role="img" aria-label="Mapa interactivo de sismos en Panamá" />
-      {!ready && <div className="map-fallback">Cargando mapa…</div>}
+      <div className="map-layer-selector" role="group" aria-label="Modo de visualización del mapa">
+        <button
+          type="button"
+          className={`layer-btn${mapMode === "satellite" ? " active" : ""}`}
+          onClick={() => handleModeChange("satellite")}
+          title="Vista satelital híbrida (imágenes + nombres y rutas)"
+        >
+          🛰️ Satélite
+        </button>
+        <button
+          type="button"
+          className={`layer-btn${mapMode === "esri" ? " active" : ""}`}
+          onClick={() => handleModeChange("esri")}
+          title="Vista satelital pura Esri ArcGIS"
+        >
+          🌍 Esri Sat
+        </button>
+        <button
+          type="button"
+          className={`layer-btn${mapMode === "streets" ? " active" : ""}`}
+          onClick={() => handleModeChange("streets")}
+          title="Mapa callejero y relieve"
+        >
+          🗺️ Callejero
+        </button>
+      </div>
+      {!ready && <div className="map-fallback">Cargando mapa satelital…</div>}
     </>
   );
 }
