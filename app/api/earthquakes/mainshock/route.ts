@@ -33,6 +33,15 @@ function isValid(item: Earthquake) {
   );
 }
 
+// El detalle de un evento trae ~57 KB de "products" que la página no usa: se envía solo lo necesario.
+function slim({ id, properties: p, geometry }: Earthquake): Earthquake {
+  return {
+    id,
+    properties: { mag: p.mag, place: p.place, time: p.time, url: p.url, alert: p.alert, felt: p.felt, mmi: p.mmi, tsunami: p.tsunami },
+    geometry,
+  };
+}
+
 export async function GET() {
   try {
     const mainshock = (await queryUsgs({ eventid: MAINSHOCK_ID })) as Earthquake | null;
@@ -54,8 +63,8 @@ export async function GET() {
     );
 
     const result: MainshockResponse = {
-      mainshock,
-      aftershocks: { count: aftershocks.length, strongest },
+      mainshock: slim(mainshock),
+      aftershocks: { count: aftershocks.length, strongest: strongest && slim(strongest) },
       fetchedAt: new Date().toISOString(),
     };
     return Response.json(result, {
