@@ -11,9 +11,9 @@ export async function GET(request: Request) {
   try {
     const { events, catalogs } = await fetchPanamaEvents(SINCE);
     const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
-    // Caché corta: la página consulta cada ~25 s y un sismo nuevo debe verse cuanto antes.
+    // Caché ultra-rápida: la página consulta cada ~12 s y un sismo nuevo debe verse de inmediato.
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=15, stale-while-revalidate=60" },
+      headers: { "Cache-Control": "public, max-age=5, stale-while-revalidate=10" },
     });
   } catch (error) {
     console.error("Catálogos sísmicos no disponibles:", error);

@@ -260,19 +260,23 @@ export default function Home() {
   }, [mainshock, status]);
 
   useEffect(() => {
-    // Sondeo cada 25 segundos para detectar nuevos sismos de inmediato
+    // Sondeo rápido cada 12 segundos para detectar nuevos sismos con mínima latencia
     const timer = window.setInterval(() => {
       setRefreshKey(key => key + 1);
-    }, 25_000);
+    }, 12_000);
 
     const onVisible = () => {
       if (!document.hidden) setRefreshKey(key => key + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("pageshow", onVisible);
 
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pageshow", onVisible);
     };
   }, []);
 

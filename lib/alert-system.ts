@@ -20,8 +20,8 @@ const STORAGE_SEEN_KEY = "sismo_panama_seen_v2";
 // Un sismo que ocurrió hace más de esto ya no justifica sirena ni voz: se avisa en pantalla y en silencio.
 // Así, al reabrir la app o despertar el equipo no suena una alarma por algo que pasó hace rato.
 export const ALARM_MAX_AGE_MS = 15 * 60_000;
-// Tope de espera para que termine la sirena antes de hablar
-const SIREN_MAX_MS = 2500;
+// Duración de la sirena antes de que la voz hable de inmediato (1.3s para reacción rápida en iPhone)
+const SIREN_ALERT_MS = 1300;
 const SEEN_LIMIT = 400;
 
 let globalAudioCtx: AudioContext | null = null;
@@ -29,9 +29,23 @@ let currentAlarmNodes: { osc1: OscillatorNode; osc2?: OscillatorNode; gain: Gain
 let currentAudioElement: HTMLAudioElement | null = null;
 let activeUtterance: SpeechSynthesisUtterance | null = null;
 let cachedVoices: SpeechSynthesisVoice[] = [];
+let preloadedSiren: HTMLAudioElement | null = null;
 // Cada alerta nueva (o cada "silenciar") cambia la tanda: lo que quedó pendiente de la anterior se descarta.
 let alarmRun = 0;
 let alarmTimer: number | null = null;
+
+// Pre-cargar audio de la sirena en memoria para reproducción sin retardo de red
+export function getPreloadedSiren(): HTMLAudioElement | null {
+  if (typeof window === "undefined") return null;
+  if (!preloadedSiren) {
+    try {
+      preloadedSiren = new Audio("/siren.wav");
+      preloadedSiren.preload = "auto";
+      preloadedSiren.load();
+    } catch {}
+  }
+  return preloadedSiren;
+}
 
 // Cargar voces disponibles en el dispositivo tan pronto estén listas
 function loadVoices() {
@@ -45,12 +59,15 @@ function loadVoices() {
   return cachedVoices;
 }
 
-if (typeof window !== "undefined" && "speechSynthesis" in window) {
-  loadVoices();
-  if ("onvoiceschanged" in window.speechSynthesis) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      loadVoices();
-    };
+if (typeof window !== "undefined") {
+  getPreloadedSiren();
+  if ("speechSynthesis" in window) {
+    loadVoices();
+    if ("onvoiceschanged" in window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        loadVoices();
+      };
+    }
   }
 }
 
@@ -58,15 +75,46 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
 export function unlockAudioAndSpeech() {
   if (typeof window === "undefined") return;
   try {
-    getAudioContext();
+    const ctx = getAudioContext();
+    if (ctx) {
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+      try {
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+      } catch {}
+    }
+    const siren = getPreloadedSiren();
+    if (siren) {
+      // En iOS Safari, reproducir y pausar inmediatamente en gesto de usuario
+      // autoriza el elemento Audio para reproducciones posteriores sin latencia de red ni bloqueo
+      siren.volume = 0;
+      const playPromise = siren.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            siren.pause();
+            siren.currentTime = 0;
+            siren.volume = 1.0;
+          })
+          .catch(() => {
+            siren.volume = 1.0;
+          });
+      }
+    }
     if ("speechSynthesis" in window) {
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
       loadVoices();
-      // Emite un utterance silencioso para desbloquear el motor TTS en WebKit/iOS
-      const dummy = new SpeechSynthesisUtterance("");
-      dummy.volume = 0;
+      // Emite un utterance silencioso (" ") para despertar el motor TTS en WebKit/iOS
+      const dummy = new SpeechSynthesisUtterance(" ");
+      dummy.volume = 0.01;
+      dummy.rate = 2.0;
       window.speechSynthesis.speak(dummy);
     }
   } catch {}
@@ -157,11 +205,18 @@ export function playEmergencyAlarmSound(onEnd?: () => void) {
       window.clearTimeout(alarmTimer);
       alarmTimer = null;
     }
+    // Pausar la sirena al cumplirse el pulso de alarma para que la locución por voz se escuche limpia e inmediata
+    if (currentAudioElement) {
+      try {
+        currentAudioElement.pause();
+        currentAudioElement.currentTime = 0;
+      } catch {}
+    }
     onEnd?.();
   };
-  alarmTimer = window.setTimeout(finish, SIREN_MAX_MS);
+  alarmTimer = window.setTimeout(finish, SIREN_ALERT_MS);
 
-  // 1. Primero mediante elemento Audio (/siren.wav) para máxima compatibilidad móvil y escritorio
+  // 1. Primero mediante elemento Audio pre-cargado para 0 latencia en iPhone y Android
   let fellBack = false;
   const fallBack = () => {
     if (fellBack || run !== alarmRun) return;
@@ -169,8 +224,9 @@ export function playEmergencyAlarmSound(onEnd?: () => void) {
     playSynthesizedSiren(finish);
   };
   try {
-    const audio = new Audio("/siren.wav");
+    const audio = getPreloadedSiren() || new Audio("/siren.wav");
     audio.volume = 1.0;
+    audio.currentTime = 0;
     audio.onended = finish;
     audio.onerror = fallBack;
     currentAudioElement = audio;
@@ -195,27 +251,21 @@ function playSynthesizedSiren(onEnd: () => void) {
   }
 
   const runSynth = () => {
-    // Con el audio bloqueado por el navegador no habrá sonido: no se hace esperar a la voz.
-    if (ctx.state !== "running") {
-      onEnd();
-      return;
-    }
     try {
       const now = ctx.currentTime;
-      const duration = 3.8;
+      const duration = 1.3;
 
       const masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(0.35, now);
-      masterGain.gain.setValueAtTime(0.35, now + duration - 0.3);
+      masterGain.gain.setValueAtTime(0.4, now);
       masterGain.gain.linearRampToValueAtTime(0.001, now + duration);
       masterGain.connect(ctx.destination);
 
       const osc1 = ctx.createOscillator();
       osc1.type = "sawtooth";
 
-      const cycles = Math.floor(duration / 0.35);
+      const cycles = Math.floor(duration / 0.3);
       for (let i = 0; i < cycles; i++) {
-        const t = now + i * 0.35;
+        const t = now + i * 0.3;
         osc1.frequency.setValueAtTime(i % 2 === 0 ? 880 : 660, t);
       }
 
@@ -256,6 +306,9 @@ export function playVoiceAlert(text: string) {
     // Pequeño retardo (60ms) necesario para WebKit / iOS Safari tras llamar a cancel()
     window.setTimeout(() => {
       try {
+        if (synth.paused) {
+          synth.resume();
+        }
         const utterance = new SpeechSynthesisUtterance(text);
         activeUtterance = utterance;
 
