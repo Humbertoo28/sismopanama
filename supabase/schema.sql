@@ -34,6 +34,7 @@ alter table public.push_subscriptions enable row level security;
 alter table public.notified_quakes enable row level security;
 
 -- Permitir acceso al rol service_role (usado por el backend de Next.js)
+drop policy if exists "Allow service_role full access to push_subscriptions" on public.push_subscriptions;
 create policy "Allow service_role full access to push_subscriptions"
   on public.push_subscriptions
   for all
@@ -41,6 +42,7 @@ create policy "Allow service_role full access to push_subscriptions"
   using (true)
   with check (true);
 
+drop policy if exists "Allow service_role full access to notified_quakes" on public.notified_quakes;
 create policy "Allow service_role full access to notified_quakes"
   on public.notified_quakes
   for all
