@@ -3,32 +3,86 @@ import { kmBetween, type Earthquake } from "./earthquakes";
 export type AlertPreferences = {
   notificationsEnabled: boolean;
   soundEnabled: boolean;
-  voiceEnabled?: boolean;
+  voiceEnabled: boolean;
   minMagnitude: number;
 };
 
 const DEFAULT_PREFERENCES: AlertPreferences = {
   notificationsEnabled: true,
   soundEnabled: true,
-  voiceEnabled: false,
+  voiceEnabled: true,
   minMagnitude: 0,
 };
 
 const STORAGE_PREFS_KEY = "sismo_panama_alert_prefs_v1";
 const STORAGE_SEEN_KEY = "sismo_panama_seen_v2";
 
-// Un sismo que ocurrió hace más de esto ya no justifica sirena: se avisa en pantalla y en silencio.
+// Un sismo que ocurrió hace más de esto ya no justifica sirena ni voz: se avisa en pantalla y en silencio.
 // Así, al reabrir la app o despertar el equipo no suena una alarma por algo que pasó hace rato.
 export const ALARM_MAX_AGE_MS = 15 * 60_000;
-const SIREN_MAX_MS = 6000;
+// Tope de espera para que termine la sirena antes de hablar
+const SIREN_MAX_MS = 2500;
 const SEEN_LIMIT = 400;
 
 let globalAudioCtx: AudioContext | null = null;
 let currentAlarmNodes: { osc1: OscillatorNode; osc2?: OscillatorNode; gain: GainNode } | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
+let activeUtterance: SpeechSynthesisUtterance | null = null;
+let cachedVoices: SpeechSynthesisVoice[] = [];
 // Cada alerta nueva (o cada "silenciar") cambia la tanda: lo que quedó pendiente de la anterior se descarta.
 let alarmRun = 0;
 let alarmTimer: number | null = null;
+
+// Cargar voces disponibles en el dispositivo tan pronto estén listas
+function loadVoices() {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
+  try {
+    const list = window.speechSynthesis.getVoices();
+    if (list && list.length > 0) {
+      cachedVoices = list;
+    }
+  } catch {}
+  return cachedVoices;
+}
+
+if (typeof window !== "undefined" && "speechSynthesis" in window) {
+  loadVoices();
+  if ("onvoiceschanged" in window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      loadVoices();
+    };
+  }
+}
+
+// Desbloquear audio y síntesis de voz en iOS Safari y Android en la primera interacción
+export function unlockAudioAndSpeech() {
+  if (typeof window === "undefined") return;
+  try {
+    getAudioContext();
+    if ("speechSynthesis" in window) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      loadVoices();
+      // Emite un utterance silencioso para desbloquear el motor TTS en WebKit/iOS
+      const dummy = new SpeechSynthesisUtterance("");
+      dummy.volume = 0;
+      window.speechSynthesis.speak(dummy);
+    }
+  } catch {}
+}
+
+if (typeof window !== "undefined") {
+  const onFirstInteraction = () => {
+    unlockAudioAndSpeech();
+    window.removeEventListener("touchstart", onFirstInteraction);
+    window.removeEventListener("touchend", onFirstInteraction);
+    window.removeEventListener("click", onFirstInteraction);
+  };
+  window.addEventListener("touchstart", onFirstInteraction, { passive: true });
+  window.addEventListener("touchend", onFirstInteraction, { passive: true });
+  window.addEventListener("click", onFirstInteraction, { passive: true });
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -74,6 +128,11 @@ export function stopAlarmSound() {
       // Ignorar si ya se detuvo
     }
     currentAlarmNodes = null;
+  }
+  if (activeUtterance) {
+    activeUtterance.onend = null;
+    activeUtterance.onerror = null;
+    activeUtterance = null;
   }
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     try {
@@ -188,19 +247,55 @@ function playSynthesizedSiren(onEnd: () => void) {
 export function playVoiceAlert(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   try {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "es-PA";
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
+    const synth = window.speechSynthesis;
+    if (synth.paused) {
+      synth.resume();
+    }
+    synth.cancel();
 
-    const voices = window.speechSynthesis.getVoices();
-    const esVoice = voices.find(v => v.lang.startsWith("es-PA") || v.lang.startsWith("es-MX") || v.lang.startsWith("es"));
-    if (esVoice) utterance.voice = esVoice;
+    // Pequeño retardo (60ms) necesario para WebKit / iOS Safari tras llamar a cancel()
+    window.setTimeout(() => {
+      try {
+        const utterance = new SpeechSynthesisUtterance(text);
+        activeUtterance = utterance;
 
-    window.speechSynthesis.speak(utterance);
+        const voices = cachedVoices.length > 0 ? cachedVoices : loadVoices();
+        // Buscar la mejor voz en español disponible en este dispositivo (iOS, Android, Windows, Mac):
+        const esVoice =
+          voices.find(v => v.lang.toLowerCase().replace("_", "-") === "es-pa") ||
+          voices.find(v => v.lang.toLowerCase().replace("_", "-") === "es-419") ||
+          voices.find(v => v.lang.toLowerCase().replace("_", "-").startsWith("es-mx")) ||
+          voices.find(v => v.lang.toLowerCase().replace("_", "-").startsWith("es-us")) ||
+          voices.find(v => v.lang.toLowerCase().replace("_", "-").startsWith("es-es")) ||
+          voices.find(v => v.lang.toLowerCase().startsWith("es")) ||
+          voices.find(v => (v.name || "").toLowerCase().includes("spanish"));
+
+        if (esVoice) {
+          utterance.voice = esVoice;
+          utterance.lang = esVoice.lang;
+        } else {
+          utterance.lang = "es-ES";
+        }
+
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        utterance.onend = () => {
+          activeUtterance = null;
+        };
+        utterance.onerror = (err) => {
+          activeUtterance = null;
+          console.warn("SpeechSynthesis error:", err);
+        };
+
+        synth.speak(utterance);
+      } catch (err) {
+        console.warn("Error en synth.speak:", err);
+      }
+    }, 60);
   } catch (e) {
-    console.warn("No se pudo reproducir voz de alerta:", e);
+    console.warn("No se pudo iniciar voz de alerta:", e);
   }
 }
 
@@ -544,9 +639,21 @@ export async function broadcastEarthquakeAlert(
   // 1. Vibración táctil en teléfonos móviles
   vibrateDevice([400, 200, 400, 200, 800]);
 
-  // 2. Sirena de alarma de emergencia
+  // 2. Sirena de alarma y locución por voz en español
+  const voiceMsg = isTest
+    ? `Prueba de alerta sísmica en Panamá. Sirena, voz y notificaciones activas.`
+    : `Alerta sísmica en Panamá. Sismo de magnitud ${event.properties.mag === null ? "desconocida" : event.properties.mag.toFixed(1).replace(".", " coma ")}, ${spokenPlace(event.properties.place)}. Mantén la calma.`;
+
+  const speak = () => {
+    if (prefs.voiceEnabled) {
+      playVoiceAlert(voiceMsg);
+    }
+  };
+
   if (prefs.soundEnabled) {
-    playEmergencyAlarmSound();
+    playEmergencyAlarmSound(speak);
+  } else {
+    speak();
   }
 
   // 3. Notificación emergente del sistema en el navegador/celular

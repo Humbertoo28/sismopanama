@@ -166,7 +166,7 @@ export default function Home() {
               (best, event) => (!best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best),
               null,
             );
-          // Sirena solo para lo que acaba de ocurrir. Un sismo de hace un rato (se reabrió la app o el
+          // Sirena y voz solo para lo que acaba de ocurrir. Un sismo de hace un rato (se reabrió la app o el
           // equipo despertó) se muestra en pantalla y en silencio: una alarma por algo viejo confunde.
           const now = Date.now();
           const recent = qualifying.filter(event => now - event.properties.time <= ALARM_MAX_AGE_MS);

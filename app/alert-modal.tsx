@@ -14,6 +14,7 @@ import {
   sendTestWebPush,
   stopAlarmSound,
   subscribeToWebPush,
+  unlockAudioAndSpeech,
   type AlertPreferences,
 } from "../lib/alert-system";
 import PwaInstall from "./pwa-install";
@@ -84,6 +85,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
 
   const handleTestAlert = async () => {
     setIsTesting(true);
+    unlockAudioAndSpeech();
     const now = Date.now();
     // Simular un evento de prueba
     const testEvent: Earthquake = latestEvent ?? {
@@ -244,6 +246,21 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             </label>
           </div>
 
+          {/* Sección de Voz en Español */}
+          <div className="alert-setting-row">
+            <div className="alert-setting-info">
+              <strong>Voz en español</strong>
+              <span>Anuncia la magnitud y ubicación del sismo en voz alta.</span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={prefs.voiceEnabled}
+                onChange={e => updatePref("voiceEnabled", e.target.checked)}
+              />
+              <span className="toggle-slider" />
+            </label>
+          </div>
 
           {/* Filtro por magnitud */}
           <div className="alert-setting-row">
@@ -276,7 +293,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           <div className="alert-test-box">
             <div>
               <strong>Probar alerta</strong>
-              <p>Comprueba la sirena y la notificación en este equipo.</p>
+              <p>Prueba la sirena, la voz y la notificación en este equipo.</p>
             </div>
             <div className="alert-test-actions">
               <button
