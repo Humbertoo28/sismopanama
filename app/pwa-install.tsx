@@ -97,9 +97,9 @@ export default function PwaInstall() {
               <div style={{ display: "flex", gap: 12, alignItems: "flex-start", background: "#f8fafc", padding: 12, borderRadius: 10 }}>
                 <span style={{ fontSize: 20 }}>1️⃣</span>
                 <div>
-                  <strong style={{ fontSize: 13, color: "#17253c" }}>Toca el botón Compartir</strong>
+                  <strong style={{ fontSize: 13, color: "#17253c" }}>Toca Compartir</strong>
                   <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748b" }}>
-                    En la barra inferior de Safari, pulsa el icono de compartir <strong>(el cuadrado con una flecha hacia arriba ⎋)</strong>.
+                    En la barra inferior de Safari, pulsa el icono <strong>Compartir (⎋)</strong>.
                   </p>
                 </div>
               </div>
@@ -107,16 +107,12 @@ export default function PwaInstall() {
               <div style={{ display: "flex", gap: 12, alignItems: "flex-start", background: "#f8fafc", padding: 12, borderRadius: 10 }}>
                 <span style={{ fontSize: 20 }}>2️⃣</span>
                 <div>
-                  <strong style={{ fontSize: 13, color: "#17253c" }}>Selecciona &quot;Agregar a inicio&quot;</strong>
+                  <strong style={{ fontSize: 13, color: "#17253c" }}>Agregar a inicio</strong>
                   <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748b" }}>
-                    Desplázate hacia abajo y elige <strong>&quot;Agregar a la pantalla de inicio&quot; (icono ➕)</strong> y luego toca <strong>&quot;Agregar&quot;</strong>.
+                    Elige <strong>&quot;Agregar a pantalla de inicio&quot; (➕)</strong> y confirma.
                   </p>
                 </div>
               </div>
-
-              <p style={{ fontSize: 11.5, color: "#64748b", margin: 0, textAlign: "center" }}>
-                ¡Y listo! Tendrás el icono de Sismo Panamá en tu pantalla de inicio como cualquier otra aplicación.
-              </p>
             </div>
             <footer className="alert-modal-footer">
               <button type="button" className="btn-primary" onClick={() => setShowIosGuide(false)}>

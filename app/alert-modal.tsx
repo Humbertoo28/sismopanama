@@ -126,8 +126,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           <div className="alert-modal-title-box">
             <span className="alert-bell-icon" aria-hidden="true">🔔</span>
             <div>
-              <h2 id="alert-modal-title">Alertas Sísmicas en Vivo</h2>
-              <p>Recibe avisos sonoros y notificaciones automáticas cuando ocurra un sismo en Panamá.</p>
+              <h2 id="alert-modal-title">Alertas Sísmicas</h2>
+              <p>Avisos sonoros y notificaciones inmediatas para Panamá.</p>
             </div>
           </div>
           <button type="button" className="alert-modal-close" onClick={() => { stopAlarmSound(); onClose(); }} aria-label="Cerrar modal">
@@ -139,13 +139,13 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           {/* Sección de Notificaciones del Sistema */}
           <div className="alert-setting-row">
             <div className="alert-setting-info">
-              <strong>Notificaciones en el dispositivo</strong>
-              <span>Aparecen en tu teléfono o computadora aunque tengas la pestaña en segundo plano.</span>
+              <strong>Notificaciones en pantalla</strong>
+              <span>Avisos visuales en tu celular o computadora.</span>
               <div className="perm-badge-wrap">
-                {permStatus === "granted" && <span className="perm-badge ok">✓ Notificaciones autorizadas</span>}
-                {permStatus === "denied" && <span className="perm-badge danger">✕ Bloqueadas por el navegador (habilítalas en permisos de sitio)</span>}
-                {permStatus === "default" && <span className="perm-badge warning">⚠ Requiere permiso de tu navegador</span>}
-                {permStatus === "unsupported" && <span className="perm-badge muted">Navegador no soporta notificaciones</span>}
+                {permStatus === "granted" && <span className="perm-badge ok">✓ Activadas</span>}
+                {permStatus === "denied" && <span className="perm-badge danger">✕ Bloqueadas en tu navegador</span>}
+                {permStatus === "default" && <span className="perm-badge warning">⚠ Requiere permiso</span>}
+                {permStatus === "unsupported" && <span className="perm-badge muted">No soportadas en este navegador</span>}
               </div>
             </div>
             {permStatus === "granted" ? (
@@ -164,7 +164,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 onClick={handleRequestPermission}
                 disabled={permStatus === "denied" || permStatus === "unsupported"}
               >
-                Activar notificaciones
+                Activar
               </button>
             )}
           </div>
@@ -173,17 +173,17 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           <div className="alert-setting-row" style={{ background: "rgba(14, 165, 233, 0.08)", border: "1px solid rgba(14, 165, 233, 0.25)", borderRadius: "10px", padding: "14px 12px" }}>
             <div className="alert-setting-info">
               <strong style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>📲</span> Alertas Push con la app cerrada
-                <span style={{ fontSize: "10px", background: "#0284c7", color: "#fff", padding: "2px 6px", borderRadius: "4px", fontWeight: "700" }}>24/7 PUSH</span>
+                <span>📲</span> Alertas con la app cerrada
+                <span style={{ fontSize: "10px", background: "#0284c7", color: "#fff", padding: "2px 6px", borderRadius: "4px", fontWeight: "700" }}>24/7</span>
               </strong>
               <span>
-                Recibe notificaciones en tu celular o PC incluso con la app cerrada, gracias al servicio en la nube Supabase.
+                Recibe avisos aunque no tengas la página web abierta.
               </span>
               <div className="perm-badge-wrap" style={{ marginTop: "6px" }}>
                 {isPushSubscribed ? (
-                  <span className="perm-badge ok">✓ Suscripción en segundo plano activa</span>
+                  <span className="perm-badge ok">✓ Activo en segundo plano</span>
                 ) : (
-                  <span className="perm-badge warning">⚠ No suscrito a alertas en segundo plano</span>
+                  <span className="perm-badge warning">⚠ No activado</span>
                 )}
               </div>
               {pushMsg && (
@@ -205,7 +205,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 onClick={handleTogglePush}
                 disabled={pushLoading}
               >
-                {pushLoading ? "Conectando…" : isPushSubscribed ? "✓ Actualizar Suscripción" : "Activar en 2do Plano"}
+                {pushLoading ? "Conectando…" : isPushSubscribed ? "✓ Actualizar" : "Activar 24/7"}
               </button>
               {isPushSubscribed && (
                 <button
@@ -222,7 +222,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                   onClick={handleTestPush}
                   disabled={pushLoading}
                 >
-                  Probar Push en 2do Plano
+                  Probar envío
                 </button>
               )}
             </div>
@@ -231,8 +231,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           {/* Sección de Sonido de Emergencia */}
           <div className="alert-setting-row">
             <div className="alert-setting-info">
-              <strong>Alarma sonora de emergencia</strong>
-              <span>Reproduce una sirena de alerta sísmica para que todos en el lugar la escuchen de inmediato.</span>
+              <strong>Sirena de alarma</strong>
+              <span>Alarma sonora inmediata si ocurre un temblor.</span>
             </div>
             <label className="toggle-switch">
               <input
@@ -248,8 +248,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           {/* Filtro por magnitud */}
           <div className="alert-setting-row">
             <div className="alert-setting-info">
-              <strong>Magnitud mínima para alertar</strong>
-              <span>Elige si deseas sonar para cualquier movimiento o solo para sismos perceptibles.</span>
+              <strong>Magnitud mínima</strong>
+              <span>Filtra temblores leves o solo sismos perceptibles.</span>
             </div>
             <select
               className="mag-threshold-select"
@@ -258,16 +258,16 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             >
               <option value="0">Todos los sismos (M ≥ 0.0)</option>
               <option value="3.0">Sismos perceptibles (M ≥ 3.0)</option>
-              <option value="4.0">Sismos moderados a fuertes (M ≥ 4.0)</option>
-              <option value="5.0">Solo sismos de gran magnitud (M ≥ 5.0)</option>
+              <option value="4.0">Moderados a fuertes (M ≥ 4.0)</option>
+              <option value="5.0">Solo sismos mayores (M ≥ 5.0)</option>
             </select>
           </div>
 
           {/* Instalar App Web */}
           <div className="alert-setting-row">
             <div className="alert-setting-info">
-              <strong>Instalar como Aplicación Web (PWA)</strong>
-              <span>Agrégala a tu pantalla de inicio para abrirla como app independiente en pantalla completa.</span>
+              <strong>Instalar acceso directo</strong>
+              <span>Agrégala a tu pantalla de inicio para abrirla rápido.</span>
             </div>
             <PwaInstall />
           </div>
@@ -275,8 +275,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           {/* Probar la alerta */}
           <div className="alert-test-box">
             <div>
-              <strong>¿Cómo suena y se siente la alerta?</strong>
-              <p>Pulsa el botón para probar la sirena y la notificación en tu equipo.</p>
+              <strong>Probar alerta</strong>
+              <p>Comprueba la sirena y la notificación en este equipo.</p>
             </div>
             <div className="alert-test-actions">
               <button
@@ -285,7 +285,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 onClick={handleTestAlert}
                 disabled={isTesting}
               >
-                {isTesting ? "🔊 Sonando alarma…" : "🔊 Probar alerta ahora"}
+                {isTesting ? "🔊 Sonando…" : "🔊 Probar alerta"}
               </button>
               {isTesting && (
                 <button
@@ -304,8 +304,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             <div className="broadcast-header">
               <span className="broadcast-icon">📢</span>
               <div>
-                <strong>Difundir alerta a todos</strong>
-                <p>Envía los datos del sismo a tus grupos de WhatsApp o Telegram para avisar a familiares y amigos en Panamá.</p>
+                <strong>Avisar a familiares</strong>
+                <p>Comparte los datos de este sismo por WhatsApp o Telegram.</p>
               </div>
             </div>
             <div className="broadcast-buttons">
@@ -337,7 +337,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
 
         <footer className="alert-modal-footer">
           <button type="button" className="btn-primary" onClick={() => { stopAlarmSound(); onClose(); }}>
-            Listo, mantener monitoreo activo
+            Listo, mantener monitoreo
           </button>
         </footer>
       </div>

@@ -69,7 +69,7 @@ export default function Checklists() {
 
   return (
     <div className="check-card">
-      <div className="card-heading"><div><span className="section-kicker">TU LISTA</span><h2 id="checklist-title">Prepárate y revisa</h2></div></div>
+      <div className="card-heading"><div><span className="section-kicker">LISTA RÁPIDA</span><h2 id="checklist-title">Qué revisar</h2></div></div>
       <div className="segmented check-tabs" role="group" aria-label="Elegir lista">
         {CHECKLISTS.map(item => (
           <button key={item.id} type="button" className={item.id === list.id ? "selected" : ""} aria-pressed={item.id === list.id} onClick={() => setListId(item.id)}>{item.label}</button>
@@ -91,7 +91,7 @@ export default function Checklists() {
         ))}
       </ul>
       <div className="check-foot">
-        <span>{list.note ?? "Tu progreso se guarda solo en este dispositivo."}</span>
+        <span>{list.note ?? "Progreso guardado en este equipo."}</span>
         {done.length > 0 && <button type="button" onClick={() => update([])}>Reiniciar</button>}
       </div>
     </div>

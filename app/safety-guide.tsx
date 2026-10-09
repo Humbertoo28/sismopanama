@@ -61,7 +61,7 @@ export default function SafetyGuide({ aftershockCount, strongestAftershock }: Pr
           </div>
         )}
       </div>
-      <p className="guide-disclaimer">Recomendaciones generales de seguridad sísmica. Si las autoridades te dan otra indicación, síguela siempre.</p>
+      <p className="guide-disclaimer">Instrucciones básicas de seguridad. Sigue siempre las indicaciones oficiales de SINAPROC.</p>
     </div>
   );
 }
