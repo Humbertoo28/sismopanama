@@ -5,6 +5,7 @@ import QuakeMap from "./quake-map";
 import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
 import Sources from "./sources";
+import FlagMark from "./flag-mark";
 import { isAftershock, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
 
 const date = new Intl.DateTimeFormat("es-PA", {
@@ -196,7 +197,7 @@ export default function Home() {
     <div className="app-shell">
       <aside className="sidebar" aria-label="Navegación principal">
         <a className="brand" href="#inicio" aria-label="Sismo Panamá, inicio">
-          <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M4 21h7l4-9 6 17 4-10h11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+          <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
           <span><strong>SISMO</strong><small>PANAMÁ</small></span>
         </a>
         <div className="side-label">EXPLORAR</div>
