@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Earthquake, ReplayStep } from "../lib/earthquakes";
+import { reducedMotion, shakeElement } from "./shake";
 
 type Props = {
   mainshock: Earthquake;
@@ -29,6 +30,12 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // Cada vez que la reproducción llega a un sismo, la línea de tiempo tiembla con su magnitud.
+  useEffect(() => {
+    const element = box.current;
+    if (element && replay && replay.index > 0 && !reducedMotion()) shakeElement(element, replay.mag);
+  }, [replay]);
 
   const sequence = [mainshock, ...aftershocks].sort((a, b) => a.properties.time - b.properties.time);
   const start = mainshock.properties.time;

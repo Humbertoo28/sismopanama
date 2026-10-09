@@ -5,12 +5,12 @@ import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { isAftershock, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
 import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
+import { reducedMotion, shakeElement, vibrate } from "./shake";
 
 type Props = {
   events: Earthquake[];
   mainshock: Earthquake | null;
   focus: FocusRequest | null;
-  shake: boolean;
   alert: LiveAlert | null;
   replayKey: number;
   onSelect: (id: string) => void;
@@ -24,22 +24,7 @@ const dateTime = new Intl.DateTimeFormat("es-PA", {
 
 const STEP_MS = 900;
 const RECENT_MS = 3 * 3_600_000;
-const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// Hace temblar el mapa con la fuerza y duración que corresponden a la magnitud (ver shakeFor).
-const shakeTimers = new WeakMap<HTMLElement, number>();
-function shakeElement(container: HTMLElement, mag: number | null, scale = 1) {
-  const { px, ms } = shakeFor(mag);
-  container.style.setProperty("--shake", `${(px * scale).toFixed(1)}px`);
-  container.style.setProperty("--shake-ms", `${ms}ms`);
-  container.classList.remove("quake-shake");
-  container.getBoundingClientRect(); // fuerza el reflujo para reiniciar la animación si ya estaba en marcha
-  container.classList.add("quake-shake");
-  window.clearTimeout(shakeTimers.get(container));
-  shakeTimers.set(container, window.setTimeout(() => container.classList.remove("quake-shake"), ms + 60));
-}
-
-export default function QuakeMap({ events, mainshock, focus, shake, alert, replayKey, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, mainshock, focus, alert, replayKey, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(false);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
@@ -47,9 +32,9 @@ export default function QuakeMap({ events, mainshock, focus, shake, alert, repla
   const focusedRef = useRef<Props["focus"]>(null);
   const popIn = useRef(true);
   const fresh = useRef<{ id: string; until: number } | null>(null);
-  const latest = useRef({ events, mainshock, shake, onSelect, onReplay });
+  const latest = useRef({ events, mainshock, onSelect, onReplay });
   useEffect(() => {
-    latest.current = { events, mainshock, shake, onSelect, onReplay };
+    latest.current = { events, mainshock, onSelect, onReplay };
   });
 
   useEffect(() => {
@@ -144,7 +129,7 @@ export default function QuakeMap({ events, mainshock, focus, shake, alert, repla
     map.once("moveend", () => {
       markersRef.current.get(focus.id)?.openPopup();
       const target = latest.current.events.find(event => event.id === focus.id);
-      if (!focus.quiet && target && latest.current.shake && !reducedMotion()) shakeElement(map.getContainer(), target.properties.mag, 0.7);
+      if (!focus.quiet && target && !reducedMotion()) shakeElement(map.getContainer(), target.properties.mag, 0.7);
     });
     const zoom = Math.max(map.getZoom(), 9);
     if (reducedMotion()) map.setView(marker.getLatLng(), zoom, { animate: false });
@@ -158,7 +143,7 @@ export default function QuakeMap({ events, mainshock, focus, shake, alert, repla
     const span = markersRef.current.get(alert.event.id)?.getElement()?.firstElementChild as HTMLElement | undefined;
     fresh.current = { id: alert.event.id, until: Date.now() + 8000 };
     span?.classList.add("fresh");
-    if (latest.current.shake && !reducedMotion()) shakeElement(map.getContainer(), alert.event.properties.mag);
+    if (!reducedMotion()) shakeElement(map.getContainer(), alert.event.properties.mag);
     const timer = window.setTimeout(() => {
       fresh.current = null;
       markersRef.current.get(alert.event.id)?.getElement()?.firstElementChild?.classList.remove("fresh");
@@ -203,9 +188,9 @@ export default function QuakeMap({ events, mainshock, focus, shake, alert, repla
         const span = byId.get(event.id);
         span?.classList.remove("replay-hidden");
         span?.classList.add("replay-pop");
-        if (!still && latest.current.shake) {
+        if (!still) {
           shakeElement(container, event.properties.mag);
-          navigator.vibrate?.(Math.round(shakeFor(event.properties.mag).ms * 0.6));
+          vibrate(Math.round(shakeFor(event.properties.mag).ms * 0.6));
         }
         latest.current.onReplay({ index: i + 1, total, time: event.properties.time, mag: event.properties.mag });
       }, start + i * STEP_MS));

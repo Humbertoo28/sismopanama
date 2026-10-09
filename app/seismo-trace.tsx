@@ -1,10 +1,22 @@
+"use client";
+
 // Trazo decorativo de sismógrafo para el bloque del sismo principal: ruido, llegada de las ondas y decaimiento.
-// Se dibuja dos veces seguidas para que el desplazamiento horizontal se repita sin saltos.
+// Se dibuja dos veces seguidas para que el desplazamiento horizontal se repita sin saltos. Con la
+// reproducción de la secuencia, se agita en cada sismo.
+import { useEffect, useRef } from "react";
+import type { ReplayStep } from "../lib/earthquakes";
+import { reducedMotion, shakeElement } from "./shake";
+
 const TRACE = "M0 30.5 L4 31.0 L8 29.6 L12 31.2 L16 29.9 L20 30.4 L24 31.2 L28 30.0 L32 31.3 L36 30.2 L40 31.2 L44 31.1 L48 30.2 L52 29.1 L56 31.1 L60 30.8 L64 29.6 L68 28.7 L72 29.8 L76 30.3 L80 28.7 L84 31.3 L88 29.0 L92 30.6 L96 31.0 L100 31.1 L104 30.5 L108 29.1 L112 30.9 L116 29.8 L120 29.6 L124 30.4 L128 29.9 L132 31.2 L136 31.2 L140 30.8 L144 29.5 L148 30.2 L152 27.1 L156 31.7 L160 45.8 L164 -0.1 L168 41.9 L172 40.2 L176 11.2 L180 41.5 L184 32.1 L188 17.0 L192 41.6 L196 28.2 L200 17.6 L204 47.4 L208 22.5 L212 22.4 L216 44.9 L220 21.3 L224 29.9 L228 36.9 L232 22.8 L236 31.0 L240 33.7 L244 23.3 L248 33.2 L252 33.3 L256 21.6 L260 35.8 L264 30.0 L268 23.3 L272 34.7 L276 28.8 L280 28.7 L284 32.8 L288 27.9 L292 27.1 L296 32.9 L300 27.6 L304 29.8 L308 33.0 L312 28.1 L316 30.7 L320 32.7 L324 28.9 L328 32.1 L332 30.0 L336 29.4 L340 32.0 L344 30.5 L348 27.2 L352 33.1 L356 29.7 L360 28.6 L364 30.5 L368 28.4 L372 28.5 L376 31.5 L380 29.6 L384 30.3 L388 29.7 L392 27.8 L396 31.2 L400 31.6 L404 29.7 L408 31.2 L412 30.4 L416 29.1 L420 31.1 L424 31.4 L428 29.9 L432 30.8 L436 29.7 L440 28.4 L444 30.0 L448 29.7 L452 29.5 L456 30.0 L460 30.9 L464 28.9 L468 29.5 L472 28.7 L476 29.2 L480 30.4 L484 30.1 L488 31.2 L492 29.7 L496 31.0 L500 31.4 L504 30.8 L508 30.8 L512 30.6 L516 31.2 L520 31.3 L524 31.1 L528 31.1 L532 30.3 L536 31.4 L540 28.9 L544 29.7 L548 31.1 L552 30.6 L556 30.5 L560 30.4 L564 31.0 L568 29.1 L572 28.6 L576 30.0 L580 30.1 L584 31.2 L588 31.1 L592 30.5 L596 30.6 L600 29.0";
 
-export default function SeismoTrace() {
+export default function SeismoTrace({ replay }: { replay: ReplayStep | null }) {
+  const trace = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    if (trace.current && replay && replay.index > 0 && !reducedMotion()) shakeElement(trace.current, replay.mag);
+  }, [replay]);
+
   return (
-    <svg className="mainshock-trace" viewBox="0 0 1200 60" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <svg ref={trace} className="mainshock-trace" viewBox="0 0 1200 60" preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <g>
         <path d={TRACE} />
         <path d={TRACE} transform="translate(600 0)" />

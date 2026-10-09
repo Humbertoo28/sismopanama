@@ -70,6 +70,11 @@ export function shakeFor(mag: number | null) {
   };
 }
 
+// La página muestra solo los sismos desde el inicio del 9 de octubre de 2026 en Panamá (UTC−5) en
+// adelante. La fecha es fija a propósito: si fuera "hoy" relativo, mañana la lista quedaría vacía y
+// se perdería la secuencia de este sismo.
+export const SINCE = Date.UTC(2026, 9, 9, 5, 0, 0);
+
 export const MAINSHOCK_ID = "us6000u18k";
 export const AFTERSHOCK_RADIUS_KM = 150;
 

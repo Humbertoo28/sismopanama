@@ -1,16 +1,11 @@
-import { REGION, isPanamaPlace, type Earthquake, type EarthquakeResponse } from "../../../lib/earthquakes";
+import { REGION, SINCE, isPanamaPlace, type Earthquake, type EarthquakeResponse } from "../../../lib/earthquakes";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  const days = Number(new URL(request.url).searchParams.get("days") ?? "30");
-  if (![1, 7, 30].includes(days)) {
-    return Response.json({ error: "Período no válido" }, { status: 400 });
-  }
-
+export async function GET() {
   const params = new URLSearchParams({
     format: "geojson",
-    starttime: new Date(Date.now() - days * 86_400_000).toISOString(),
+    starttime: new Date(SINCE).toISOString(),
     orderby: "time",
     limit: "2000",
     ...REGION,
