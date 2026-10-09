@@ -327,7 +327,9 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
           onClick={() => handleModeChange("satellite")}
           title="Vista satelital híbrida (imágenes + nombres y rutas)"
         >
-          🛰️ Satélite
+          <span aria-hidden="true">🛰️</span>
+          <span className="layer-text-full">Satélite</span>
+          <span className="layer-text-short">Sat</span>
         </button>
         <button
           type="button"
@@ -335,7 +337,9 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
           onClick={() => handleModeChange("esri")}
           title="Vista satelital pura Esri ArcGIS"
         >
-          🌍 Esri Sat
+          <span aria-hidden="true">🌍</span>
+          <span className="layer-text-full">Esri Sat</span>
+          <span className="layer-text-short">Esri</span>
         </button>
         <button
           type="button"
@@ -343,7 +347,9 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
           onClick={() => handleModeChange("streets")}
           title="Mapa callejero y relieve"
         >
-          🗺️ Callejero
+          <span aria-hidden="true">🗺️</span>
+          <span className="layer-text-full">Callejero</span>
+          <span className="layer-text-short">Calles</span>
         </button>
       </div>
       {!ready && <div className="map-fallback">Cargando mapa satelital…</div>}

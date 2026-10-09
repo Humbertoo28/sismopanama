@@ -406,7 +406,7 @@ export default function Home() {
               <span className={permStatus === "granted" ? "btn-pulse-dot" : undefined} aria-hidden="true">
                 {permStatus === "granted" ? null : "🔔"}
               </span>
-              <span>{permStatus === "granted" ? "Alertas Activas" : "Activar Alertas"}</span>
+              <span className="alert-btn-text">{permStatus === "granted" ? "Alertas Activas" : "Activar Alertas"}</span>
             </button>
             <span className="live-pill"><i /> MONITOREO ACTIVO</span>
           </div>
@@ -419,18 +419,23 @@ export default function Home() {
               <h1 id="page-title">Sismo en Panamá:<br /><em>lo que necesitas saber.</em></h1>
               <p>Explora la actividad sísmica reciente en Panamá. Información clara para estar al tanto, cuando más importa.</p>
             </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            <div className="page-intro-actions">
               <button
                 type="button"
-                className="alert-topbar-btn active"
+                className="alert-topbar-btn active intro-alert-btn"
                 onClick={() => setAlertModalOpen(true)}
-                style={{ padding: "12px 18px", fontSize: "12px" }}
               >
                 <span>🔔 Configurar / Difundir Alerta</span>
               </button>
-              <button className={`refresh-button${status === "loading" ? " loading" : ""}`} type="button" aria-label="Actualizar datos de sismos" disabled={status === "loading"} onClick={() => setRefreshKey(key => key + 1)}>
+              <button
+                className={`refresh-button${status === "loading" ? " loading" : ""}`}
+                type="button"
+                aria-label="Actualizar datos de sismos"
+                disabled={status === "loading"}
+                onClick={() => setRefreshKey(key => key + 1)}
+              >
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                Actualizar datos
+                <span>Actualizar datos</span>
               </button>
             </div>
           </section>
