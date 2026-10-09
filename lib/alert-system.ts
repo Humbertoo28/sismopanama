@@ -3,24 +3,23 @@ import { kmBetween, type Earthquake } from "./earthquakes";
 export type AlertPreferences = {
   notificationsEnabled: boolean;
   soundEnabled: boolean;
-  voiceEnabled: boolean;
+  voiceEnabled?: boolean;
   minMagnitude: number;
 };
 
 const DEFAULT_PREFERENCES: AlertPreferences = {
   notificationsEnabled: true,
   soundEnabled: true,
-  voiceEnabled: true,
+  voiceEnabled: false,
   minMagnitude: 0,
 };
 
 const STORAGE_PREFS_KEY = "sismo_panama_alert_prefs_v1";
 const STORAGE_SEEN_KEY = "sismo_panama_seen_v2";
 
-// Un sismo que ocurrió hace más de esto ya no justifica sirena ni voz: se avisa en pantalla y en silencio.
+// Un sismo que ocurrió hace más de esto ya no justifica sirena: se avisa en pantalla y en silencio.
 // Así, al reabrir la app o despertar el equipo no suena una alarma por algo que pasó hace rato.
 export const ALARM_MAX_AGE_MS = 15 * 60_000;
-// Tope de espera a que termine la sirena antes de hablar, por si el navegador nunca avisa del final.
 const SIREN_MAX_MS = 6000;
 const SEEN_LIMIT = 400;
 
@@ -539,26 +538,18 @@ export async function broadcastEarthquakeAlert(
     : "No disponible";
   const timeStr = formatDateTimePanama(event.properties.time);
 
-  // Se corta cualquier sirena o voz que quedara de una alerta anterior antes de empezar esta.
+  // Se corta cualquier sirena o sonido que quedara de una alerta anterior antes de empezar esta.
   stopAlarmSound();
 
   // 1. Vibración táctil en teléfonos móviles
   vibrateDevice([400, 200, 400, 200, 800]);
 
-  // 2. Sirena y 3. voz, una después de la otra: juntas no se entiende ninguna de las dos.
-  const voiceMsg = isTest
-    ? `Prueba de alerta sísmica. El sonido y las notificaciones funcionan correctamente.`
-    : `Alerta sísmica. Sismo de magnitud ${event.properties.mag === null ? "desconocida" : event.properties.mag.toFixed(1).replace(".", " coma ")}, ${spokenPlace(event.properties.place)}. Mantén la calma.`;
-  const speak = () => {
-    if (prefs.voiceEnabled) playVoiceAlert(voiceMsg);
-  };
+  // 2. Sirena de alarma de emergencia
   if (prefs.soundEnabled) {
-    playEmergencyAlarmSound(speak);
-  } else {
-    speak();
+    playEmergencyAlarmSound();
   }
 
-  // 4. Notificación emergente del sistema en el navegador/celular
+  // 3. Notificación emergente del sistema en el navegador/celular
   if (prefs.notificationsEnabled && getNotificationPermissionStatus() === "granted") {
     const title = isTest
       ? `🧪 [PRUEBA] Alerta sísmica activa en Panamá`

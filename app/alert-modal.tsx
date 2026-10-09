@@ -244,21 +244,6 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             </label>
           </div>
 
-          {/* Sección de Voz Text-to-Speech */}
-          <div className="alert-setting-row">
-            <div className="alert-setting-info">
-              <strong>Locución por voz en español</strong>
-              <span>Anuncia la magnitud y ubicación del sismo en voz alta para alertar a los presentes.</span>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={prefs.voiceEnabled}
-                onChange={e => updatePref("voiceEnabled", e.target.checked)}
-              />
-              <span className="toggle-slider" />
-            </label>
-          </div>
 
           {/* Filtro por magnitud */}
           <div className="alert-setting-row">
@@ -291,7 +276,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           <div className="alert-test-box">
             <div>
               <strong>¿Cómo suena y se siente la alerta?</strong>
-              <p>Pulsa el botón para probar la sirena, la notificación y la voz en tu equipo.</p>
+              <p>Pulsa el botón para probar la sirena y la notificación en tu equipo.</p>
             </div>
             <div className="alert-test-actions">
               <button
