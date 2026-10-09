@@ -6,7 +6,9 @@ import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
 import Sources from "./sources";
 import FlagMark from "./flag-mark";
-import { isAftershock, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
+import CountUp from "./count-up";
+import SeismoTrace from "./seismo-trace";
+import { isAftershock, type Earthquake, type EarthquakeResponse, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
 const date = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
@@ -29,6 +31,11 @@ function depthText(event: Earthquake) {
   const depth = event.geometry.coordinates[2];
   return Number.isFinite(depth) ? `${Math.round(depth!)} km` : "No disponible";
 }
+const NAV = [
+  ["inicio", "◫", "Panel general"], ["mapa", "◎", "Mapa sísmico"], ["eventos", "≡", "Últimos eventos"],
+  ["recomendaciones", "✚", "Qué hacer ahora"], ["fuentes", "✓", "Fuentes"], ["preparacion", "✳", "Preparación"],
+] as const;
+const SPIED = ["inicio", "mapa", "eventos", "recomendaciones", "fuentes"];
 const PAGER: Record<string, string> = { green: "Verde", yellow: "Amarilla", orange: "Naranja", red: "Roja" };
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 const INTENSITY = ["No sentido", "Débil", "Débil", "Ligera", "Moderada", "Fuerte", "Muy fuerte", "Severa", "Violenta"];
@@ -60,6 +67,10 @@ export default function Home() {
   const [onlyAftershocks, setOnlyAftershocks] = useState(false);
   const [sort, setSort] = useState<"recent" | "magnitude">("recent");
   const [shared, setShared] = useState(false);
+  const [section, setSection] = useState("inicio");
+  const [replayKey, setReplayKey] = useState(0);
+  const [replay, setReplay] = useState<ReplayStep | null>(null);
+  const navLock = useRef(0);
   const introFocused = useRef(false);
 
   useEffect(() => {
@@ -115,6 +126,33 @@ export default function Home() {
     load();
     return () => controller.abort();
   }, [refreshKey]);
+
+  // Marca en el menú la sección que se está leyendo. Tras pulsar un enlace se congela un momento,
+  // para que el scroll animado no recorra las secciones intermedias.
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      if (performance.now() < navLock.current) return;
+      const line = window.innerHeight * 0.35;
+      let active = SPIED[0];
+      for (const id of SPIED) {
+        const element = document.getElementById(id);
+        if (element && element.getBoundingClientRect().top <= line) active = id;
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) active = SPIED[SPIED.length - 1];
+      setSection(active);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    frame = requestAnimationFrame(update);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   // Enfoque inicial en el epicentro, una vez que el listado también cargó: si los marcadores
   // se reconstruyen a mitad del movimiento del mapa, el desplazamiento no termina.
@@ -202,16 +240,14 @@ export default function Home() {
         </a>
         <div className="side-label">EXPLORAR</div>
         <nav className="side-nav">
-          <a className="active" href="#inicio"><span className="nav-icon">◫</span> Panel general</a>
-          <a href="#mapa"><span className="nav-icon">◎</span> Mapa sísmico</a>
-          <a href="#eventos"><span className="nav-icon">≡</span> Últimos eventos</a>
-          <a href="#recomendaciones"><span className="nav-icon">✚</span> Qué hacer ahora</a>
-          <a href="#fuentes"><span className="nav-icon">✓</span> Fuentes</a>
-          <a href="#preparacion"><span className="nav-icon">✳</span> Preparación</a>
+          {NAV.map(([id, icon, label]) => (
+            <a key={id} href={`#${id}`} className={section === id ? "active" : ""} aria-current={section === id ? "location" : undefined}
+              onClick={() => { navLock.current = performance.now() + 900; setSection(id); }}><span className="nav-icon">{icon}</span> {label}</a>
+          ))}
         </nav>
         <div className="side-bottom">
           <div className="source-indicator"><span className="pulse-dot" /><span>DATOS DEL USGS</span></div>
-          <p>Información sísmica para Panamá y la región cercana.</p>
+          <p>Información sísmica de Panamá.</p>
           <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">Conocer la fuente <span aria-hidden="true">↗</span></a>
         </div>
       </aside>
@@ -227,7 +263,7 @@ export default function Home() {
             <div>
               <div className="eyebrow"><span className="eyebrow-line" /> OBSERVATORIO SÍSMICO</div>
               <h1 id="page-title">Sismo en Panamá:<br /><em>lo que necesitas saber.</em></h1>
-              <p>Explora la actividad sísmica reciente en Panamá y sus alrededores. Información clara para estar al tanto, cuando más importa.</p>
+              <p>Explora la actividad sísmica reciente en Panamá. Información clara para estar al tanto, cuando más importa.</p>
             </div>
             <button className={`refresh-button${status === "loading" ? " loading" : ""}`} type="button" aria-label="Actualizar datos de sismos" disabled={status === "loading"} onClick={() => setRefreshKey(key => key + 1)}>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -237,8 +273,9 @@ export default function Home() {
 
           {main && mainshock && (
             <section className="mainshock" aria-labelledby="mainshock-title">
+              <SeismoTrace />
               <div className="mainshock-head">
-                <div className="mainshock-mag"><strong>{magText(main)}</strong><span>MAGNITUD</span></div>
+                <div className="mainshock-mag"><strong>{main.properties.mag === null ? "—" : <CountUp value={main.properties.mag} from={0} decimals={1} duration={1500} />}</strong><span>MAGNITUD</span></div>
                 <div className="mainshock-title">
                   <span className="mainshock-kicker"><i /> SISMO PRINCIPAL · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}</span>
                   <h2 id="mainshock-title">{placeText(main)}</h2>
@@ -256,8 +293,8 @@ export default function Home() {
                 <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
                 {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
                 {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}</dd><small>estimada por el USGS</small></div>}
-                {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd>{mainFelt.toLocaleString("es-PA")}</dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
-                <div><dt>RÉPLICAS</dt><dd>{mainshock.aftershocks.count.toLocaleString("es-PA")}</dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
+                {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
+                <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
               </dl>
               {main.properties.tsunami === 1 && <p className="mainshock-warning" role="alert">El USGS marcó este evento como posible generador de tsunami. Consulta los avisos oficiales en tsunami.gov y las indicaciones de SINAPROC.</p>}
               <p className="mainshock-note">Cifras del USGS, <a href="#fuentes">contrastadas con otras agencias</a>: se actualizan y pueden cambiar a medida que se revisan. No reemplazan los avisos oficiales de SINAPROC.</p>
@@ -265,27 +302,27 @@ export default function Home() {
           )}
 
           <div className={`status-strip${status === "error" ? " error" : ""}`} role="status" aria-live="polite">
-            <div className="status-left"><span className="status-spark" /><strong>{status === "loading" ? "Consultando sismos recientes…" : status === "error" ? "No se pudo consultar el catálogo" : "Datos sísmicos actualizados"}</strong><span>{status === "loading" ? "Fuente: USGS Earthquake Catalog" : status === "error" ? "Revisa tu conexión e intenta actualizar de nuevo." : `${allEvents.length} ${allEvents.length === 1 ? "evento reportado" : "eventos reportados"} en la región consultada`}</span></div>
+            <div className="status-left"><span className="status-spark" /><strong>{status === "loading" ? "Consultando sismos recientes…" : status === "error" ? "No se pudo consultar el catálogo" : "Datos sísmicos actualizados"}</strong><span>{status === "loading" ? "Fuente: USGS Earthquake Catalog" : status === "error" ? "Revisa tu conexión e intenta actualizar de nuevo." : `${allEvents.length} ${allEvents.length === 1 ? "evento reportado" : "eventos reportados"} en Panamá`}</span></div>
             <span>{lastUpdate ? `Última consulta: ${clockFormat.format(new Date(lastUpdate))}` : "Última consulta: --"}</span>
           </div>
 
           <section className="metric-grid" aria-label="Resumen de actividad sísmica">
-            <article className="metric-card"><div className="metric-top"><span>EVENTOS REGISTRADOS</span><span className="metric-icon">◎</span></div><div className="metric-main"><strong>{status === "error" && !lastUpdate ? "—" : events.length.toLocaleString("es-PA")}</strong><span>en el período</span></div><p>{days === 1 ? "Últimas 24 horas" : `Últimos ${days} días`} · Panamá y alrededores</p></article>
-            <article className="metric-card"><div className="metric-top"><span>MAYOR MAGNITUD</span><span className="metric-icon coral">⌁</span></div><div className="metric-main"><strong>{strongest ? magText(strongest) : "—"}</strong><span>magnitud</span></div><p>{strongest ? placeText(strongest) : "Sin eventos disponibles"}</p></article>
+            <article className="metric-card"><div className="metric-top"><span>EVENTOS REGISTRADOS</span><span className="metric-icon">◎</span></div><div className="metric-main"><strong>{status === "error" && !lastUpdate ? "—" : <CountUp value={events.length} />}</strong><span>en el período</span></div><p>{days === 1 ? "Últimas 24 horas" : `Últimos ${days} días`} · Solo Panamá</p></article>
+            <article className="metric-card"><div className="metric-top"><span>MAYOR MAGNITUD</span><span className="metric-icon coral">⌁</span></div><div className="metric-main"><strong>{strongest && strongest.properties.mag !== null ? <CountUp value={strongest.properties.mag} decimals={1} /> : "—"}</strong><span>magnitud</span></div><p>{strongest ? placeText(strongest) : "Sin eventos disponibles"}</p></article>
             <article className="metric-card"><div className="metric-top"><span>EVENTO MÁS RECIENTE</span><span className="metric-icon blue">◷</span></div><div className="metric-main"><strong>{recentValue}</strong><span>{recentUnit}</span></div><p>{latest ? dateTime.format(new Date(latest.properties.time)) : "Hora local de Panamá (UTC−5)"}</p></article>
           </section>
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
-            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><div className="segmented" role="group" aria-label="Período">{[[1, "24 horas"], [7, "7 días"], [30, "30 días"]].map(([value, label]) => <button key={value} type="button" className={days === value ? "selected" : ""} aria-pressed={days === value} onClick={() => chooseDays(Number(value))}>{label}</button>)}</div><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="2.5">M 2.5+</option><option value="4.5">M 4.5+</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}</div></div>
+            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><div className="segmented" role="group" aria-label="Período">{[[1, "24 horas"], [7, "7 días"], [30, "30 días"]].map(([value, label]) => <button key={value} type="button" className={days === value ? "selected" : ""} aria-pressed={days === value} onClick={() => chooseDays(Number(value))}>{label}</button>)}</div><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="2.5">M 2.5+</option><option value="4.5">M 4.5+</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && <button type="button" className="replay-button" onClick={() => setReplayKey(key => key + 1)} disabled={replay !== null}>{replay ? "Reproduciendo…" : "▶ Reproducir secuencia"}</button>}</div></div>
             <div className="map-card">
-              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} onSelect={setSelectedId} /><div className="map-label"><span className="mini-dot" /> PANAMÁ Y ALREDEDORES</div><div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
+              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} replayKey={replayKey} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
               <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div></div><a className="featured-link" href={featured?.properties.url?.startsWith("https://earthquake.usgs.gov/") ? featured.properties.url : "https://earthquake.usgs.gov/earthquakes/map/"} target="_blank" rel="noopener noreferrer">Ver en USGS <span aria-hidden="true">↗</span></a></div>
             </div>
             <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información.</p>
           </section>
 
           <div className="lower-grid">
-            <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{events.length} {events.length === 1 ? "evento" : "eventos"}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map(event => <button key={event.id} type="button" className="event-row" onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{depthText(event)} de profundidad</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : <div className="empty-state">{status === "loading" ? "Consultando eventos sísmicos…" : status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
+            <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{events.length} {events.length === 1 ? "evento" : "eventos"}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map(event => <button key={event.id} type="button" className="event-row" onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{depthText(event)} de profundidad</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : status === "loading" ? <div className="event-skeletons" role="status" aria-label="Consultando eventos sísmicos">{[0, 1, 2, 3, 4].map(i => <div key={i} className="event-skeleton" style={{ animationDelay: `${i * 90}ms` }}><i /><span /><em /></div>)}</div> : <div className="empty-state">{status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
             <section id="preparacion" className="prepared-card" aria-labelledby="prepared-title"><div className="prepared-icon">✳</div><span className="section-kicker">ESTAR PREPARADOS IMPORTA</span><h2 id="prepared-title">La información es parte de tu seguridad.</h2><p>Ante un sismo, mantén la calma y sigue las indicaciones de las autoridades de protección civil.</p><div className="prepared-steps"><div><span>01</span><strong>Agáchate</strong><small>Reduce el riesgo de caídas.</small></div><div><span>02</span><strong>Cúbrete</strong><small>Protege cabeza y cuello.</small></div><div><span>03</span><strong>Sujétate</strong><small>Espera a que termine el movimiento.</small></div></div><a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">Visitar SINAPROC <span aria-hidden="true">↗</span></a></section>
           </div>
           <section id="recomendaciones" className="guide-section" aria-labelledby="guide-title">

@@ -1,14 +1,18 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Leaflet se carga como script global y no trae tipos. */
 
 import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
-import { isAftershock, type Earthquake } from "../lib/earthquakes";
+import { isAftershock, type Earthquake, type ReplayStep } from "../lib/earthquakes";
+import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
 
 type Props = {
   events: Earthquake[];
   mainshock: Earthquake | null;
   focus: { id: string } | null;
+  replayKey: number;
   onSelect: (id: string) => void;
+  onReplay: (step: ReplayStep | null) => void;
 };
 
 const dateTime = new Intl.DateTimeFormat("es-PA", {
@@ -16,33 +20,56 @@ const dateTime = new Intl.DateTimeFormat("es-PA", {
   hour: "2-digit", minute: "2-digit", hour12: true,
 });
 
-export default function QuakeMap({ events, mainshock, focus, onSelect }: Props) {
+const STEP_MS = 900;
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+export default function QuakeMap({ events, mainshock, focus, replayKey, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(false);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const focusedRef = useRef<Props["focus"]>(null);
-  const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
+  const popIn = useRef(true);
+  const latest = useRef({ events, mainshock, onSelect, onReplay });
+  useEffect(() => {
+    latest.current = { events, mainshock, onSelect, onReplay };
+  });
 
   useEffect(() => {
     if (!ready || mapRef.current) return;
     const L = (window as any).L;
     if (!L) return;
-    const map = L.map("leaflet-map", { scrollWheelZoom: false, zoomControl: false })
-      .setView([8.46, -80.4], window.innerWidth < 760 ? 6 : 7);
+    const map = L.map("leaflet-map", {
+      scrollWheelZoom: false, zoomControl: false,
+      minZoom: 6, maxBounds: PANAMA_MAP_BOUNDS, maxBoundsViscosity: 0.9,
+    }).setView([8.46, -80.4], window.innerWidth < 760 ? 6 : 7);
     L.control.zoom({ position: "topright" }).addTo(map);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
     }).addTo(map);
+
+    // Panamá resaltado: se atenúa todo lo que queda fuera de su contorno y se dibuja el borde.
+    const rings = PANAMA_RINGS.map(ring => ring.map(([lng, lat]) => [lat, lng]));
+    const world = [[-85, -200], [-85, 200], [85, 200], [85, -200]];
+    L.polygon([world, ...rings], { className: "panama-mask", stroke: false, fillColor: "#072357", fillOpacity: 0.5, interactive: false }).addTo(map);
+    const outline = L.polygon(rings, { className: "panama-outline", color: "#ffffff", weight: 2.5, fill: false, interactive: false }).addTo(map);
+    outline.getElement()?.setAttribute("pathLength", "1");
+
+    // De cerca el contorno simplificado ya no coincide con la costa del mapa: se desvanece.
+    const container = map.getContainer();
+    const markDetail = () => container.classList.toggle("map-detail", map.getZoom() >= 9);
+    map.on("zoomend", markDetail);
+
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
+    const markers = markersRef.current;
     return () => {
+      map.off("zoomend", markDetail);
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
-      markersRef.current.clear();
+      markers.clear();
     };
   }, [ready]);
 
@@ -52,6 +79,8 @@ export default function QuakeMap({ events, mainshock, focus, onSelect }: Props) 
     if (!ready || !L || !layer) return;
     layer.clearLayers();
     markersRef.current.clear();
+    const chronological = [...events].sort((a, b) => a.properties.time - b.properties.time).map(event => event.id);
+    const pop = popIn.current && !reducedMotion();
     for (const event of events) {
       const [lng, lat, depth] = event.geometry.coordinates;
       const mag = event.properties.mag;
@@ -60,7 +89,7 @@ export default function QuakeMap({ events, mainshock, focus, onSelect }: Props) 
       const kind = isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}" style="width:${size}px;height:${size}px"></span>`,
+        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${isMain ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const marker = L.marker([lat, lng], {
@@ -79,9 +108,10 @@ export default function QuakeMap({ events, mainshock, focus, onSelect }: Props) 
       popup.appendChild(title);
       popup.appendChild(meta);
       marker.bindPopup(popup);
-      marker.on("click", () => onSelectRef.current(event.id));
+      marker.on("click", () => latest.current.onSelect(event.id));
       markersRef.current.set(event.id, marker);
     }
+    if (events.length) popIn.current = false;
   }, [events, mainshock, ready]);
 
   useEffect(() => {
@@ -90,15 +120,74 @@ export default function QuakeMap({ events, mainshock, focus, onSelect }: Props) 
     if (!marker) return;
     focusedRef.current = focus;
     const map = mapRef.current;
-    // Abrir el popup antes de que termine el desplazamiento animado lo cancela.
+    // Abrir el popup antes de que termine el movimiento animado lo cancela.
     map.once("moveend", () => markersRef.current.get(focus.id)?.openPopup());
-    map.setView(marker.getLatLng(), Math.max(map.getZoom(), 9), { animate: true });
+    const zoom = Math.max(map.getZoom(), 9);
+    if (reducedMotion()) map.setView(marker.getLatLng(), zoom, { animate: false });
+    else map.flyTo(marker.getLatLng(), zoom, { duration: 1.4 });
   }, [focus, events, ready]);
+
+  // Reproduce la secuencia: el sismo principal y sus réplicas aparecen en orden cronológico.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!replayKey || !map) return;
+    const { events: all, mainshock: main } = latest.current;
+    const sequence = (main ? all.filter(event => event.id === main.id || isAftershock(event, main)) : all)
+      .slice()
+      .sort((a, b) => a.properties.time - b.properties.time);
+    if (sequence.length < 2) return;
+
+    const L = (window as any).L;
+    const container = map.getContainer() as HTMLElement;
+    const still = reducedMotion();
+    const spans: HTMLElement[] = [];
+    const byId = new Map<string, HTMLElement>();
+    for (const [id, marker] of markersRef.current) {
+      const span = marker.getElement()?.firstElementChild as HTMLElement | undefined;
+      if (!span) continue;
+      span.classList.remove("pop");
+      span.classList.add("replay-hidden");
+      spans.push(span);
+      byId.set(id, span);
+    }
+
+    map.closePopup();
+    const area = L.latLngBounds(sequence.map(event => [event.geometry.coordinates[1], event.geometry.coordinates[0]]));
+    map.flyToBounds(area, { padding: [70, 70], maxZoom: 9, animate: !still, duration: 1.2 });
+
+    const total = sequence.length;
+    const start = still ? 0 : 1300;
+    const timers: number[] = [];
+    latest.current.onReplay({ index: 0, total, time: sequence[0].properties.time, mag: null });
+    sequence.forEach((event, i) => {
+      timers.push(window.setTimeout(() => {
+        const span = byId.get(event.id);
+        span?.classList.remove("replay-hidden");
+        span?.classList.add("replay-pop");
+        if (i === 0 && !still) {
+          container.classList.add("quake-shake");
+          timers.push(window.setTimeout(() => container.classList.remove("quake-shake"), 800));
+        }
+        latest.current.onReplay({ index: i + 1, total, time: event.properties.time, mag: event.properties.mag });
+      }, start + i * STEP_MS));
+    });
+    timers.push(window.setTimeout(() => {
+      for (const span of spans) span.classList.remove("replay-hidden");
+      latest.current.onReplay(null);
+    }, start + total * STEP_MS + 600));
+
+    return () => {
+      timers.forEach(timer => window.clearTimeout(timer));
+      container.classList.remove("quake-shake");
+      for (const span of spans) span.classList.remove("replay-hidden", "replay-pop");
+      latest.current.onReplay(null);
+    };
+  }, [replayKey]);
 
   return (
     <>
       <Script src="/leaflet.js" strategy="afterInteractive" onReady={() => setReady(true)} />
-      <div id="leaflet-map" role="img" aria-label="Mapa interactivo de sismos en Panamá y alrededores" />
+      <div id="leaflet-map" role="img" aria-label="Mapa interactivo de sismos en Panamá" />
       {!ready && <div className="map-fallback">Cargando mapa…</div>}
     </>
   );

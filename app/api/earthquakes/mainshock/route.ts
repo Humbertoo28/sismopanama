@@ -2,6 +2,7 @@ import {
   MAINSHOCK_ID,
   REGION,
   isAftershock,
+  isPanamaPlace,
   type Earthquake,
   type MainshockResponse,
 } from "../../../../lib/earthquakes";
@@ -30,7 +31,7 @@ export async function GET() {
       ...REGION,
     })) as { features?: Earthquake[] } | null;
     const aftershocks = (after?.features ?? []).filter(
-      (item) => isValid(item) && isAftershock(item, mainshock),
+      (item) => isValid(item) && isAftershock(item, mainshock) && isPanamaPlace(item.properties.place),
     );
     const strongest = aftershocks.reduce<Earthquake | null>(
       (best, event) =>

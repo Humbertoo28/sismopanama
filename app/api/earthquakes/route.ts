@@ -1,4 +1,4 @@
-import { REGION, type Earthquake, type EarthquakeResponse } from "../../../lib/earthquakes";
+import { REGION, isPanamaPlace, type Earthquake, type EarthquakeResponse } from "../../../lib/earthquakes";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,8 @@ export async function GET(request: Request) {
         Number.isFinite(item.properties?.time) &&
         Array.isArray(item.geometry?.coordinates) &&
         Number.isFinite(item.geometry.coordinates[0]) &&
-        Number.isFinite(item.geometry.coordinates[1]),
+        Number.isFinite(item.geometry.coordinates[1]) &&
+        isPanamaPlace(item.properties.place),
     );
     const result: EarthquakeResponse = { features, fetchedAt: new Date().toISOString() };
     return Response.json(result, {

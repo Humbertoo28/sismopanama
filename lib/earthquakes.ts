@@ -37,10 +37,24 @@ export type SourceRow = {
   url: string;
 };
 
+export type ReplayStep = {
+  index: number;
+  total: number;
+  time: number;
+  mag: number | null;
+};
+
 export type SourcesResponse = {
   sources: SourceRow[];
   fetchedAt: string;
 };
+
+// El USGS nombra cada sismo por el lugar poblado más cercano y su país ("12 km WSW of Pitaloza Arriba,
+// Panama"). Se usa esa etiqueta, y no un contorno geográfico: varias réplicas caen mar adentro, frente
+// a la costa panameña, y un margen geográfico dejaría pasar sismos colombianos pegados a la frontera.
+export function isPanamaPlace(place: string | null | undefined) {
+  return !!place && /\bPanam[aá]\b/i.test(place) && !/Colombia|Costa Rica/i.test(place);
+}
 
 export const MAINSHOCK_ID = "us6000u18k";
 export const AFTERSHOCK_RADIUS_KM = 150;

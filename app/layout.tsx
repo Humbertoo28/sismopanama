@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Sismo Panamá — Monitor sísmico",
   description:
-    "Consulta sismos recientes en Panamá y sus alrededores, con mapa, magnitud y hora local. Datos del USGS, contrastados con EMSC y GFZ.",
+    "Consulta sismos recientes en Panamá, con mapa, magnitud y hora local. Datos del USGS, contrastados con EMSC y GFZ.",
   icons: { icon: "/favicon.svg" },
 };
 
