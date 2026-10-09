@@ -39,9 +39,18 @@ export async function GET() {
       null,
     );
 
+    // El USGS marca con tsunami = 1 los sismos grandes en zonas oceánicas: no confirma un tsunami,
+    // pero indica que hay que mirar los avisos oficiales. Se avisa también si es una réplica.
+    const flagged = aftershocks
+      .filter((item) => item.properties.tsunami === 1)
+      .reduce<Earthquake | null>(
+        (best, event) => !best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best,
+        null,
+      );
+
     const result: MainshockResponse = {
       mainshock: slim(mainshock),
-      aftershocks: { count: aftershocks.length, strongest: strongest && slim(strongest) },
+      aftershocks: { count: aftershocks.length, strongest: strongest && slim(strongest), tsunami: flagged && slim(flagged) },
       fetchedAt: new Date().toISOString(),
     };
     return Response.json(result, {

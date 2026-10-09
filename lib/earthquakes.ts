@@ -22,7 +22,7 @@ export type EarthquakeResponse = {
 
 export type MainshockResponse = {
   mainshock: Earthquake;
-  aftershocks: { count: number; strongest: Earthquake | null };
+  aftershocks: { count: number; strongest: Earthquake | null; tsunami: Earthquake | null };
   fetchedAt: string;
 };
 
@@ -44,6 +44,10 @@ export type ReplayStep = {
   mag: number | null;
 };
 
+export type FocusRequest = { id: string; quiet?: boolean };
+
+export type LiveAlert = { key: number; event: Earthquake; count: number };
+
 export type SourcesResponse = {
   sources: SourceRow[];
   fetchedAt: string;
@@ -54,6 +58,16 @@ export type SourcesResponse = {
 // a la costa panameña, y un margen geográfico dejaría pasar sismos colombianos pegados a la frontera.
 export function isPanamaPlace(place: string | null | undefined) {
   return !!place && /\bPanam[aá]\b/i.test(place) && !/Colombia|Costa Rica/i.test(place);
+}
+
+// Fuerza y duración del temblor del mapa según la magnitud: M 3.9 apenas se nota (~1.6 px) y
+// M 7.7 llega al máximo (9.5 px). Sin magnitud conocida se trata como un sismo pequeño.
+export function shakeFor(mag: number | null) {
+  const m = mag ?? 3.5;
+  return {
+    px: Math.min(9.5, Math.max(1.6, (m - 3.2) * 2.2)),
+    ms: Math.min(1100, Math.max(450, 380 + m * 70)),
+  };
 }
 
 export const MAINSHOCK_ID = "us6000u18k";

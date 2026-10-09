@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import QuakeMap from "./quake-map";
 import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
@@ -8,7 +8,8 @@ import Sources from "./sources";
 import FlagMark from "./flag-mark";
 import CountUp from "./count-up";
 import SeismoTrace from "./seismo-trace";
-import { isAftershock, type Earthquake, type EarthquakeResponse, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
+import SequenceChart from "./sequence-chart";
+import { isAftershock, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
 const date = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
@@ -62,7 +63,7 @@ export default function Home() {
   const [clock, setClock] = useState<string>("--:--");
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [focus, setFocus] = useState<{ id: string } | null>(null);
+  const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [mainshock, setMainshock] = useState<MainshockResponse | null>(null);
   const [onlyAftershocks, setOnlyAftershocks] = useState(false);
   const [sort, setSort] = useState<"recent" | "magnitude">("recent");
@@ -71,6 +72,10 @@ export default function Home() {
   const [replayKey, setReplayKey] = useState(0);
   const [replay, setReplay] = useState<ReplayStep | null>(null);
   const navLock = useRef(0);
+  const [shakeOn, setShakeOn] = useState(true);
+  const [alert, setAlert] = useState<LiveAlert | null>(null);
+  const [dismissedKey, setDismissedKey] = useState(0);
+  const seen = useRef<{ days: number; ids: Set<string> } | null>(null);
   const introFocused = useRef(false);
 
   useEffect(() => {
@@ -92,6 +97,14 @@ export default function Home() {
         if (!response.ok) throw new Error(`Error ${response.status}`);
         const data: EarthquakeResponse = await response.json();
         if (!Array.isArray(data.features)) throw new Error("Respuesta no válida");
+        // Un sismo es "nuevo" si no estaba en la consulta anterior del mismo período y ocurrió hace menos de una hora.
+        const before = seen.current;
+        if (before && before.days === days) {
+          const fresh = data.features.filter(event => !before.ids.has(event.id) && Date.now() - event.properties.time < 3_600_000);
+          const strongest = fresh.reduce<Earthquake | null>((best, event) => !best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best, null);
+          if (strongest) setAlert({ key: Date.now(), event: strongest, count: fresh.length });
+        }
+        seen.current = { days, ids: new Set(data.features.map(event => event.id)) };
         setAllEvents(data.features);
         setLastUpdate(data.fetchedAt);
         setStatus("ready");
@@ -127,6 +140,12 @@ export default function Home() {
     return () => controller.abort();
   }, [refreshKey]);
 
+  useEffect(() => {
+    if (!alert) return;
+    const timer = window.setTimeout(() => setDismissedKey(alert.key), 9000);
+    return () => window.clearTimeout(timer);
+  }, [alert]);
+
   // Marca en el menú la sección que se está leyendo. Tras pulsar un enlace se congela un momento,
   // para que el scroll animado no recorra las secciones intermedias.
   useEffect(() => {
@@ -160,7 +179,7 @@ export default function Home() {
     if (!mainshock || status === "loading" || introFocused.current) return;
     introFocused.current = true;
     setSelectedId(mainshock.mainshock.id);
-    setFocus({ id: mainshock.mainshock.id });
+    setFocus({ id: mainshock.mainshock.id, quiet: true });
   }, [mainshock, status]);
 
   useEffect(() => {
@@ -190,6 +209,10 @@ export default function Home() {
   const mapEvents = useMemo(
     () => main && !events.some(event => event.id === main.id) ? [main, ...events] : events,
     [events, main],
+  );
+  const sequenceAftershocks = useMemo(
+    () => main ? allEvents.filter(event => isAftershock(event, main)) : [],
+    [allEvents, main],
   );
   const featured = mapEvents.find(event => event.id === selectedId) ?? latest;
   const [recentValue, recentUnit] = latest ? elapsed(latest.properties.time) : ["—", ""];
@@ -252,6 +275,18 @@ export default function Home() {
         </div>
       </aside>
 
+      {alert && alert.key !== dismissedKey && (
+        <div className="live-toast" role="status">
+          <span className="live-toast-icon" aria-hidden="true">⌁</span>
+          <div>
+            <strong>{alert.count > 1 ? `${alert.count} sismos nuevos` : "Nuevo sismo detectado"}</strong>
+            <span>M {magText(alert.event)} · {placeText(alert.event)} · {clockFormat.format(new Date(alert.event.properties.time))}{alert.event.properties.tsunami === 1 && " · Marcado con posible tsunami: revisa tsunami.gov"}</span>
+          </div>
+          <button type="button" onClick={() => { chooseEvent(alert.event); setDismissedKey(alert.key); }}>Ver en el mapa</button>
+          <button type="button" className="toast-close" aria-label="Cerrar aviso" onClick={() => setDismissedKey(alert.key)}>×</button>
+        </div>
+      )}
+
       <main id="inicio" className="main-content">
         <header className="topbar">
           <div className="breadcrumb">INICIO <span>/</span> PANEL GENERAL</div>
@@ -296,7 +331,8 @@ export default function Home() {
                 {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
                 <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
               </dl>
-              {main.properties.tsunami === 1 && <p className="mainshock-warning" role="alert">El USGS marcó este evento como posible generador de tsunami. Consulta los avisos oficiales en tsunami.gov y las indicaciones de SINAPROC.</p>}
+              {main.properties.tsunami === 1 && <p className="mainshock-warning" role="alert">El USGS marcó este evento como posible generador de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.</p>}
+              {mainshock.aftershocks.tsunami && <p className="mainshock-warning" role="alert">El USGS marcó la réplica de M {magText(mainshock.aftershocks.tsunami)} ({placeText(mainshock.aftershocks.tsunami)}) como posible generadora de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.</p>}
               <p className="mainshock-note">Cifras del USGS, <a href="#fuentes">contrastadas con otras agencias</a>: se actualizan y pueden cambiar a medida que se revisan. No reemplazan los avisos oficiales de SINAPROC.</p>
             </section>
           )}
@@ -313,16 +349,24 @@ export default function Home() {
           </section>
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
-            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><div className="segmented" role="group" aria-label="Período">{[[1, "24 horas"], [7, "7 días"], [30, "30 días"]].map(([value, label]) => <button key={value} type="button" className={days === value ? "selected" : ""} aria-pressed={days === value} onClick={() => chooseDays(Number(value))}>{label}</button>)}</div><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="2.5">M 2.5+</option><option value="4.5">M 4.5+</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && <button type="button" className="replay-button" onClick={() => setReplayKey(key => key + 1)} disabled={replay !== null}>{replay ? "Reproduciendo…" : "▶ Reproducir secuencia"}</button>}</div></div>
+            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><div className="segmented" role="group" aria-label="Período">{[[1, "24 horas"], [7, "7 días"], [30, "30 días"]].map(([value, label]) => <button key={value} type="button" className={days === value ? "selected" : ""} aria-pressed={days === value} onClick={() => chooseDays(Number(value))}>{label}</button>)}</div><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="2.5">M 2.5+</option><option value="4.5">M 4.5+</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && <button type="button" className="replay-button" onClick={() => setReplayKey(key => key + 1)} disabled={replay !== null}>{replay ? "Reproduciendo…" : "▶ Reproducir secuencia"}</button>}<button type="button" className={`replay-button shake-toggle${shakeOn ? " is-on" : ""}`} aria-pressed={shakeOn} onClick={() => setShakeOn(on => !on)} title="Con la opción de reducir movimiento activada en tu dispositivo, el mapa no tiembla">〰 Temblor: {shakeOn ? "sí" : "no"}</button></div></div>
             <div className="map-card">
-              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} replayKey={replayKey} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
+              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} shake={shakeOn} alert={alert} replayKey={replayKey} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
               <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div></div><a className="featured-link" href={featured?.properties.url?.startsWith("https://earthquake.usgs.gov/") ? featured.properties.url : "https://earthquake.usgs.gov/earthquakes/map/"} target="_blank" rel="noopener noreferrer">Ver en USGS <span aria-hidden="true">↗</span></a></div>
             </div>
             <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información.</p>
+            {main && sequenceAftershocks.length > 0 && (
+              <div className="sequence-card">
+                <span className="section-kicker">SECUENCIA SÍSMICA</span>
+                <h3>El sismo principal y sus réplicas</h3>
+                <SequenceChart mainshock={main} aftershocks={sequenceAftershocks} selectedId={selectedId} replay={replay} onSelect={chooseEvent} />
+                <p className="sequence-note">Cada barra es un sismo: la altura es la magnitud y la posición, las horas desde el sismo principal. Pulsa una para verla en el mapa. Las réplicas suelen espaciarse con el paso de las horas.</p>
+              </div>
+            )}
           </section>
 
           <div className="lower-grid">
-            <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{events.length} {events.length === 1 ? "evento" : "eventos"}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map(event => <button key={event.id} type="button" className="event-row" onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{depthText(event)} de profundidad</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : status === "loading" ? <div className="event-skeletons" role="status" aria-label="Consultando eventos sísmicos">{[0, 1, 2, 3, 4].map(i => <div key={i} className="event-skeleton" style={{ animationDelay: `${i * 90}ms` }}><i /><span /><em /></div>)}</div> : <div className="empty-state">{status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
+            <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{events.length} {events.length === 1 ? "evento" : "eventos"}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map((event, index) => <button key={event.id} type="button" className="event-row" style={{ "--i": index } as CSSProperties} onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{depthText(event)} de profundidad</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : status === "loading" ? <div className="event-skeletons" role="status" aria-label="Consultando eventos sísmicos">{[0, 1, 2, 3, 4].map(i => <div key={i} className="event-skeleton" style={{ animationDelay: `${i * 90}ms` }}><i /><span /><em /></div>)}</div> : <div className="empty-state">{status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
             <section id="preparacion" className="prepared-card" aria-labelledby="prepared-title"><div className="prepared-icon">✳</div><span className="section-kicker">ESTAR PREPARADOS IMPORTA</span><h2 id="prepared-title">La información es parte de tu seguridad.</h2><p>Ante un sismo, mantén la calma y sigue las indicaciones de las autoridades de protección civil.</p><div className="prepared-steps"><div><span>01</span><strong>Agáchate</strong><small>Reduce el riesgo de caídas.</small></div><div><span>02</span><strong>Cúbrete</strong><small>Protege cabeza y cuello.</small></div><div><span>03</span><strong>Sujétate</strong><small>Espera a que termine el movimiento.</small></div></div><a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">Visitar SINAPROC <span aria-hidden="true">↗</span></a></section>
           </div>
           <section id="recomendaciones" className="guide-section" aria-labelledby="guide-title">
