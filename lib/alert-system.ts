@@ -19,6 +19,7 @@ const STORAGE_SEEN_KEY = "sismo_panama_seen_ids_v1";
 
 let globalAudioCtx: AudioContext | null = null;
 let currentAlarmNodes: { osc1: OscillatorNode; osc2?: OscillatorNode; gain: GainNode } | null = null;
+let currentAudioElement: HTMLAudioElement | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -38,6 +39,15 @@ function getAudioContext(): AudioContext | null {
 }
 
 export function stopAlarmSound() {
+  if (currentAudioElement) {
+    try {
+      currentAudioElement.pause();
+      currentAudioElement.currentTime = 0;
+    } catch {
+      // Ignorar si falla
+    }
+    currentAudioElement = null;
+  }
   if (currentAlarmNodes) {
     try {
       currentAlarmNodes.gain.gain.setValueAtTime(0.0001, globalAudioCtx?.currentTime ?? 0);
@@ -49,58 +59,83 @@ export function stopAlarmSound() {
     currentAlarmNodes = null;
   }
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // Ignorar
+    }
   }
 }
 
 export function playEmergencyAlarmSound() {
   stopAlarmSound();
+
+  // 1. Reproducir primero mediante elemento Audio (/siren.wav) para máxima compatibilidad móvil y escritorio
+  if (typeof window !== "undefined") {
+    try {
+      const audio = new Audio("/siren.wav");
+      audio.volume = 1.0;
+      currentAudioElement = audio;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn("Audio play falló, usando Web Audio:", err);
+          playSynthesizedSiren();
+        });
+      }
+    } catch (e) {
+      console.warn("Error iniciando Audio('/siren.wav'):", e);
+      playSynthesizedSiren();
+    }
+  } else {
+    playSynthesizedSiren();
+  }
+}
+
+function playSynthesizedSiren() {
   const ctx = getAudioContext();
   if (!ctx) return;
 
-  try {
-    const now = ctx.currentTime;
-    const duration = 4.5; // Duración total de la alarma
+  const runSynth = () => {
+    try {
+      const now = ctx.currentTime;
+      const duration = 3.8;
 
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.0001, now);
-    masterGain.gain.exponentialRampToValueAtTime(0.35, now + 0.15);
-    masterGain.gain.setValueAtTime(0.35, now + duration - 0.4);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    masterGain.connect(ctx.destination);
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.35, now);
+      masterGain.gain.setValueAtTime(0.35, now + duration - 0.3);
+      masterGain.gain.linearRampToValueAtTime(0.001, now + duration);
+      masterGain.connect(ctx.destination);
 
-    // Oscilador 1: Tono de advertencia modulado tipo sirena sísmica
-    const osc1 = ctx.createOscillator();
-    osc1.type = "sawtooth";
+      const osc1 = ctx.createOscillator();
+      osc1.type = "sawtooth";
 
-    // Modulación de frecuencia: alterna entre 780Hz y 960Hz cada 0.3 segundos
-    const cycles = Math.floor(duration / 0.35);
-    for (let i = 0; i < cycles; i++) {
-      const t = now + i * 0.35;
-      osc1.frequency.setValueAtTime(i % 2 === 0 ? 880 : 660, t);
-    }
-
-    // Filtro pasa-bajos para suavizar el sonido y que no sea estridente
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(1400, now);
-
-    osc1.connect(filter);
-    filter.connect(masterGain);
-
-    osc1.start(now);
-    osc1.stop(now + duration);
-
-    currentAlarmNodes = { osc1, gain: masterGain };
-
-    // Limpieza automática
-    window.setTimeout(() => {
-      if (currentAlarmNodes?.osc1 === osc1) {
-        currentAlarmNodes = null;
+      const cycles = Math.floor(duration / 0.35);
+      for (let i = 0; i < cycles; i++) {
+        const t = now + i * 0.35;
+        osc1.frequency.setValueAtTime(i % 2 === 0 ? 880 : 660, t);
       }
-    }, (duration + 0.2) * 1000);
-  } catch (error) {
-    console.warn("Error al emitir sonido de alarma sísmica:", error);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(1400, now);
+
+      osc1.connect(filter);
+      filter.connect(masterGain);
+
+      osc1.start(now);
+      osc1.stop(now + duration);
+
+      currentAlarmNodes = { osc1, gain: masterGain };
+    } catch (err) {
+      console.warn("Error en sintetizador de sirena:", err);
+    }
+  };
+
+  if (ctx.state === "suspended") {
+    ctx.resume().then(runSynth).catch(runSynth);
+  } else {
+    runSynth();
   }
 }
 

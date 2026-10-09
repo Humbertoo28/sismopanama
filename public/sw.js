@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
   "/leaflet.js",
+  "/siren.wav",
   "/fonts/dm-sans-latin.woff2",
   "/fonts/space-grotesk-latin.woff2",
 ];

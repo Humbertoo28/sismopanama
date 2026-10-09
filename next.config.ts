@@ -20,7 +20,7 @@ const csp = [
   "connect-src 'self'",
   "worker-src 'self'",
   "manifest-src 'self'",
-  "media-src 'none'",
+  "media-src 'self' data: blob:",
   "object-src 'none'",
   "frame-src 'none'",
   "frame-ancestors 'none'",
