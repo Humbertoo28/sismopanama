@@ -50,7 +50,8 @@ export type ReplayStep = {
 
 export type FocusRequest = { id: string; quiet?: boolean };
 
-export type LiveAlert = { key: number; event: Earthquake; count: number };
+// `quiet`: el sismo es nuevo para este dispositivo pero ya tiene un rato; se avisa en pantalla sin sirena.
+export type LiveAlert = { key: number; event: Earthquake; count: number; quiet?: boolean };
 
 export type SourcesResponse = {
   sources: SourceRow[];
@@ -85,6 +86,10 @@ export const AFTERSHOCK_RADIUS_KM = 150;
 export function distanceKm(a: Earthquake, b: Earthquake) {
   const [lng1, lat1] = a.geometry.coordinates;
   const [lng2, lat2] = b.geometry.coordinates;
+  return kmBetween(lat1, lng1, lat2, lng2);
+}
+
+export function kmBetween(lat1: number, lng1: number, lat2: number, lng2: number) {
   const rad = Math.PI / 180;
   const h =
     Math.sin(((lat2 - lat1) * rad) / 2) ** 2 +

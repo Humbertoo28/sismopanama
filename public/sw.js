@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v3";
+const CACHE_NAME = "sismo-panama-v4";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -70,13 +70,53 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// Receptor de Web Push (funciona incluso con la app cerrada / celular bloqueado)
+self.addEventListener("push", (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { body: event.data.text() };
+    }
+  }
+
+  const title = data.title || "🚨 Alerta Sísmica - Panamá";
+  const options = {
+    body: data.body || "Se ha registrado un evento sísmico reciente en Panamá.",
+    icon: "/icon-192.png",
+    badge: "/favicon.svg",
+    vibrate: [400, 150, 400, 150, 400],
+    tag: data.id ? `sismo-${data.id}` : "sismo-panama-alert",
+    renotify: true,
+    requireInteraction: true,
+    data: {
+      url: data.url || "/",
+      id: data.id,
+      timestamp: data.time || Date.now(),
+    },
+    actions: [
+      { action: "explore", title: "Ver Mapa" },
+      { action: "close", title: "Cerrar" },
+    ],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  if (event.action === "close") {
+    return;
+  }
   const urlToOpen = event.notification.data?.url || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
         if (client.url && "focus" in client) {
+          if ("navigate" in client && urlToOpen !== "/") {
+            client.navigate(urlToOpen);
+          }
           return client.focus();
         }
       }

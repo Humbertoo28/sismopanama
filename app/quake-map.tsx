@@ -242,11 +242,12 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
   // Sismo nuevo mientras la página está abierta: su marcador destaca y el mapa tiembla según su magnitud.
   useEffect(() => {
     const map = mapRef.current;
+    // Un aviso en silencio (sismo de hace un rato) no hace temblar el mapa.
     if (!alert || !map) return;
     const span = markersRef.current.get(alert.event.id)?.getElement()?.firstElementChild as HTMLElement | undefined;
     fresh.current = { id: alert.event.id, until: Date.now() + 8000 };
     span?.classList.add("fresh");
-    if (!reducedMotion()) shakeElement(map.getContainer(), alert.event.properties.mag);
+    if (!alert.quiet && !reducedMotion()) shakeElement(map.getContainer(), alert.event.properties.mag);
     const timer = window.setTimeout(() => {
       fresh.current = null;
       markersRef.current.get(alert.event.id)?.getElement()?.firstElementChild?.classList.remove("fresh");

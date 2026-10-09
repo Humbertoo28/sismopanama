@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Earthquake } from "../lib/earthquakes";
 import {
   broadcastEarthquakeAlert,
+  getExistingPushSubscription,
   getNotificationPermissionStatus,
   getTelegramShareUrl,
   getWhatsAppShareUrl,
   loadAlertPreferences,
   requestNotificationPermission,
   saveAlertPreferences,
+  sendTestWebPush,
   stopAlarmSound,
+  subscribeToWebPush,
   type AlertPreferences,
 } from "../lib/alert-system";
 import PwaInstall from "./pwa-install";
@@ -26,6 +29,17 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
   const [prefs, setPrefs] = useState<AlertPreferences>(loadAlertPreferences);
   const [permStatus, setPermStatus] = useState<NotificationPermission | "unsupported">(() => getNotificationPermissionStatus());
   const [isTesting, setIsTesting] = useState(false);
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushMsg, setPushMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      getExistingPushSubscription().then((sub) => {
+        setIsPushSubscribed(Boolean(sub));
+      });
+    }
+  }, [isOpen]);
 
   const updatePref = <K extends keyof AlertPreferences>(key: K, value: AlertPreferences[K]) => {
     const updated = { ...prefs, [key]: value };
@@ -38,7 +52,34 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
     setPermStatus(getNotificationPermissionStatus());
     if (granted) {
       updatePref("notificationsEnabled", true);
+      // Auto-suscribir a Web Push si el usuario concede permiso
+      handleTogglePush();
     }
+  };
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    setPushMsg(null);
+    const res = await subscribeToWebPush(prefs.minMagnitude);
+    if (res.ok) {
+      setIsPushSubscribed(true);
+      setPushMsg("✓ ¡Suscrito con éxito a alertas en segundo plano!");
+    } else {
+      setPushMsg(`✕ ${res.error}`);
+    }
+    setPushLoading(false);
+  };
+
+  const handleTestPush = async () => {
+    setPushLoading(true);
+    setPushMsg(null);
+    const res = await sendTestWebPush();
+    if (res.ok) {
+      setPushMsg("✓ Notificación push enviada. Revisa la barra de tu dispositivo.");
+    } else {
+      setPushMsg(`✕ ${res.error}`);
+    }
+    setPushLoading(false);
   };
 
   const handleTestAlert = async () => {
@@ -58,7 +99,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
     };
 
     await broadcastEarthquakeAlert(testEvent, 1, prefs, true);
-    window.setTimeout(() => setIsTesting(false), 4500);
+    window.setTimeout(() => setIsTesting(false), 12_000);
   };
 
   if (!isOpen) return null;
@@ -126,6 +167,65 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 Activar notificaciones
               </button>
             )}
+          </div>
+
+          {/* Sección de Web Push (Segundo plano / App cerrada) */}
+          <div className="alert-setting-row" style={{ background: "rgba(14, 165, 233, 0.08)", border: "1px solid rgba(14, 165, 233, 0.25)", borderRadius: "10px", padding: "14px 12px" }}>
+            <div className="alert-setting-info">
+              <strong style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>📲</span> Alertas Push con la app cerrada
+                <span style={{ fontSize: "10px", background: "#0284c7", color: "#fff", padding: "2px 6px", borderRadius: "4px", fontWeight: "700" }}>24/7 PUSH</span>
+              </strong>
+              <span>
+                Recibe notificaciones en tu celular o PC incluso con la app cerrada, gracias al servicio en la nube Supabase.
+              </span>
+              <div className="perm-badge-wrap" style={{ marginTop: "6px" }}>
+                {isPushSubscribed ? (
+                  <span className="perm-badge ok">✓ Suscripción en segundo plano activa</span>
+                ) : (
+                  <span className="perm-badge warning">⚠ No suscrito a alertas en segundo plano</span>
+                )}
+              </div>
+              {pushMsg && (
+                <div style={{ marginTop: "6px", fontSize: "11px", color: pushMsg.startsWith("✓") ? "#34d399" : "#f87171" }}>
+                  {pushMsg}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
+              <button
+                type="button"
+                className="perm-req-btn"
+                style={{
+                  background: isPushSubscribed ? "#047857" : "#0284c7",
+                  fontSize: "11px",
+                  padding: "8px 12px",
+                  whiteSpace: "nowrap",
+                }}
+                onClick={handleTogglePush}
+                disabled={pushLoading}
+              >
+                {pushLoading ? "Conectando…" : isPushSubscribed ? "✓ Actualizar Suscripción" : "Activar en 2do Plano"}
+              </button>
+              {isPushSubscribed && (
+                <button
+                  type="button"
+                  style={{
+                    background: "rgba(255,255,255,0.08)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    borderRadius: "6px",
+                    color: "#fff",
+                    fontSize: "10px",
+                    padding: "5px 8px",
+                    cursor: "pointer",
+                  }}
+                  onClick={handleTestPush}
+                  disabled={pushLoading}
+                >
+                  Probar Push en 2do Plano
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Sección de Sonido de Emergencia */}

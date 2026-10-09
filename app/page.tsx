@@ -12,13 +12,17 @@ import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
 import PwaInstall from "./pwa-install";
 import {
+  ALARM_MAX_AGE_MS,
   broadcastEarthquakeAlert,
   getNotificationPermissionStatus,
-  getSeenEarthquakeIds,
   getWhatsAppShareUrl,
+  isSeenQuake,
   loadAlertPreferences,
-  saveSeenEarthquakeIds,
+  loadSeenQuakes,
+  rememberQuakes,
+  saveSeenQuakes,
   stopAlarmSound,
+  type SeenQuake,
 } from "../lib/alert-system";
 import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
@@ -72,6 +76,12 @@ function elapsed(time: number) {
   return [String(days), days === 1 ? "día" : "días"];
 }
 
+// "35 min" o "1 h 5 min".
+function agoText(minutes: number) {
+  const m = Math.max(0, minutes);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+}
+
 export default function Home() {
   const [minimum, setMinimum] = useState(0);
   const [allEvents, setAllEvents] = useState<Earthquake[]>([]);
@@ -96,7 +106,7 @@ export default function Home() {
   const [permStatus, setPermStatus] = useState<NotificationPermission | "unsupported">(() =>
     typeof window !== "undefined" ? getNotificationPermissionStatus() : "default",
   );
-  const seen = useRef<{ ids: Set<string> } | null>(null);
+  const seen = useRef<SeenQuake[] | null>(null);
   const previousEvents = useRef<Earthquake[]>([]);
   const introFocused = useRef(false);
 
@@ -128,12 +138,15 @@ export default function Home() {
         const data: EarthquakeResponse = await response.json();
         if (!Array.isArray(data.features)) throw new Error("Respuesta no válida");
 
-        const storedSeen = seen.current ? seen.current.ids : getSeenEarthquakeIds();
-        const isFirstRun = !seen.current && storedSeen.size === 0;
+        // Se lee de localStorage en cada consulta: así otra pestaña (o la app instalada) que ya dio la alerta
+        // de un sismo también cuenta, y este dispositivo no la repite.
+        const stored = loadSeenQuakes();
+        const known = stored.length > 0 ? stored : (seen.current ?? []);
+        const isFirstRun = !seen.current && stored.length === 0;
 
         // Un sismo es "nuevo" si no estaba registrado y ocurrió hace menos de 2 horas
         const fresh = data.features.filter(
-          event => ![event.id, ...(event.properties.aliases ?? [])].some(id => storedSeen.has(id)) && !previousEvents.current.some(old => sameEvent(old, event)) && Date.now() - event.properties.time < 2 * 3_600_000,
+          event => !isSeenQuake(event, known) && !previousEvents.current.some(old => sameEvent(old, event)) && Date.now() - event.properties.time < 2 * 3_600_000,
         );
 
         const prefs = loadAlertPreferences();
@@ -141,22 +154,29 @@ export default function Home() {
           event => event.properties.mag === null || event.properties.mag >= prefs.minMagnitude,
         );
 
+        // Se anota como visto antes de avisar, para que otra pestaña que consulte ahora no avise también.
+        const remembered = rememberQuakes(known, data.features);
+        seen.current = remembered;
+        previousEvents.current = data.features;
+        saveSeenQuakes(remembered);
+
         if (!isFirstRun && qualifying.length > 0) {
-          const strongest = qualifying.reduce<Earthquake | null>(
-            (best, event) => (!best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best),
-            null,
-          );
+          const strongestOf = (list: Earthquake[]) =>
+            list.reduce<Earthquake | null>(
+              (best, event) => (!best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best),
+              null,
+            );
+          // Sirena y voz solo para lo que acaba de ocurrir. Un sismo de hace un rato (se reabrió la app o el
+          // equipo despertó) se muestra en pantalla y en silencio: una alarma por algo viejo confunde.
+          const now = Date.now();
+          const recent = qualifying.filter(event => now - event.properties.time <= ALARM_MAX_AGE_MS);
+          const quiet = recent.length === 0;
+          const strongest = strongestOf(quiet ? qualifying : recent);
           if (strongest) {
-            setAlert({ key: Date.now(), event: strongest, count: qualifying.length });
-            broadcastEarthquakeAlert(strongest, qualifying.length, prefs);
+            setAlert({ key: now, event: strongest, count: qualifying.length, quiet });
+            if (!quiet) broadcastEarthquakeAlert(strongest, qualifying.length, prefs);
           }
         }
-
-        const currentIds = new Set(data.features.flatMap(event => [event.id, ...(event.properties.aliases ?? [])]));
-        const mergedSeen = new Set([...storedSeen, ...currentIds]);
-        seen.current = { ids: mergedSeen };
-        previousEvents.current = data.features;
-        saveSeenEarthquakeIds(mergedSeen);
 
         setAllEvents(data.features);
         setLastUpdate(data.fetchedAt);
@@ -341,11 +361,12 @@ export default function Home() {
           <span className="live-toast-icon" aria-hidden="true">🚨</span>
           <div className="live-toast-content">
             <div className="live-toast-head">
-              <strong>¡ALERTA SÍSMICA EN PANAMÁ!</strong>
+              <strong>{alert.quiet ? "Sismo reciente en Panamá" : "¡ALERTA SÍSMICA EN PANAMÁ!"}</strong>
               <span className="live-toast-badge">M {magText(alert.event)}</span>
             </div>
             <div className="live-toast-desc">
               {placeText(alert.event)} · {clockFormat.format(new Date(alert.event.properties.time))}
+              {alert.quiet && ` · hace ${agoText(Math.round((alert.key - alert.event.properties.time) / 60_000))}`}
               {alert.event.properties.tsunami === 1 && " · Riesgo potencial de tsunami (tsunami.gov)"}
             </div>
           </div>
@@ -368,14 +389,16 @@ export default function Home() {
             >
               📲 Mandar a todos por WhatsApp
             </a>
-            <button
-              type="button"
-              className="btn-toast-mute"
-              onClick={() => stopAlarmSound()}
-              title="Silenciar sonido de alarma"
-            >
-              🔇 Silenciar
-            </button>
+            {!alert.quiet && (
+              <button
+                type="button"
+                className="btn-toast-mute"
+                onClick={() => stopAlarmSound()}
+                title="Silenciar sonido de alarma"
+              >
+                🔇 Silenciar
+              </button>
+            )}
           </div>
           <button
             type="button"

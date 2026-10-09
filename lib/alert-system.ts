@@ -1,4 +1,4 @@
-import type { Earthquake } from "./earthquakes";
+import { kmBetween, type Earthquake } from "./earthquakes";
 
 export type AlertPreferences = {
   notificationsEnabled: boolean;
@@ -15,11 +15,21 @@ const DEFAULT_PREFERENCES: AlertPreferences = {
 };
 
 const STORAGE_PREFS_KEY = "sismo_panama_alert_prefs_v1";
-const STORAGE_SEEN_KEY = "sismo_panama_seen_ids_v1";
+const STORAGE_SEEN_KEY = "sismo_panama_seen_v2";
+
+// Un sismo que ocurrió hace más de esto ya no justifica sirena ni voz: se avisa en pantalla y en silencio.
+// Así, al reabrir la app o despertar el equipo no suena una alarma por algo que pasó hace rato.
+export const ALARM_MAX_AGE_MS = 15 * 60_000;
+// Tope de espera a que termine la sirena antes de hablar, por si el navegador nunca avisa del final.
+const SIREN_MAX_MS = 6000;
+const SEEN_LIMIT = 400;
 
 let globalAudioCtx: AudioContext | null = null;
 let currentAlarmNodes: { osc1: OscillatorNode; osc2?: OscillatorNode; gain: GainNode } | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
+// Cada alerta nueva (o cada "silenciar") cambia la tanda: lo que quedó pendiente de la anterior se descarta.
+let alarmRun = 0;
+let alarmTimer: number | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -39,8 +49,15 @@ function getAudioContext(): AudioContext | null {
 }
 
 export function stopAlarmSound() {
+  alarmRun++;
+  if (typeof window !== "undefined" && alarmTimer !== null) {
+    window.clearTimeout(alarmTimer);
+    alarmTimer = null;
+  }
   if (currentAudioElement) {
     try {
+      currentAudioElement.onended = null;
+      currentAudioElement.onerror = null;
       currentAudioElement.pause();
       currentAudioElement.currentTime = 0;
     } catch {
@@ -50,6 +67,7 @@ export function stopAlarmSound() {
   }
   if (currentAlarmNodes) {
     try {
+      currentAlarmNodes.osc1.onended = null;
       currentAlarmNodes.gain.gain.setValueAtTime(0.0001, globalAudioCtx?.currentTime ?? 0);
       currentAlarmNodes.osc1.stop();
       currentAlarmNodes.osc2?.stop();
@@ -67,36 +85,63 @@ export function stopAlarmSound() {
   }
 }
 
-export function playEmergencyAlarmSound() {
+// Reproduce la sirena y llama a `onEnd` cuando termina (o si no se pudo oír), para que la voz hable
+// después de ella y no encima. Si llega otra alerta o se silencia, `onEnd` ya no se ejecuta.
+export function playEmergencyAlarmSound(onEnd?: () => void) {
+  if (typeof window === "undefined") return;
   stopAlarmSound();
-
-  // 1. Reproducir primero mediante elemento Audio (/siren.wav) para máxima compatibilidad móvil y escritorio
-  if (typeof window !== "undefined") {
-    try {
-      const audio = new Audio("/siren.wav");
-      audio.volume = 1.0;
-      currentAudioElement = audio;
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn("Audio play falló, usando Web Audio:", err);
-          playSynthesizedSiren();
-        });
-      }
-    } catch (e) {
-      console.warn("Error iniciando Audio('/siren.wav'):", e);
-      playSynthesizedSiren();
+  const run = alarmRun;
+  let done = false;
+  const finish = () => {
+    if (done || run !== alarmRun) return;
+    done = true;
+    if (alarmTimer !== null) {
+      window.clearTimeout(alarmTimer);
+      alarmTimer = null;
     }
-  } else {
-    playSynthesizedSiren();
+    onEnd?.();
+  };
+  alarmTimer = window.setTimeout(finish, SIREN_MAX_MS);
+
+  // 1. Primero mediante elemento Audio (/siren.wav) para máxima compatibilidad móvil y escritorio
+  let fellBack = false;
+  const fallBack = () => {
+    if (fellBack || run !== alarmRun) return;
+    fellBack = true;
+    playSynthesizedSiren(finish);
+  };
+  try {
+    const audio = new Audio("/siren.wav");
+    audio.volume = 1.0;
+    audio.onended = finish;
+    audio.onerror = fallBack;
+    currentAudioElement = audio;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn("Audio play falló, usando Web Audio:", err);
+        fallBack();
+      });
+    }
+  } catch (e) {
+    console.warn("Error iniciando Audio('/siren.wav'):", e);
+    fallBack();
   }
 }
 
-function playSynthesizedSiren() {
+function playSynthesizedSiren(onEnd: () => void) {
   const ctx = getAudioContext();
-  if (!ctx) return;
+  if (!ctx) {
+    onEnd();
+    return;
+  }
 
   const runSynth = () => {
+    // Con el audio bloqueado por el navegador no habrá sonido: no se hace esperar a la voz.
+    if (ctx.state !== "running") {
+      onEnd();
+      return;
+    }
     try {
       const now = ctx.currentTime;
       const duration = 3.8;
@@ -123,12 +168,14 @@ function playSynthesizedSiren() {
       osc1.connect(filter);
       filter.connect(masterGain);
 
+      osc1.onended = onEnd;
       osc1.start(now);
       osc1.stop(now + duration);
 
       currentAlarmNodes = { osc1, gain: masterGain };
     } catch (err) {
       console.warn("Error en sintetizador de sirena:", err);
+      onEnd();
     }
   };
 
@@ -231,6 +278,107 @@ export async function sendSystemNotification({
   }
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+export async function getExistingPushSubscription(): Promise<PushSubscription | null> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return null;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+  } catch {
+    return null;
+  }
+}
+
+export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return { ok: false, error: "Tu navegador no soporta notificaciones Web Push en segundo plano." };
+  }
+
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      return { ok: false, error: "Permiso de notificaciones denegado." };
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+
+    if (!sub) {
+      const keyRes = await fetch("/api/push/vapid-public-key");
+      const { publicKey } = (await keyRes.json()) as { publicKey?: string };
+      if (!publicKey) throw new Error("No se pudo obtener la clave VAPID pública");
+
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+
+    const subJson = sub.toJSON();
+    const saveRes = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint: subJson.endpoint,
+        keys: subJson.keys,
+        minMagnitude,
+      }),
+    });
+
+    const data = (await saveRes.json()) as { error?: string };
+    if (!saveRes.ok) {
+      return { ok: false, error: data.error || "No se pudo registrar la suscripción en el servidor." };
+    }
+
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
+export async function sendTestWebPush(): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return { ok: false, error: "Web Push no disponible en este entorno" };
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      return { ok: false, error: "No tienes una suscripción Push activa aún. Activa las alertas primero." };
+    }
+    const subJson = sub.toJSON();
+    const res = await fetch("/api/push/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint: subJson.endpoint,
+        keys: subJson.keys,
+      }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      return { ok: false, error: data.error || "Error al enviar la prueba" };
+    }
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
 export function loadAlertPreferences(): AlertPreferences {
   if (typeof window === "undefined") return DEFAULT_PREFERENCES;
   try {
@@ -252,27 +400,81 @@ export function saveAlertPreferences(prefs: AlertPreferences) {
   }
 }
 
-export function getSeenEarthquakeIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+// Sismos que este dispositivo ya conoce. Se guardan con hora y posición, y no solo con su id: los catálogos
+// revisan el sismo (el id del IGC lleva el segundo exacto, que cambia al revisarlo) y un id nuevo del mismo
+// sismo no debe volver a sonar como si fuera otro. Se comparten entre pestañas por localStorage.
+export type SeenQuake = { ids: string[]; time: number; lat: number; lng: number };
+
+function matchesSeen(event: Earthquake, record: SeenQuake) {
+  if ([event.id, ...(event.properties.aliases ?? [])].some(id => record.ids.includes(id))) return true;
+  const [lng, lat] = event.geometry.coordinates;
+  // Mismo criterio que sameEvent: menos de un minuto de diferencia y a menos de 120 km.
+  return Math.abs(event.properties.time - record.time) <= 60_000 && kmBetween(lat, lng, record.lat, record.lng) <= 120;
+}
+
+export function isSeenQuake(event: Earthquake, seen: SeenQuake[]) {
+  return seen.some(record => matchesSeen(event, record));
+}
+
+export function rememberQuakes(seen: SeenQuake[], events: Earthquake[]): SeenQuake[] {
+  const next = seen.map(record => ({ ...record, ids: [...record.ids] }));
+  for (const event of events) {
+    const ids = [event.id, ...(event.properties.aliases ?? [])];
+    const [lng, lat] = event.geometry.coordinates;
+    const hit = next.find(record => matchesSeen(event, record));
+    if (hit) {
+      // Se actualiza con la última revisión para que una cadena de revisiones siga coincidiendo.
+      hit.ids = Array.from(new Set([...hit.ids, ...ids]));
+      hit.time = event.properties.time;
+      hit.lat = lat;
+      hit.lng = lng;
+    } else {
+      next.push({ ids, time: event.properties.time, lat, lng });
+    }
+  }
+  return next.sort((a, b) => a.time - b.time).slice(-SEEN_LIMIT);
+}
+
+export function loadSeenQuakes(): SeenQuake[] {
+  if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_SEEN_KEY);
-    if (!raw) return new Set();
-    const list = JSON.parse(raw);
-    return new Set(Array.isArray(list) ? list : []);
+    const list = JSON.parse(localStorage.getItem(STORAGE_SEEN_KEY) ?? "[]");
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+      (item): item is SeenQuake =>
+        !!item && Array.isArray(item.ids) && Number.isFinite(item.time) && Number.isFinite(item.lat) && Number.isFinite(item.lng),
+    );
   } catch {
-    return new Set();
+    return [];
   }
 }
 
-export function saveSeenEarthquakeIds(ids: Set<string>) {
+export function saveSeenQuakes(seen: SeenQuake[]) {
   if (typeof window === "undefined") return;
   try {
-    // Guardar solo los últimos 200 IDs para no saturar localStorage
-    const list = Array.from(ids).slice(-200);
-    localStorage.setItem(STORAGE_SEEN_KEY, JSON.stringify(list));
+    localStorage.setItem(STORAGE_SEEN_KEY, JSON.stringify(seen));
   } catch {
     // Ignorar si falla
   }
+}
+
+const COMPASS: Record<string, string> = {
+  N: "norte", S: "sur", E: "este", W: "oeste",
+  NE: "noreste", NW: "noroeste", SE: "sureste", SW: "suroeste",
+  NNE: "norte-noreste", ENE: "este-noreste", ESE: "este-sureste", SSE: "sur-sureste",
+  SSW: "sur-suroeste", WSW: "oeste-suroeste", WNW: "oeste-noroeste", NNW: "norte-noroeste",
+};
+
+// El USGS nombra el lugar en inglés ("12 km WSW of Pitaloza Arriba, Panama") y la voz en español lo
+// destrozaría. Se traduce a una frase que se entienda al oído; los demás catálogos traen un texto distinto.
+export function spokenPlace(place: string | null | undefined) {
+  const text = (place ?? "").trim();
+  const usgs = /^(\d+)\s*km\s+([NSEW]{1,3})\s+of\s+(.+?)(?:,\s*Panam[aá])?$/i.exec(text);
+  const direction = usgs ? COMPASS[usgs[2].toUpperCase()] : undefined;
+  if (usgs && direction) return `a ${usgs[1]} kilómetros al ${direction} de ${usgs[3]}`;
+  // EMSC solo da coordenadas ("Panamá (8.12°N, 80.12°O)"): leerlas no ayuda a nadie.
+  if (!text || /\d\s*°/.test(text)) return "en Panamá";
+  return `en ${text.replace(/,\s*Panam[aá]$/i, "")}`;
 }
 
 export function formatDateTimePanama(timestamp: number) {
@@ -337,22 +539,23 @@ export async function broadcastEarthquakeAlert(
     : "No disponible";
   const timeStr = formatDateTimePanama(event.properties.time);
 
+  // Se corta cualquier sirena o voz que quedara de una alerta anterior antes de empezar esta.
+  stopAlarmSound();
+
   // 1. Vibración táctil en teléfonos móviles
   vibrateDevice([400, 200, 400, 200, 800]);
 
-  // 2. Alarma sonora sísmica
+  // 2. Sirena y 3. voz, una después de la otra: juntas no se entiende ninguna de las dos.
+  const voiceMsg = isTest
+    ? `Prueba de alerta sísmica. El sonido y las notificaciones funcionan correctamente.`
+    : `Alerta sísmica. Sismo de magnitud ${event.properties.mag === null ? "desconocida" : event.properties.mag.toFixed(1).replace(".", " coma ")}, ${spokenPlace(event.properties.place)}. Mantén la calma.`;
+  const speak = () => {
+    if (prefs.voiceEnabled) playVoiceAlert(voiceMsg);
+  };
   if (prefs.soundEnabled) {
-    playEmergencyAlarmSound();
-  }
-
-  // 3. Notificación de voz hablada
-  if (prefs.voiceEnabled) {
-    const voiceMsg = isTest
-      ? `Prueba de alerta sísmica en Panamá. El sistema de notificación y audio está funcionando correctamente.`
-      : `¡Atención! Alerta sísmica. Nuevo sismo reportado en Panamá de magnitud ${mag} en ${place}. Mantén la calma y mantente a salvo.`;
-    window.setTimeout(() => {
-      playVoiceAlert(voiceMsg);
-    }, 1200);
+    playEmergencyAlarmSound(speak);
+  } else {
+    speak();
   }
 
   // 4. Notificación emergente del sistema en el navegador/celular
