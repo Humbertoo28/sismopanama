@@ -182,6 +182,10 @@ export default function Home() {
         setLastUpdate(data.fetchedAt);
         setCatalogs(data.catalogs);
         setStatus("ready");
+        if (!introFocused.current && data.features.length > 0) {
+          introFocused.current = true;
+          setFocus({ id: data.features[0].id, quiet: true });
+        }
       } catch (error) {
         if (controller.signal.aborted) return;
         console.error("No se pudo cargar el catálogo sísmico:", error);
@@ -250,15 +254,6 @@ export default function Home() {
     };
   }, []);
 
-  // Enfoque inicial en el epicentro, una vez que el listado también cargó: si los marcadores
-  // se reconstruyen a mitad del movimiento del mapa, el desplazamiento no termina.
-  useEffect(() => {
-    if (!mainshock || status === "loading" || introFocused.current) return;
-    introFocused.current = true;
-    setSelectedId(mainshock.mainshock.id);
-    setFocus({ id: mainshock.mainshock.id, quiet: true });
-  }, [mainshock, status]);
-
   useEffect(() => {
     // Sondeo rápido cada 12 segundos para detectar nuevos sismos con mínima latencia
     const timer = window.setInterval(() => {
@@ -298,7 +293,7 @@ export default function Home() {
   );
   const latest = events[0] ?? null;
   const mapEvents = useMemo(
-    () => main && !events.some(event => event.id === main.id) ? [main, ...events] : events,
+    () => main && !events.some(event => event.id === main.id) ? [...events, main] : events,
     [events, main],
   );
   const sequenceAftershocks = useMemo(
@@ -480,7 +475,16 @@ export default function Home() {
                 </div>
                 <div className="mainshock-actions">
                   <a className="primary" href="#recomendaciones">Qué hacer ahora</a>
-                  <button type="button" onClick={() => chooseEvent(main)}>Ver en el mapa</button>
+                  <button type="button" onClick={() => chooseEvent(main)}>Ver sismo principal en mapa</button>
+                  {latest && main && latest.id !== main.id && (
+                    <button
+                      type="button"
+                      onClick={() => chooseEvent(latest)}
+                      style={{ background: "#e11d48", color: "#fff", border: "0" }}
+                    >
+                      📍 Ver último sismo ({magText(latest)} M)
+                    </button>
+                  )}
                   <button type="button" onClick={share} aria-live="polite">{shared ? "Enlace copiado" : "Compartir"}</button>
                   <a
                     className="wide"
@@ -521,7 +525,7 @@ export default function Home() {
           <section id="mapa" className="map-section" aria-labelledby="map-title">
             <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="2.5">M 2.5+</option><option value="4.5">M 4.5+</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && <button type="button" className="replay-button" onClick={() => setReplayKey(key => key + 1)} disabled={replay !== null}>{replay ? "Reproduciendo…" : "▶ Reproducir secuencia"}</button>}</div></div>
             <div className="map-card">
-              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
+              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> Último sismo</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
               <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div></div><a className="featured-link" href={reportUrl(featured)} target="_blank" rel="noopener noreferrer">{`Ver en ${SOURCE_NAMES[featured?.properties.source ?? "usgs"]}`} <span aria-hidden="true">↗</span></a></div>
             </div>
             <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información.</p>

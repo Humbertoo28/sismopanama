@@ -198,27 +198,48 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
     layer.clearLayers();
     markersRef.current.clear();
     const chronological = [...events].sort((a, b) => a.properties.time - b.properties.time).map(event => event.id);
+    const latestEvent = events.reduce<Earthquake | null>(
+      (newest, e) => (!newest || e.properties.time > newest.properties.time ? e : newest),
+      null,
+    );
     const pop = popIn.current && !reducedMotion();
     for (const event of events) {
       const [lng, lat, depth] = event.geometry.coordinates;
       const mag = event.properties.mag;
+      const isLatest = event.id === latestEvent?.id;
       const isMain = event.id === mainshock?.id;
-      const size = isMain ? 40 : Math.max(12, Math.min(34, 11 + (mag ?? 0) * 3.4));
-      const kind = isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
-      const recent = !isMain && now - event.properties.time < RECENT_MS ? " recent" : "";
+      const size = isLatest
+        ? Math.max(34, Math.min(46, 22 + (mag ?? 0) * 3.4))
+        : isMain
+        ? 34
+        : Math.max(12, Math.min(34, 11 + (mag ?? 0) * 3.4));
+      const kind = isLatest ? " latest" : isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
+      const recent = !isMain && !isLatest && now - event.properties.time < RECENT_MS ? " recent" : "";
       const highlight = fresh.current?.id === event.id && now < fresh.current.until ? " fresh" : "";
       const hiddenByReplay = replayHidden.current?.has(event.id) ? " replay-hidden" : "";
+      const hasRipples = isLatest || (isMain && !latestEvent);
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${isMain ? "<i></i><i></i>" : ""}</span>`,
+        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const marker = L.marker([lat, lng], {
         icon,
-        zIndexOffset: isMain ? 1000 : 0,
-        title: `Sismo M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
+        zIndexOffset: isLatest ? 1200 : (isMain ? 800 : 0),
+        title: `${isLatest ? "Último sismo - " : isMain ? "Sismo principal - " : ""}M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
       }).addTo(layer);
       const popup = document.createElement("div");
+      if (isLatest) {
+        const badge = document.createElement("div");
+        badge.className = "popup-badge-latest";
+        badge.textContent = "📍 ÚLTIMO SISMO REGISTRADO";
+        popup.appendChild(badge);
+      } else if (isMain) {
+        const badge = document.createElement("div");
+        badge.className = "popup-badge-main";
+        badge.textContent = "⭐ SISMO PRINCIPAL";
+        popup.appendChild(badge);
+      }
       const title = document.createElement("div");
       title.className = "popup-title";
       title.textContent = `M ${mag === null ? "—" : mag.toFixed(1)} · ${event.properties.place || "Ubicación no especificada"}`;
