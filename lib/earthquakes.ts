@@ -9,6 +9,8 @@ export type Earthquake = {
     felt?: number | null;
     mmi?: number | null;
     tsunami?: number | null;
+    magType?: string | null;
+    status?: string | null;
   };
   geometry: { coordinates: [number, number, number?] };
 };
@@ -21,6 +23,22 @@ export type EarthquakeResponse = {
 export type MainshockResponse = {
   mainshock: Earthquake;
   aftershocks: { count: number; strongest: Earthquake | null };
+  fetchedAt: string;
+};
+
+export type SourceRow = {
+  id: "usgs" | "emsc" | "gfz";
+  agency: string;
+  magnitude: number | null;
+  magType: string | null;
+  depthKm: number | null;
+  time: number;
+  reviewed: boolean | null;
+  url: string;
+};
+
+export type SourcesResponse = {
+  sources: SourceRow[];
   fetchedAt: string;
 };
 

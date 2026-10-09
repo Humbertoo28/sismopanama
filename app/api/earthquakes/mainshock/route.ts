@@ -5,39 +5,15 @@ import {
   type Earthquake,
   type MainshockResponse,
 } from "../../../../lib/earthquakes";
+import { isValidEarthquake as isValid, queryUsgs } from "../../../../lib/usgs";
 
 export const dynamic = "force-dynamic";
-
-async function queryUsgs(params: Record<string, string>): Promise<unknown> {
-  const response = await fetch(
-    `https://earthquake.usgs.gov/fdsnws/event/1/query?${new URLSearchParams({ format: "geojson", ...params })}`,
-    {
-      headers: { Accept: "application/geo+json, application/json" },
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    },
-  );
-  if (!response.ok && response.status !== 204) {
-    throw new Error(`USGS respondió ${response.status}`);
-  }
-  return response.status === 204 ? null : response.json();
-}
-
-function isValid(item: Earthquake) {
-  return (
-    typeof item?.id === "string" &&
-    Number.isFinite(item.properties?.time) &&
-    Array.isArray(item.geometry?.coordinates) &&
-    Number.isFinite(item.geometry.coordinates[0]) &&
-    Number.isFinite(item.geometry.coordinates[1])
-  );
-}
 
 // El detalle de un evento trae ~57 KB de "products" que la página no usa: se envía solo lo necesario.
 function slim({ id, properties: p, geometry }: Earthquake): Earthquake {
   return {
     id,
-    properties: { mag: p.mag, place: p.place, time: p.time, url: p.url, alert: p.alert, felt: p.felt, mmi: p.mmi, tsunami: p.tsunami },
+    properties: { mag: p.mag, place: p.place, time: p.time, url: p.url, alert: p.alert, felt: p.felt, mmi: p.mmi, tsunami: p.tsunami, magType: p.magType, status: p.status },
     geometry,
   };
 }

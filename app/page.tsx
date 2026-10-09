@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import QuakeMap from "./quake-map";
 import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
+import Sources from "./sources";
 import { isAftershock, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
 
 const date = new Intl.DateTimeFormat("es-PA", {
@@ -204,6 +205,7 @@ export default function Home() {
           <a href="#mapa"><span className="nav-icon">◎</span> Mapa sísmico</a>
           <a href="#eventos"><span className="nav-icon">≡</span> Últimos eventos</a>
           <a href="#recomendaciones"><span className="nav-icon">✚</span> Qué hacer ahora</a>
+          <a href="#fuentes"><span className="nav-icon">✓</span> Fuentes</a>
           <a href="#preparacion"><span className="nav-icon">✳</span> Preparación</a>
         </nav>
         <div className="side-bottom">
@@ -240,6 +242,7 @@ export default function Home() {
                   <span className="mainshock-kicker"><i /> SISMO PRINCIPAL · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}</span>
                   <h2 id="mainshock-title">{placeText(main)}</h2>
                   <p>{dateTime.format(new Date(main.properties.time))} · hora de Panamá</p>
+                  {main.properties.status && <span className={`review-chip${main.properties.status === "reviewed" ? " ok" : ""}`}>{main.properties.status === "reviewed" ? "✓ Revisado por el USGS" : "Datos automáticos del USGS, aún sin revisar"}</span>}
                 </div>
                 <div className="mainshock-actions">
                   <a className="primary" href="#recomendaciones">Qué hacer ahora</a>
@@ -256,7 +259,7 @@ export default function Home() {
                 <div><dt>RÉPLICAS</dt><dd>{mainshock.aftershocks.count.toLocaleString("es-PA")}</dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
               </dl>
               {main.properties.tsunami === 1 && <p className="mainshock-warning" role="alert">El USGS marcó este evento como posible generador de tsunami. Consulta los avisos oficiales en tsunami.gov y las indicaciones de SINAPROC.</p>}
-              <p className="mainshock-note">Cifras del USGS: se actualizan y pueden cambiar a medida que se revisan. No reemplazan los avisos oficiales de SINAPROC.</p>
+              <p className="mainshock-note">Cifras del USGS, <a href="#fuentes">contrastadas con otras agencias</a>: se actualizan y pueden cambiar a medida que se revisan. No reemplazan los avisos oficiales de SINAPROC.</p>
             </section>
           )}
 
@@ -304,7 +307,12 @@ export default function Home() {
             </div>
           </section>
 
-          <footer><span>© {new Date().getFullYear()} Sismo Panamá</span><span>Datos: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS Earthquake Catalog</a> · No sustituye alertas oficiales ni predice sismos.</span></footer>
+          <section id="fuentes" className="guide-section" aria-labelledby="sources-title">
+            <div className="section-heading"><div><span className="section-kicker">FUENTES Y VERIFICACIÓN</span><h2 id="sources-title">De dónde salen los datos</h2></div></div>
+            <Sources refreshKey={refreshKey} />
+          </section>
+
+          <footer><span>© {new Date().getFullYear()} Sismo Panamá</span><span>Datos: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS Earthquake Catalog</a>, contrastado con <a href="https://www.emsc-csem.org/" target="_blank" rel="noopener noreferrer">EMSC</a> y <a href="https://geofon.gfz.de/" target="_blank" rel="noopener noreferrer">GFZ GEOFON</a> · No sustituye alertas oficiales ni predice sismos.</span></footer>
         </div>
       </main>
     </div>
