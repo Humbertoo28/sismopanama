@@ -1,9 +1,11 @@
 import {
   MAINSHOCK_ID,
+  sameEvent,
   type Earthquake,
   type SourceRow,
   type SourcesResponse,
 } from "../../../../lib/earthquakes";
+import { fetchIgc } from "../../../../lib/catalogs";
 import { rejectQuery } from "../../../../lib/http";
 import { isValidEarthquake, queryUsgs } from "../../../../lib/usgs";
 
@@ -22,6 +24,23 @@ function closest<T extends { time: number }>(items: T[], time: number) {
     (best, item) => !best || Math.abs(item.time - time) < Math.abs(best.time - time) ? item : best,
     null,
   );
+}
+
+// El IGC (red sísmica nacional de Panamá) publica sus sismos en una tabla propia; se busca el del mismo evento.
+async function fetchIgcRow(usgs: Earthquake): Promise<SourceRow | null> {
+  const match = (await fetchIgc(usgs.properties.time - WINDOW_MS)).filter(event => sameEvent(event, usgs))
+    .sort((a, b) => Math.abs(a.properties.time - usgs.properties.time) - Math.abs(b.properties.time - usgs.properties.time))[0];
+  if (!match) return null;
+  return {
+    id: "igc",
+    agency: "IGC (Panamá)",
+    magnitude: match.properties.mag,
+    magType: null,
+    depthKm: Number.isFinite(match.geometry.coordinates[2]) ? match.geometry.coordinates[2]! : null,
+    time: match.properties.time,
+    reviewed: match.properties.status === "reviewed",
+    url: "https://sismosgeociencias.up.ac.pa/",
+  };
 }
 
 async function fetchEmsc(query: URLSearchParams, time: number): Promise<SourceRow | null> {
@@ -105,7 +124,7 @@ export async function GET(request: Request) {
       maxlongitude: String(lng + AREA_DEGREES),
     });
 
-    const others = await Promise.allSettled([fetchEmsc(query, time), fetchGfz(query, time)]);
+    const others = await Promise.allSettled([fetchIgcRow(usgs), fetchEmsc(query, time), fetchGfz(query, time)]);
     const sources: SourceRow[] = [
       {
         id: "usgs",

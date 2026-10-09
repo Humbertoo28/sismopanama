@@ -1,4 +1,5 @@
-import { REGION, SINCE, isPanamaPlace, type Earthquake, type EarthquakeResponse } from "../../../lib/earthquakes";
+import { SINCE, type EarthquakeResponse } from "../../../lib/earthquakes";
+import { fetchPanamaEvents } from "../../../lib/catalogs";
 import { rejectQuery } from "../../../lib/http";
 
 export const dynamic = "force-dynamic";
@@ -6,40 +7,16 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const rejected = rejectQuery(request);
   if (rejected) return rejected;
-  const params = new URLSearchParams({
-    format: "geojson",
-    starttime: new Date(SINCE).toISOString(),
-    orderby: "time",
-    limit: "2000",
-    ...REGION,
-  });
 
   try {
-    const response = await fetch(`https://earthquake.usgs.gov/fdsnws/event/1/query?${params}`, {
-      headers: { Accept: "application/geo+json, application/json" },
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!response.ok && response.status !== 204) {
-      throw new Error(`USGS respondió ${response.status}`);
-    }
-    const data = (response.status === 204 ? { features: [] } : await response.json()) as { features?: unknown };
-    if (!Array.isArray(data.features)) throw new Error("Respuesta inválida del catálogo");
-    const features: Earthquake[] = data.features.filter(
-      (item: Earthquake) =>
-        typeof item.id === "string" &&
-        Number.isFinite(item.properties?.time) &&
-        Array.isArray(item.geometry?.coordinates) &&
-        Number.isFinite(item.geometry.coordinates[0]) &&
-        Number.isFinite(item.geometry.coordinates[1]) &&
-        isPanamaPlace(item.properties.place),
-    );
-    const result: EarthquakeResponse = { features, fetchedAt: new Date().toISOString() };
+    const { events, catalogs } = await fetchPanamaEvents(SINCE);
+    const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
+    // Caché corta: la página consulta cada ~25 s y un sismo nuevo debe verse cuanto antes.
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+      headers: { "Cache-Control": "public, max-age=15, stale-while-revalidate=60" },
     });
   } catch (error) {
-    console.error("USGS fetch failed:", error);
+    console.error("Catálogos sísmicos no disponibles:", error);
     return Response.json(
       { error: "No se pudo consultar el catálogo sísmico" },
       { status: 502, headers: { "Cache-Control": "no-store" } },

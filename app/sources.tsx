@@ -9,7 +9,7 @@ const clock = new Intl.DateTimeFormat("es-PA", {
 
 const OFFICIAL = [
   { name: "SINAPROC", tag: "Oficial · Panamá", url: "https://www.sinaproc.gob.pa/", role: "Protección Civil de Panamá: alertas, evacuaciones e indicaciones oficiales." },
-  { name: "Universidad de Panamá", tag: "Científica · Panamá", url: "https://www.up.ac.pa/", role: "Sede del Instituto de Geociencias (IGC), que opera la Red Sísmica Nacional." },
+  { name: "Instituto de Geociencias (IGC-UP)", tag: "Científica · Panamá", url: "https://geociencias.up.ac.pa/", role: "Red Sísmica Nacional de la Universidad de Panamá. Publica los sismos del país, con reportes preliminares a los pocos minutos." },
   { name: "Cruz Roja Panameña", tag: "Humanitaria · Panamá", url: "https://cruzroja.org.pa/", role: "Ayuda humanitaria y primeros auxilios." },
   { name: "Centros de Alerta de Tsunamis de EE. UU.", tag: "Oficial · Internacional", url: "https://www.tsunami.gov/", role: "Avisos de tsunami para el Pacífico (NOAA)." },
 ];

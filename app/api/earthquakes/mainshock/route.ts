@@ -1,11 +1,10 @@
 import {
   MAINSHOCK_ID,
-  REGION,
   isAftershock,
-  isPanamaPlace,
   type Earthquake,
   type MainshockResponse,
 } from "../../../../lib/earthquakes";
+import { fetchPanamaEvents } from "../../../../lib/catalogs";
 import { rejectQuery } from "../../../../lib/http";
 import { isValidEarthquake as isValid, queryUsgs } from "../../../../lib/usgs";
 
@@ -27,15 +26,9 @@ export async function GET(request: Request) {
     const mainshock = (await queryUsgs({ eventid: MAINSHOCK_ID })) as Earthquake | null;
     if (!mainshock || !isValid(mainshock)) throw new Error("Respuesta inválida del catálogo");
 
-    const after = (await queryUsgs({
-      starttime: new Date(mainshock.properties.time).toISOString(),
-      orderby: "time",
-      limit: "2000",
-      ...REGION,
-    })) as { features?: Earthquake[] } | null;
-    const aftershocks = (after?.features ?? []).filter(
-      (item) => isValid(item) && isAftershock(item, mainshock) && isPanamaPlace(item.properties.place),
-    );
+    // Mismas fuentes que la lista de sismos (USGS + EMSC), para que el conteo de réplicas coincida.
+    const { events } = await fetchPanamaEvents(mainshock.properties.time);
+    const aftershocks = events.filter((item) => isAftershock(item, mainshock));
     const strongest = aftershocks.reduce<Earthquake | null>(
       (best, event) =>
         !best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best,
@@ -57,7 +50,7 @@ export async function GET(request: Request) {
       fetchedAt: new Date().toISOString(),
     };
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+      headers: { "Cache-Control": "public, max-age=15, stale-while-revalidate=60" },
     });
   } catch (error) {
     console.error("USGS mainshock fetch failed:", error);

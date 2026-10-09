@@ -175,3 +175,4 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .pwa-install-btn{display:inline-flex;align-items:center;gap:7px;background:#e8eefa;color:#0a3a8c;border:1px solid #c9d8f3;border-radius:100px;padding:7px 13px;font-size:11px;font-weight:700;transition:all .15s ease}
 .pwa-install-btn:hover{background:#d5e3fa;transform:translateY(-1px)}
 .pwa-status-pill{display:inline-flex;align-items:center;gap:5px;background:#e7f7ed;color:#137333;border-radius:100px;padding:6px 11px;font-size:10.5px;font-weight:700}
+.source-tag{margin-left:8px;padding:1px 7px;border-radius:100px;background:#e8eefa;font-size:9px;font-style:normal;font-weight:800;letter-spacing:.08em;color:#0a3a8c}

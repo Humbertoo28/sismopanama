@@ -11,6 +11,9 @@ export type Earthquake = {
     tsunami?: number | null;
     magType?: string | null;
     status?: string | null;
+    // Catálogo del que viene el registro (por omisión, el USGS) y los id de la misma ocurrencia en otros.
+    source?: "usgs" | "igc" | "emsc";
+    aliases?: string[];
   };
   geometry: { coordinates: [number, number, number?] };
 };
@@ -18,6 +21,7 @@ export type Earthquake = {
 export type EarthquakeResponse = {
   features: Earthquake[];
   fetchedAt: string;
+  catalogs?: { usgs: boolean; igc: boolean; emsc: boolean };
 };
 
 export type MainshockResponse = {
@@ -27,7 +31,7 @@ export type MainshockResponse = {
 };
 
 export type SourceRow = {
-  id: "usgs" | "emsc" | "gfz";
+  id: "usgs" | "igc" | "emsc" | "gfz";
   agency: string;
   magnitude: number | null;
   magType: string | null;
@@ -57,7 +61,7 @@ export type SourcesResponse = {
 // Panama"). Se usa esa etiqueta, y no un contorno geográfico: varias réplicas caen mar adentro, frente
 // a la costa panameña, y un margen geográfico dejaría pasar sismos colombianos pegados a la frontera.
 export function isPanamaPlace(place: string | null | undefined) {
-  return !!place && /\bPanam[aá]\b/i.test(place) && !/Colombia|Costa Rica/i.test(place);
+  return !!place && /(?<![\p{L}])Panam[aá](?![\p{L}])/iu.test(place) && !/Colombia|Costa Rica/iu.test(place);
 }
 
 // Fuerza y duración del temblor del mapa según la magnitud: M 3.9 apenas se nota (~1.6 px) y
@@ -78,7 +82,7 @@ export const SINCE = Date.UTC(2026, 9, 9, 5, 0, 0);
 export const MAINSHOCK_ID = "us6000u18k";
 export const AFTERSHOCK_RADIUS_KM = 150;
 
-function distanceKm(a: Earthquake, b: Earthquake) {
+export function distanceKm(a: Earthquake, b: Earthquake) {
   const [lng1, lat1] = a.geometry.coordinates;
   const [lng2, lat2] = b.geometry.coordinates;
   const rad = Math.PI / 180;
@@ -86,6 +90,12 @@ function distanceKm(a: Earthquake, b: Earthquake) {
     Math.sin(((lat2 - lat1) * rad) / 2) ** 2 +
     Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lng2 - lng1) * rad) / 2) ** 2;
   return 12_742 * Math.asin(Math.sqrt(h));
+}
+
+// Dos registros de catálogos distintos describen el mismo sismo si ocurrieron con menos de un minuto de
+// diferencia y a menos de 120 km (las agencias suelen diferir en segundos y en unos pocos km).
+export function sameEvent(a: Earthquake, b: Earthquake) {
+  return Math.abs(a.properties.time - b.properties.time) <= 60_000 && distanceKm(a, b) <= 120;
 }
 
 // Réplica: posterior al sismo principal y a menos de AFTERSHOCK_RADIUS_KM de su epicentro.

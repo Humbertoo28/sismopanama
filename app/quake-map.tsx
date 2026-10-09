@@ -108,7 +108,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       title.textContent = `M ${mag === null ? "—" : mag.toFixed(1)} · ${event.properties.place || "Ubicación no especificada"}`;
       const meta = document.createElement("div");
       meta.className = "popup-meta";
-      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"}`;
+      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"}${event.properties.source === "emsc" ? " · Fuente: EMSC" : event.properties.source === "igc" ? " · Fuente: IGC" : ""}`;
       // appendChild y no append: los tipos de workers-types pisan Element.append.
       popup.appendChild(title);
       popup.appendChild(meta);
