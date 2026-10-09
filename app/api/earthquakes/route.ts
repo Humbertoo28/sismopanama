@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     if (!response.ok && response.status !== 204) {
       throw new Error(`USGS respondió ${response.status}`);
     }
-    const data = response.status === 204 ? { features: [] } : await response.json();
+    const data = (response.status === 204 ? { features: [] } : await response.json()) as { features?: unknown };
     if (!Array.isArray(data.features)) throw new Error("Respuesta inválida del catálogo");
     const features: Earthquake[] = data.features.filter(
       (item: Earthquake) =>

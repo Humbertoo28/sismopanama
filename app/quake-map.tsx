@@ -74,8 +74,10 @@ export default function QuakeMap({ events, mainshock, focus, onSelect }: Props) 
       title.textContent = `M ${mag === null ? "—" : mag.toFixed(1)} · ${event.properties.place || "Ubicación no especificada"}`;
       const meta = document.createElement("div");
       meta.className = "popup-meta";
-      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth)} km` : "Profundidad no disponible"}`;
-      popup.append(title, meta);
+      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"}`;
+      // appendChild y no append: los tipos de workers-types pisan Element.append.
+      popup.appendChild(title);
+      popup.appendChild(meta);
       marker.bindPopup(popup);
       marker.on("click", () => onSelectRef.current(event.id));
       markersRef.current.set(event.id, marker);

@@ -355,13 +355,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	background: #fff;
 	border-radius: 5px;
 	}
+/* Sin background-image en control de capas ni icono por defecto: este mapa usa divIcon
+   y no incluye las imágenes de Leaflet, y Next falla al compilar si no existen. */
 .leaflet-control-layers-toggle {
-	background-image: url(images/layers.png);
 	width: 36px;
 	height: 36px;
 	}
 .leaflet-retina .leaflet-control-layers-toggle {
-	background-image: url(images/layers-2x.png);
 	background-size: 26px 26px;
 	}
 .leaflet-touch .leaflet-control-layers-toggle {
@@ -404,7 +404,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* Default icon URLs */
 .leaflet-default-icon-path { /* used only in path-guessing heuristic, see L.Icon.Default */
-	background-image: url(images/marker-icon.png);
 	}
 
 
