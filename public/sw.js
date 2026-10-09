@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v2";
+const CACHE_NAME = "sismo-panama-v3";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -35,11 +35,32 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  // Lo que no es de este dominio (mosaicos del mapa de Google/Esri) lo carga el navegador directamente:
+  // si el service worker lo reenviara con fetch(), la CSP (connect-src 'self') lo bloquearía.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
   // Las peticiones a las APIs de sismos siempre van a la red sin caché
   if (url.pathname.startsWith("/api/")) {
     return;
   }
   if (event.request.method !== "GET") {
+    return;
+  }
+  // Para navegación HTML, usar Network-First: carga la versión más reciente si hay conexión,
+  // y cae al caché solo si el usuario está offline.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
+    );
     return;
   }
   event.respondWith(
