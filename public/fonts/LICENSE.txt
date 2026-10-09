@@ -1,0 +1,9 @@
+Tipografías incluidas en este sitio
+
+- DM Sans — (c) The DM Sans Project Authors
+- Space Grotesk — (c) The Space Grotesk Project Authors
+
+Ambas se distribuyen bajo la licencia SIL Open Font License, Version 1.1
+(texto completo en https://openfontlicense.org). Se obtuvieron de Google Fonts y se sirven aquí,
+sin modificar, en su variante variable y subconjunto latino, para no depender de servidores de
+terceros ni enviarles datos de los visitantes.

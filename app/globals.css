@@ -75,3 +75,98 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .mainshock-warning a{color:#ffe9a8;text-decoration:underline;text-underline-offset:2px;font-weight:700}.mainshock-warning+.mainshock-warning{margin-top:10px}
 @keyframes trace-spike{0%,100%{transform:scaleY(1);opacity:.13}18%{transform:scaleY(calc(1 + var(--shake,5px) * .24));opacity:.55}}
 .sequence-chart.quake-shake{animation:quake-shake var(--shake-ms,800ms) cubic-bezier(.36,.07,.19,.97)}.mainshock-trace.quake-shake{transform-origin:center;animation:trace-spike var(--shake-ms,800ms) ease-out}
+
+/* Botón de Alertas en Topbar */
+.alert-topbar-btn{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #dce3eb;border-radius:100px;padding:8px 14px;font-size:11px;font-weight:700;color:#24364e;box-shadow:0 2px 7px #1a2a400a;transition:all .2s ease}
+.alert-topbar-btn:hover{background:#f8fafc;border-color:#b8c7d9;transform:translateY(-1px)}
+.alert-topbar-btn.active{background:#072357;color:#fff;border-color:#072357}
+.alert-topbar-btn.active:hover{background:#0b2f6b}
+.alert-topbar-btn .btn-pulse-dot{width:7px;height:7px;border-radius:50%;background:#ff8a92;animation:live-pulse 1.4s ease-out infinite}
+
+/* Live Toast Mejorado */
+.live-toast{display:grid;grid-template-columns:auto 1fr;gap:12px 14px;align-items:start;background:#072357;padding:16px 18px;max-width:520px;border-left:5px solid #da121a;box-shadow:0 20px 48px #07235777}
+.live-toast-content{grid-column:2;min-width:0}
+.live-toast-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.live-toast-head strong{font-size:14px;letter-spacing:-.01em;color:#fff;display:flex;align-items:center;gap:6px}
+.live-toast-badge{font-size:10px;font-weight:800;background:#da121a;color:#fff;padding:2px 7px;border-radius:100px;letter-spacing:.08em}
+.live-toast-desc{font-size:12px;color:#c9d6f2;line-height:1.45}
+.live-toast-actions{grid-column:1 / -1;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding-top:6px;border-top:1px solid #ffffff1a}
+.live-toast-actions button,.live-toast-actions a{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:7px;font-size:11px;font-weight:700;color:#fff;background:#ffffff1f;border:1px solid #ffffff26;transition:all .15s ease}
+.live-toast-actions button:hover,.live-toast-actions a:hover{background:#ffffff33}
+.live-toast-actions .btn-toast-wa{background:#25d366;color:#05240f;border-color:#25d366;font-weight:800}
+.live-toast-actions .btn-toast-wa:hover{background:#20ba5a}
+.live-toast-actions .btn-toast-mute{background:#ffffff14;color:#ffb8bd;border-color:#ff8a9233}
+.live-toast .toast-close{position:absolute;top:10px;right:10px;color:#a5b5c8;font-size:18px;background:none;border:0;padding:4px 8px;cursor:pointer}
+.live-toast .toast-close:hover{color:#fff}
+
+/* Modal de Configuración y Difusión de Alertas */
+.alert-modal-backdrop{position:fixed;inset:0;z-index:2200;background:#07235777;backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px;animation:fade-in .25s ease}
+.alert-modal-card{background:#fff;border-radius:16px;max-width:540px;width:100%;box-shadow:0 24px 60px #07235738;border:1px solid #e1e7f0;overflow:hidden;animation:pop-in .3s cubic-bezier(.2,1.2,.3,1)}
+.alert-modal-header{display:flex;align-items:flex-start;justify-content:space-between;padding:22px 24px 18px;border-bottom:1px solid #edf1f6;background:#fbfcfe}
+.alert-modal-title-box{display:flex;gap:14px;align-items:flex-start}
+.alert-bell-icon{width:42px;height:42px;border-radius:12px;background:#e8eefa;color:#0a3a8c;display:grid;place-items:center;font-size:22px;flex:none}
+.alert-modal-title-box h2{font-size:18px;font-weight:700;margin:0 0 4px;color:#17253c;letter-spacing:-.02em}
+.alert-modal-title-box p{margin:0;font-size:12px;line-height:1.5;color:#67778b}
+.alert-modal-close{border:0;background:none;color:#8796a8;font-size:18px;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;transition:background .2s}
+.alert-modal-close:hover{background:#eef2f7;color:#17253c}
+.alert-modal-body{padding:20px 24px;display:grid;gap:18px;max-height:72vh;overflow-y:auto}
+
+.alert-setting-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-bottom:15px;border-bottom:1px solid #edf1f6}
+.alert-setting-info{min-width:0;flex:1}
+.alert-setting-info strong{display:block;font-size:13px;color:#17253c;font-weight:700}
+.alert-setting-info span{display:block;font-size:11.5px;color:#68788c;margin-top:2px;line-height:1.45}
+.perm-badge-wrap{margin-top:6px}
+.perm-badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px}
+.perm-badge.ok{background:#e7f7ed;color:#137333}
+.perm-badge.danger{background:#fee8e8;color:#c5221f}
+.perm-badge.warning{background:#fef7e0;color:#b06000}
+.perm-badge.muted{background:#f1f3f4;color:#5f6368}
+
+.perm-req-btn{border:0;background:#0a3a8c;color:#fff;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;white-space:nowrap;transition:background .15s}
+.perm-req-btn:hover:not(:disabled){background:#072357}
+.perm-req-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* Toggle Switch */
+.toggle-switch{position:relative;display:inline-block;width:44px;height:24px;flex:none}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:34px;transition:.25s}
+.toggle-slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.25s;box-shadow:0 1px 3px #0003}
+.toggle-switch input:checked+.toggle-slider{background:#0a3a8c}
+.toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px)}
+
+.mag-threshold-select{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:600;color:#1e293b;background:#fff;cursor:pointer}
+
+/* Cuadro de prueba */
+.alert-test-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.alert-test-box strong{display:block;font-size:12.5px;color:#1e293b}
+.alert-test-box p{margin:2px 0 0;font-size:11px;color:#64748b}
+.alert-test-actions{display:flex;gap:6px}
+.btn-test-alert{border:0;background:#0a3a8c;color:#fff;border-radius:8px;padding:8px 13px;font-size:11.5px;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn-test-alert:hover:not(:disabled){background:#072357}
+.btn-test-alert.testing{background:#da121a;animation:live-pulse 1.2s ease-out infinite}
+.btn-stop-alert{border:1px solid #cbd5e1;background:#fff;color:#c5221f;border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:700}
+.btn-stop-alert:hover{background:#fee8e8}
+
+/* Difundir Alerta (WhatsApp / Telegram) */
+.broadcast-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:15px 16px}
+.broadcast-header{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.broadcast-icon{font-size:22px;line-height:1}
+.broadcast-header strong{display:block;font-size:13px;color:#1e3a8a}
+.broadcast-header p{margin:2px 0 0;font-size:11px;color:#3b82f6;line-height:1.4}
+.broadcast-buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.btn-broadcast{display:flex;align-items:center;justify-content:center;gap:7px;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;text-decoration:none;transition:transform .15s,filter .15s}
+.btn-broadcast:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn-broadcast.whatsapp{background:#25d366;color:#033a17}
+.btn-broadcast.telegram{background:#0088cc;color:#fff}
+
+.alert-modal-footer{padding:14px 24px;border-top:1px solid #edf1f6;background:#fbfcfe;display:flex;justify-content:flex-end}
+.btn-primary{border:0;background:#072357;color:#fff;border-radius:9px;padding:10px 18px;font-size:12px;font-weight:700;transition:background .15s}
+.btn-primary:hover{background:#0b2f6b}
+
+@media(max-width:760px){
+  .alert-topbar-btn{padding:6px 10px;font-size:10px}
+  .broadcast-buttons{grid-template-columns:1fr}
+  .alert-test-box{flex-direction:column;align-items:stretch}
+  .alert-setting-row{flex-direction:column;align-items:stretch;gap:10px}
+  .toggle-switch,.mag-threshold-select,.perm-req-btn{align-self:flex-start}
+}

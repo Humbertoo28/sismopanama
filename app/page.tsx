@@ -9,6 +9,16 @@ import FlagMark from "./flag-mark";
 import CountUp from "./count-up";
 import SeismoTrace from "./seismo-trace";
 import SequenceChart from "./sequence-chart";
+import AlertModal from "./alert-modal";
+import {
+  broadcastEarthquakeAlert,
+  getNotificationPermissionStatus,
+  getSeenEarthquakeIds,
+  getWhatsAppShareUrl,
+  loadAlertPreferences,
+  saveSeenEarthquakeIds,
+  stopAlarmSound,
+} from "../lib/alert-system";
 import { SINCE, isAftershock, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
 const date = new Intl.DateTimeFormat("es-PA", {
@@ -74,8 +84,20 @@ export default function Home() {
   const navLock = useRef(0);
   const [alert, setAlert] = useState<LiveAlert | null>(null);
   const [dismissedKey, setDismissedKey] = useState(0);
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [permStatus, setPermStatus] = useState<NotificationPermission | "unsupported">(() =>
+    typeof window !== "undefined" ? getNotificationPermissionStatus() : "default",
+  );
   const seen = useRef<{ ids: Set<string> } | null>(null);
   const introFocused = useRef(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(e => {
+        console.warn("No se pudo registrar Service Worker:", e);
+      });
+    }
+  }, []);
 
   useEffect(() => {
     const tick = () => setClock(clockFormat.format(new Date()));
@@ -96,14 +118,36 @@ export default function Home() {
         if (!response.ok) throw new Error(`Error ${response.status}`);
         const data: EarthquakeResponse = await response.json();
         if (!Array.isArray(data.features)) throw new Error("Respuesta no válida");
-        // Un sismo es "nuevo" si no estaba en la consulta anterior y ocurrió hace menos de una hora.
-        const before = seen.current;
-        if (before) {
-          const fresh = data.features.filter(event => !before.ids.has(event.id) && Date.now() - event.properties.time < 3_600_000);
-          const strongest = fresh.reduce<Earthquake | null>((best, event) => !best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best, null);
-          if (strongest) setAlert({ key: Date.now(), event: strongest, count: fresh.length });
+
+        const storedSeen = seen.current ? seen.current.ids : getSeenEarthquakeIds();
+        const isFirstRun = !seen.current && storedSeen.size === 0;
+
+        // Un sismo es "nuevo" si no estaba registrado y ocurrió hace menos de 2 horas
+        const fresh = data.features.filter(
+          event => !storedSeen.has(event.id) && Date.now() - event.properties.time < 2 * 3_600_000,
+        );
+
+        const prefs = loadAlertPreferences();
+        const qualifying = fresh.filter(
+          event => event.properties.mag === null || event.properties.mag >= prefs.minMagnitude,
+        );
+
+        if (!isFirstRun && qualifying.length > 0) {
+          const strongest = qualifying.reduce<Earthquake | null>(
+            (best, event) => (!best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best),
+            null,
+          );
+          if (strongest) {
+            setAlert({ key: Date.now(), event: strongest, count: qualifying.length });
+            broadcastEarthquakeAlert(strongest, qualifying.length, prefs);
+          }
         }
-        seen.current = { ids: new Set(data.features.map(event => event.id)) };
+
+        const currentIds = new Set(data.features.map(event => event.id));
+        const mergedSeen = new Set([...storedSeen, ...currentIds]);
+        seen.current = { ids: mergedSeen };
+        saveSeenEarthquakeIds(mergedSeen);
+
         setAllEvents(data.features);
         setLastUpdate(data.fetchedAt);
         setStatus("ready");
@@ -141,7 +185,10 @@ export default function Home() {
 
   useEffect(() => {
     if (!alert) return;
-    const timer = window.setTimeout(() => setDismissedKey(alert.key), 9000);
+    const timer = window.setTimeout(() => {
+      stopAlarmSound();
+      setDismissedKey(alert.key);
+    }, 18_000);
     return () => window.clearTimeout(timer);
   }, [alert]);
 
@@ -182,10 +229,20 @@ export default function Home() {
   }, [mainshock, status]);
 
   useEffect(() => {
+    // Sondeo cada 25 segundos para detectar nuevos sismos de inmediato
     const timer = window.setInterval(() => {
+      setRefreshKey(key => key + 1);
+    }, 25_000);
+
+    const onVisible = () => {
       if (!document.hidden) setRefreshKey(key => key + 1);
-    }, 300_000);
-    return () => window.clearInterval(timer);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const main = mainshock?.mainshock ?? null;
@@ -269,21 +326,78 @@ export default function Home() {
       </aside>
 
       {alert && alert.key !== dismissedKey && (
-        <div className="live-toast" role="status">
-          <span className="live-toast-icon" aria-hidden="true">⌁</span>
-          <div>
-            <strong>{alert.count > 1 ? `${alert.count} sismos nuevos` : "Nuevo sismo detectado"}</strong>
-            <span>M {magText(alert.event)} · {placeText(alert.event)} · {clockFormat.format(new Date(alert.event.properties.time))}{alert.event.properties.tsunami === 1 && " · Marcado con posible tsunami: revisa tsunami.gov"}</span>
+        <div className="live-toast" role="alert">
+          <span className="live-toast-icon" aria-hidden="true">🚨</span>
+          <div className="live-toast-content">
+            <div className="live-toast-head">
+              <strong>¡ALERTA SÍSMICA EN PANAMÁ!</strong>
+              <span className="live-toast-badge">M {magText(alert.event)}</span>
+            </div>
+            <div className="live-toast-desc">
+              {placeText(alert.event)} · {clockFormat.format(new Date(alert.event.properties.time))}
+              {alert.event.properties.tsunami === 1 && " · Riesgo potencial de tsunami (tsunami.gov)"}
+            </div>
           </div>
-          <button type="button" onClick={() => { chooseEvent(alert.event); setDismissedKey(alert.key); }}>Ver en el mapa</button>
-          <button type="button" className="toast-close" aria-label="Cerrar aviso" onClick={() => setDismissedKey(alert.key)}>×</button>
+          <div className="live-toast-actions">
+            <button
+              type="button"
+              onClick={() => {
+                chooseEvent(alert.event);
+                stopAlarmSound();
+                setDismissedKey(alert.key);
+              }}
+            >
+              🗺️ Ver en el mapa
+            </button>
+            <a
+              href={getWhatsAppShareUrl(alert.event, typeof window !== "undefined" ? window.location.href : "")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-toast-wa"
+            >
+              📲 Mandar a todos por WhatsApp
+            </a>
+            <button
+              type="button"
+              className="btn-toast-mute"
+              onClick={() => stopAlarmSound()}
+              title="Silenciar sonido de alarma"
+            >
+              🔇 Silenciar
+            </button>
+          </div>
+          <button
+            type="button"
+            className="toast-close"
+            aria-label="Cerrar aviso"
+            onClick={() => {
+              stopAlarmSound();
+              setDismissedKey(alert.key);
+            }}
+          >
+            ×
+          </button>
         </div>
       )}
 
       <main id="inicio" className="main-content">
         <header className="topbar">
           <div className="breadcrumb">INICIO <span>/</span> PANEL GENERAL</div>
-          <div className="topbar-right"><span className="local-time">Hora de Panamá · {clock}</span><span className="live-pill"><i /> MONITOREO ACTIVO</span></div>
+          <div className="topbar-right">
+            <span className="local-time">Hora de Panamá · {clock}</span>
+            <button
+              type="button"
+              className={`alert-topbar-btn${permStatus === "granted" ? " active" : ""}`}
+              onClick={() => setAlertModalOpen(true)}
+              title="Configurar y probar alertas sísmicas para todos"
+            >
+              <span className={permStatus === "granted" ? "btn-pulse-dot" : undefined} aria-hidden="true">
+                {permStatus === "granted" ? null : "🔔"}
+              </span>
+              <span>{permStatus === "granted" ? "Alertas Activas" : "Activar Alertas"}</span>
+            </button>
+            <span className="live-pill"><i /> MONITOREO ACTIVO</span>
+          </div>
         </header>
 
         <div className="content-wrap">
@@ -293,10 +407,20 @@ export default function Home() {
               <h1 id="page-title">Sismo en Panamá:<br /><em>lo que necesitas saber.</em></h1>
               <p>Explora la actividad sísmica reciente en Panamá. Información clara para estar al tanto, cuando más importa.</p>
             </div>
-            <button className={`refresh-button${status === "loading" ? " loading" : ""}`} type="button" aria-label="Actualizar datos de sismos" disabled={status === "loading"} onClick={() => setRefreshKey(key => key + 1)}>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              Actualizar datos
-            </button>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="alert-topbar-btn active"
+                onClick={() => setAlertModalOpen(true)}
+                style={{ padding: "12px 18px", fontSize: "12px" }}
+              >
+                <span>🔔 Configurar / Difundir Alerta</span>
+              </button>
+              <button className={`refresh-button${status === "loading" ? " loading" : ""}`} type="button" aria-label="Actualizar datos de sismos" disabled={status === "loading"} onClick={() => setRefreshKey(key => key + 1)}>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Actualizar datos
+              </button>
+            </div>
           </section>
 
           {main && mainshock && (
@@ -314,6 +438,15 @@ export default function Home() {
                   <a className="primary" href="#recomendaciones">Qué hacer ahora</a>
                   <button type="button" onClick={() => chooseEvent(main)}>Ver en el mapa</button>
                   <button type="button" onClick={share} aria-live="polite">{shared ? "Enlace copiado" : "Compartir"}</button>
+                  <a
+                    className="wide"
+                    href={getWhatsAppShareUrl(main, typeof window !== "undefined" ? window.location.href : "")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ background: "#25d366", color: "#033a17", border: "0", fontWeight: "800", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                  >
+                    📲 Mandar alerta a todos por WhatsApp
+                  </a>
                   <a className="wide" href={mainUrl} target="_blank" rel="noopener noreferrer">Reporte del USGS <span aria-hidden="true">↗</span></a>
                 </div>
               </div>
@@ -390,6 +523,15 @@ export default function Home() {
           <footer><span>© {new Date().getFullYear()} Sismo Panamá</span><span>Datos: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS Earthquake Catalog</a>, contrastado con <a href="https://www.emsc-csem.org/" target="_blank" rel="noopener noreferrer">EMSC</a> y <a href="https://geofon.gfz.de/" target="_blank" rel="noopener noreferrer">GFZ GEOFON</a> · No sustituye alertas oficiales ni predice sismos.</span></footer>
         </div>
       </main>
+
+      <AlertModal
+        isOpen={alertModalOpen}
+        onClose={() => {
+          setAlertModalOpen(false);
+          setPermStatus(getNotificationPermissionStatus());
+        }}
+        latestEvent={latest ?? main}
+      />
     </div>
   );
 }

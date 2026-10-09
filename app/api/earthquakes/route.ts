@@ -1,8 +1,11 @@
 import { REGION, SINCE, isPanamaPlace, type Earthquake, type EarthquakeResponse } from "../../../lib/earthquakes";
+import { rejectQuery } from "../../../lib/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rejected = rejectQuery(request);
+  if (rejected) return rejected;
   const params = new URLSearchParams({
     format: "geojson",
     starttime: new Date(SINCE).toISOString(),

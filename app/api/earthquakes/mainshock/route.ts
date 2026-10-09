@@ -6,6 +6,7 @@ import {
   type Earthquake,
   type MainshockResponse,
 } from "../../../../lib/earthquakes";
+import { rejectQuery } from "../../../../lib/http";
 import { isValidEarthquake as isValid, queryUsgs } from "../../../../lib/usgs";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,9 @@ function slim({ id, properties: p, geometry }: Earthquake): Earthquake {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rejected = rejectQuery(request);
+  if (rejected) return rejected;
   try {
     const mainshock = (await queryUsgs({ eventid: MAINSHOCK_ID })) as Earthquake | null;
     if (!mainshock || !isValid(mainshock)) throw new Error("Respuesta inválida del catálogo");

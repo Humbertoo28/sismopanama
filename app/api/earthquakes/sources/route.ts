@@ -4,6 +4,7 @@ import {
   type SourceRow,
   type SourcesResponse,
 } from "../../../../lib/earthquakes";
+import { rejectQuery } from "../../../../lib/http";
 import { isValidEarthquake, queryUsgs } from "../../../../lib/usgs";
 
 export const dynamic = "force-dynamic";
@@ -85,7 +86,9 @@ async function fetchGfz(query: URLSearchParams, time: number): Promise<SourceRow
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rejected = rejectQuery(request);
+  if (rejected) return rejected;
   try {
     const usgs = (await queryUsgs({ eventid: MAINSHOCK_ID })) as Earthquake | null;
     if (!usgs || !isValidEarthquake(usgs)) throw new Error("Respuesta inválida del catálogo");
