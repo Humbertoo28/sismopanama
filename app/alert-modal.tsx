@@ -13,6 +13,7 @@ import {
   stopAlarmSound,
   type AlertPreferences,
 } from "../lib/alert-system";
+import PwaInstall from "./pwa-install";
 
 type AlertModalProps = {
   isOpen: boolean;
@@ -175,6 +176,15 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
               <option value="4.0">Sismos moderados a fuertes (M ≥ 4.0)</option>
               <option value="5.0">Solo sismos de gran magnitud (M ≥ 5.0)</option>
             </select>
+          </div>
+
+          {/* Instalar App Web */}
+          <div className="alert-setting-row">
+            <div className="alert-setting-info">
+              <strong>Instalar como Aplicación Web (PWA)</strong>
+              <span>Agrégala a tu pantalla de inicio para abrirla como app independiente en pantalla completa.</span>
+            </div>
+            <PwaInstall />
           </div>
 
           {/* Probar la alerta */}

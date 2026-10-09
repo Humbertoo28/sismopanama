@@ -1,0 +1,43 @@
+{
+  "id": "sismo-panama-pwa",
+  "name": "Sismo Panamá — Monitor y Alerta Sísmica",
+  "short_name": "Sismo Panamá",
+  "description": "Detector sísmico en vivo, alertas con sonido de sirena y monitoreo en tiempo real para Panamá",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#072357",
+  "theme_color": "#072357",
+  "categories": ["utilities", "news"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mapa sísmico",
+      "url": "/#mapa"
+    },
+    {
+      "name": "Guía de seguridad",
+      "url": "/#recomendaciones"
+    }
+  ]
+}

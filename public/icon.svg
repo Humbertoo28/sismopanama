@@ -1,0 +1,16 @@
+
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'>
+  <rect width='512' height='512' rx='115' fill='#072357'/>
+  <g transform='translate(66, 126) scale(6.33)'>
+    <clipPath id='f'><rect x='2' y='2' width='60' height='40' rx='6'/></clipPath>
+    <g clip-path='url(#f)'>
+      <rect x='2' y='2' width='60' height='40' fill='#ffffff'/>
+      <rect x='32' y='2' width='30' height='20' fill='#da121a'/>
+      <rect x='2' y='22' width='30' height='20' fill='#072357'/>
+      <polygon points='17.00,5.40 18.48,9.96 23.28,9.96 19.40,12.78 20.88,17.34 17.00,14.52 13.12,17.34 14.60,12.78 10.72,9.96 15.52,9.96' fill='#072357'/>
+      <polygon points='47.00,25.40 48.48,29.96 53.28,29.96 49.40,32.78 50.88,37.34 47.00,34.52 43.12,37.34 44.60,32.78 40.72,29.96 45.52,29.96' fill='#da121a'/>
+    </g>
+    <rect x='2' y='2' width='60' height='40' rx='6' fill='none' stroke='#ffffff' stroke-width='2'/>
+  </g>
+  <path d='M80 430 L180 430 L210 390 L240 470 L270 370 L300 450 L330 430 L432 430' fill='none' stroke='#ff8a92' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/>
+</svg>

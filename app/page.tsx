@@ -10,6 +10,7 @@ import CountUp from "./count-up";
 import SeismoTrace from "./seismo-trace";
 import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
+import PwaInstall from "./pwa-install";
 import {
   broadcastEarthquakeAlert,
   getNotificationPermissionStatus,
@@ -385,6 +386,7 @@ export default function Home() {
           <div className="breadcrumb">INICIO <span>/</span> PANEL GENERAL</div>
           <div className="topbar-right">
             <span className="local-time">Hora de Panamá · {clock}</span>
+            <PwaInstall />
             <button
               type="button"
               className={`alert-topbar-btn${permStatus === "granted" ? " active" : ""}`}
