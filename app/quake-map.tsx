@@ -85,6 +85,10 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
   const markersRef = useRef<Map<string, any>>(new Map());
   const focusedRef = useRef<Props["focus"]>(null);
   const popIn = useRef(true);
+  // Huella de lo último que se dibujó: si los datos no cambiaron, los marcadores no se tocan.
+  const builtKey = useRef("");
+  // Durante una reproducción: sismos que aún no les toca aparecer. Sobrevive si el mapa rehace los marcadores.
+  const replayHidden = useRef<Set<string> | null>(null);
   const fresh = useRef<{ id: string; until: number } | null>(null);
   const latest = useRef({ events, mainshock, onSelect, onReplay });
   useEffect(() => {
@@ -146,6 +150,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       layerRef.current = null;
       tileLayerRef.current = null;
       overlayLayerRef.current = null;
+      builtKey.current = "";
       markers.clear();
     };
   }, [ready]);
@@ -182,11 +187,18 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
     const L = (window as any).L;
     const layer = layerRef.current;
     if (!ready || !L || !layer) return;
+    const now = Date.now();
+    // Cada consulta (cada ~25 s) trae una lista nueva aunque no haya nada nuevo. Rehacer entonces todos los
+    // marcadores cerraba el popup abierto y, en plena reproducción de la secuencia, los mostraba todos de golpe.
+    const key = `${mainshock?.id ?? ""}|${events
+      .map(event => `${event.id}:${event.properties.mag}:${event.properties.time}${event.id !== mainshock?.id && now - event.properties.time < RECENT_MS ? "r" : ""}`)
+      .join(",")}`;
+    if (key === builtKey.current) return;
+    builtKey.current = key;
     layer.clearLayers();
     markersRef.current.clear();
     const chronological = [...events].sort((a, b) => a.properties.time - b.properties.time).map(event => event.id);
     const pop = popIn.current && !reducedMotion();
-    const now = Date.now();
     for (const event of events) {
       const [lng, lat, depth] = event.geometry.coordinates;
       const mag = event.properties.mag;
@@ -195,9 +207,10 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       const kind = isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
       const recent = !isMain && now - event.properties.time < RECENT_MS ? " recent" : "";
       const highlight = fresh.current?.id === event.id && now < fresh.current.until ? " fresh" : "";
+      const hiddenByReplay = replayHidden.current?.has(event.id) ? " replay-hidden" : "";
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${highlight}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${isMain ? "<i></i><i></i>" : ""}</span>`,
+        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${isMain ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const marker = L.marker([lat, lng], {
@@ -268,15 +281,16 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
     const L = (window as any).L;
     const container = map.getContainer() as HTMLElement;
     const still = reducedMotion();
-    const spans: HTMLElement[] = [];
-    const byId = new Map<string, HTMLElement>();
-    for (const [id, marker] of markersRef.current) {
-      const span = marker.getElement()?.firstElementChild as HTMLElement | undefined;
-      if (!span) continue;
-      span.classList.remove("pop");
-      span.classList.add("replay-hidden");
-      spans.push(span);
-      byId.set(id, span);
+    const markers = markersRef.current;
+    // Los marcadores se buscan por id en cada paso y no se guardan: si llegan datos nuevos y el mapa los
+    // rehace a mitad de la reproducción, los que aún no tocan siguen ocultos en vez de aparecer de golpe.
+    const spanOf = (id: string) => markers.get(id)?.getElement()?.firstElementChild as HTMLElement | undefined;
+    const hidden = new Set(markers.keys());
+    replayHidden.current = hidden;
+    for (const id of hidden) {
+      const span = spanOf(id);
+      span?.classList.remove("pop");
+      span?.classList.add("replay-hidden");
     }
 
     map.closePopup();
@@ -289,7 +303,8 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
     latest.current.onReplay({ index: 0, total, time: sequence[0].properties.time, mag: null });
     sequence.forEach((event, i) => {
       timers.push(window.setTimeout(() => {
-        const span = byId.get(event.id);
+        hidden.delete(event.id);
+        const span = spanOf(event.id);
         span?.classList.remove("replay-hidden");
         span?.classList.add("replay-pop");
         if (!still) {
@@ -300,14 +315,17 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       }, start + i * STEP_MS));
     });
     timers.push(window.setTimeout(() => {
-      for (const span of spans) span.classList.remove("replay-hidden");
+      hidden.clear();
+      for (const id of markers.keys()) spanOf(id)?.classList.remove("replay-hidden");
       latest.current.onReplay(null);
     }, start + total * STEP_MS + 600));
 
     return () => {
       timers.forEach(timer => window.clearTimeout(timer));
       container.classList.remove("quake-shake");
-      for (const span of spans) span.classList.remove("replay-hidden", "replay-pop");
+      hidden.clear();
+      replayHidden.current = null;
+      for (const id of markers.keys()) spanOf(id)?.classList.remove("replay-hidden", "replay-pop");
       latest.current.onReplay(null);
     };
   }, [replayKey]);
