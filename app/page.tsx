@@ -326,6 +326,11 @@ export default function Home() {
     [events],
   );
   const latest = events[0] ?? null;
+  // El último sismo registrado de todos, sin importar los filtros de magnitud o de réplicas de la lista.
+  const newest = useMemo(
+    () => allEvents.reduce<Earthquake | null>((best, event) => (!best || event.properties.time > best.properties.time ? event : best), null),
+    [allEvents],
+  );
   const mapEvents = useMemo(
     () => main && !events.some(event => event.id === main.id) ? [...events, main] : events,
     [events, main],
@@ -337,6 +342,7 @@ export default function Home() {
   const featured = mapEvents.find(event => event.id === selectedId) ?? latest;
   const [recentValue, recentUnit] = latest ? elapsed(latest.properties.time) : ["—", ""];
   const [mainValue, mainUnit] = main ? elapsed(main.properties.time) : ["—", ""];
+  const [newestValue, newestUnit] = newest ? elapsed(newest.properties.time) : ["—", ""];
   const mainMmi = main?.properties.mmi;
   const mainFelt = main?.properties.felt;
   const mainAlert = main?.properties.alert;
@@ -515,15 +521,6 @@ export default function Home() {
                 <div className="mainshock-actions">
                   <a className="primary" href="#recomendaciones">Qué hacer ahora</a>
                   <button type="button" onClick={() => chooseEvent(main)}>Ver sismo principal en mapa</button>
-                  {latest && main && latest.id !== main.id && (
-                    <button
-                      type="button"
-                      onClick={() => chooseEvent(latest)}
-                      style={{ background: "#e11d48", color: "#fff", border: "0" }}
-                    >
-                      📍 Ver último sismo ({magText(latest)} M)
-                    </button>
-                  )}
                   <button type="button" onClick={share} aria-live="polite">{shared ? "Enlace copiado" : "Compartir"}</button>
                   <a
                     className="wide"
@@ -537,6 +534,20 @@ export default function Home() {
                   <a className="wide" href={mainUrl} target="_blank" rel="noopener noreferrer">Reporte del USGS <span aria-hidden="true">↗</span></a>
                 </div>
               </div>
+              {newest && newest.id !== main.id && !sameEvent(newest, main) && (
+                <div className="mainshock-latest" role="group" aria-label="Último sismo registrado">
+                  <div className="latest-mag"><strong>{magText(newest)}</strong><span>M</span></div>
+                  <div className="latest-info">
+                    <span className="latest-kicker"><i /> ÚLTIMO SISMO REGISTRADO · {newestValue === "Ahora" ? "AHORA MISMO" : `HACE ${newestValue} ${newestUnit}`.toUpperCase()}</span>
+                    <strong className="latest-place">{placeText(newest)}</strong>
+                    <small>
+                      {dateTime.format(new Date(newest.properties.time))} · {depthText(newest)} de profundidad · {SOURCE_NAMES[newest.properties.source ?? "usgs"]}
+                      {newest.properties.status === "automatic" && " · preliminar"}
+                    </small>
+                  </div>
+                  <button type="button" onClick={() => chooseEvent(newest)}>📍 Ver en el mapa</button>
+                </div>
+              )}
               <dl className="mainshock-stats">
                 <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
                 {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
