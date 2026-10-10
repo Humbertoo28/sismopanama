@@ -301,8 +301,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setRefreshKey(key => key + 1), POLL_MS);
-    const slowTimer = window.setInterval(() => setSlowKey(key => key + 1), SLOW_POLL_MS);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setRefreshKey(key => key + 1);
+    }, POLL_MS);
+    const slowTimer = window.setInterval(() => {
+      if (!document.hidden) setSlowKey(key => key + 1);
+    }, SLOW_POLL_MS);
 
     // Al volver a la pestaña se consulta todo de inmediato. visibilitychange, focus y pageshow suelen dispararse
     // juntos: se atienden como una sola consulta.
