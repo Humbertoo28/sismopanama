@@ -31,6 +31,16 @@ function decodedLength(value: unknown): number {
 export const isPushPublicKey = (value: unknown): value is string => decodedLength(value) === 65;
 export const isPushAuthSecret = (value: unknown): value is string => decodedLength(value) === 16;
 
+// Solo para el registro de rechazos: bytes que mide una clave (-1 si no es base64url válida). Nunca el valor.
+export const keyBytes = decodedLength;
+
+// Solo el dominio de una dirección (sin ruta, que lleva el identificador del dispositivo, ni credenciales).
+export function endpointHost(value: unknown): string {
+  if (typeof value !== "string") return `(${typeof value})`;
+  const match = /^(https?):\/\/([^/?#\s]*)/i.exec(value);
+  return match ? `${match[1].toLowerCase()}://${match[2].split("@").pop()}`.slice(0, 80) : "(no es una dirección web)";
+}
+
 export function isPushKeys(value: unknown): value is { p256dh: string; auth: string } {
   const keys = value as { p256dh?: unknown; auth?: unknown } | null | undefined;
   return isPushPublicKey(keys?.p256dh) && isPushAuthSecret(keys?.auth);

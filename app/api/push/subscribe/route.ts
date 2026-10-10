@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
-import { isPushEndpoint, isPushKeys, parseMinMagnitude, readJsonObject } from "@/lib/push-validation";
+import { endpointHost, isPushEndpoint, isPushKeys, keyBytes, parseMinMagnitude, readJsonObject } from "@/lib/push-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,17 @@ export async function POST(req: NextRequest) {
     const oldEndpoint = body?.oldEndpoint;
 
     if (!isPushEndpoint(endpoint) || !isPushKeys(keys) || (oldEndpoint !== undefined && !isPushEndpoint(oldEndpoint))) {
+      // Queda constancia de qué se rechazó y por qué, sin guardar nada del dispositivo: solo el dominio, los tamaños de
+      // las claves y el tipo de navegador. Así se ve si el filtro de seguridad deja fuera a algún servicio de push legítimo.
+      const k = keys as { p256dh?: unknown; auth?: unknown } | null | undefined;
+      console.warn("[push] suscripción rechazada", JSON.stringify({
+        dominio: endpointHost(endpoint),
+        direccionOk: isPushEndpoint(endpoint),
+        clavesOk: isPushKeys(keys),
+        bytesClaves: { p256dh: keyBytes(k?.p256dh), auth: keyBytes(k?.auth) },
+        dominioAnterior: oldEndpoint === undefined ? null : endpointHost(oldEndpoint),
+        navegador: (req.headers.get("user-agent") ?? "").slice(0, 90),
+      }));
       return NextResponse.json(INVALID, { status: 400 });
     }
 
