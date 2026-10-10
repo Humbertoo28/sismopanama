@@ -249,7 +249,10 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       // appendChild y no append: los tipos de workers-types pisan Element.append.
       popup.appendChild(title);
       popup.appendChild(meta);
-      marker.bindPopup(popup);
+      // Al abrirse el globo, Leaflet mueve el mapa para que quepa; se le reserva el espacio de los botones que lo
+      // cubren (marca y selector de capas arriba, leyenda y atribución abajo) para que no lo tapen.
+      const narrow = window.innerWidth <= 700;
+      marker.bindPopup(popup, { autoPanPaddingTopLeft: [12, narrow ? 100 : 64], autoPanPaddingBottomRight: [56, 16] });
       marker.on("click", () => latest.current.onSelect(event.id));
       markersRef.current.set(event.id, marker);
     }

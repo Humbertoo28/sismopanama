@@ -294,6 +294,50 @@ function playSynthesizedSiren(onEnd: () => void) {
   }
 }
 
+// Voces en español: siempre una voz femenina. Los navegadores no dicen el género de una voz, así que se reconoce
+// por el nombre. Antes se tomaba la primera voz en español de la lista, que cambia según la pestaña, el
+// navegador y si ya cargaron las voces de Google: una pestaña hablaba con una voz de mujer y otra con una de hombre.
+const MALE_VOICE =
+  /(?<![\p{L}])(pablo|raul|raúl|jorge|juan|diego|carlos|enrique|miguel|pedro|andres|andrés|alvaro|álvaro|antonio|tomas|tomás|jaime|ricardo|fernando|luis|manuel|alberto|alejandro|arturo|gonzalo|ramon|ramón|sergio|jose|josé|ignacio|oscar|óscar|mateo|santiago|lorenzo|emilio|lazaro|lázaro|marcelo|mario|orlando|sebastian|sebastián|rodrigo|roberto|alex|male|masculin\w*|hombre)(?![\p{L}])/iu;
+const FEMALE_VOICE =
+  /(?<![\p{L}])(sabina|helena|laura|paulina|monica|mónica|dalia|elvira|lucia|lucía|marisol|paloma|paula|paola|esperanza|elena|camila|catalina|sofia|sofía|valentina|salome|salomé|soledad|angelica|angélica|francisca|isabela|mariana|carmela|ximena|marina|nuria|belkys|karla|lupe|margarita|ramona|reina|tania|yolanda|estrella|irene|liliana|larissa|female|femenin\w*|mujer)(?![\p{L}])|google espa/iu;
+
+export function pickSpanishVoice<T extends { name: string; lang: string }>(voices: T[]): T | null {
+  const regionRank = (lang: string) => {
+    const l = lang.toLowerCase().replace("_", "-");
+    if (l === "es-pa") return 0;
+    if (l === "es-419") return 1;
+    if (l.startsWith("es-mx")) return 2;
+    if (l.startsWith("es-us")) return 3;
+    if (l.startsWith("es-es")) return 5;
+    return l.startsWith("es") ? 4 : 6;
+  };
+  const spanish = voices.filter(v => v.lang.toLowerCase().replace("_", "-").startsWith("es") || /spanish|español/i.test(v.name));
+  if (spanish.length === 0) return null;
+  // Femenina conocida primero, luego sin género reconocible (p. ej. las voces de Android), y la masculina solo si
+  // no hay otra: una alerta debe hablarse aunque el equipo tenga únicamente una voz masculina.
+  const score = (v: T) => (MALE_VOICE.test(v.name) ? 100 : FEMALE_VOICE.test(v.name) ? 0 : 10) + regionRank(v.lang);
+  return spanish.reduce((best, v) => (score(v) < score(best) ? v : best));
+}
+
+// Si hay varias pestañas o ventanas abiertas (la página y la app instalada), solo una suena por cada alerta.
+const STORAGE_AUDIO_CLAIM_KEY = "sismo_panama_audio_claim_v1";
+const TAB_ID = Math.random().toString(36).slice(2);
+function claimAlertAudio(eventId: string): boolean {
+  try {
+    const now = Date.now();
+    const raw = localStorage.getItem(STORAGE_AUDIO_CLAIM_KEY);
+    if (raw) {
+      const claim = JSON.parse(raw) as { id?: string; tab?: string; at?: number };
+      if (claim.id === eventId && claim.tab !== TAB_ID && now - (claim.at ?? 0) < 60_000) return false;
+    }
+    localStorage.setItem(STORAGE_AUDIO_CLAIM_KEY, JSON.stringify({ id: eventId, tab: TAB_ID, at: now }));
+  } catch {
+    // Sin localStorage no se puede coordinar: suena esta pestaña.
+  }
+  return true;
+}
+
 export function playVoiceAlert(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   try {
@@ -312,16 +356,11 @@ export function playVoiceAlert(text: string) {
         const utterance = new SpeechSynthesisUtterance(text);
         activeUtterance = utterance;
 
-        const voices = cachedVoices.length > 0 ? cachedVoices : loadVoices();
-        // Buscar la mejor voz en español disponible en este dispositivo (iOS, Android, Windows, Mac):
-        const esVoice =
-          voices.find(v => v.lang.toLowerCase().replace("_", "-") === "es-pa") ||
-          voices.find(v => v.lang.toLowerCase().replace("_", "-") === "es-419") ||
-          voices.find(v => v.lang.toLowerCase().replace("_", "-").startsWith("es-mx")) ||
-          voices.find(v => v.lang.toLowerCase().replace("_", "-").startsWith("es-us")) ||
-          voices.find(v => v.lang.toLowerCase().replace("_", "-").startsWith("es-es")) ||
-          voices.find(v => v.lang.toLowerCase().startsWith("es")) ||
-          voices.find(v => (v.name || "").toLowerCase().includes("spanish"));
+        // Las voces se piden en el momento de hablar: la lista guardada puede estar incompleta si el navegador aún
+        // no terminó de cargar las suyas.
+        const fresh = synth.getVoices();
+        const voices = fresh.length > 0 ? fresh : cachedVoices.length > 0 ? cachedVoices : loadVoices();
+        const esVoice = pickSpanishVoice(voices);
 
         if (esVoice) {
           utterance.voice = esVoice;
@@ -399,10 +438,13 @@ export async function sendSystemNotification({
       if (reg && reg.showNotification) {
         await reg.showNotification(title, {
           body,
-          icon: "/favicon.svg",
+          icon: "/icon-192.png",
           badge: "/favicon.svg",
           tag,
           renotify: true,
+          // Explícitamente con sonido y vibración: el aviso no debe llegar en silencio por omisión.
+          silent: false,
+          vibrate: [400, 150, 400, 150, 400],
           data: { url },
         } as unknown as NotificationOptions);
         return true;
@@ -501,7 +543,17 @@ export async function syncPushSubscription(minMagnitude: number): Promise<void> 
 
 export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return { ok: false, error: "Tu navegador no soporta notificaciones Web Push en segundo plano." };
+    // En iPhone y iPad el push solo existe para la app instalada en la pantalla de inicio, no en una pestaña de Safari.
+    const iosTab =
+      /iphone|ipad|ipod/i.test(navigator.userAgent) &&
+      !(navigator as unknown as { standalone?: boolean }).standalone &&
+      !window.matchMedia("(display-mode: standalone)").matches;
+    return {
+      ok: false,
+      error: iosTab
+        ? "En iPhone primero instala la app: toca Compartir → Agregar a pantalla de inicio, ábrela desde el ícono y pulsa Activar 24/7 otra vez."
+        : "Tu navegador no soporta notificaciones Web Push en segundo plano.",
+    };
   }
 
   try {
@@ -714,11 +766,24 @@ export function getTelegramShareUrl(event: Earthquake, currentUrl: string): stri
   return `https://t.me/share/url?url=${encodeURIComponent(currentUrl.split("#")[0])}&text=${encodeURIComponent(text)}`;
 }
 
+// Lo que manda el servidor en un push, convertido en un sismo para que la página lo trate igual que uno propio.
+export type PushedQuake = { id?: string; magnitude?: number; place?: string; time?: number; lat?: number; lng?: number; depth?: number };
+export function earthquakeFromPush(quake: PushedQuake): Earthquake | null {
+  if (!quake.id || !Number.isFinite(quake.time)) return null;
+  return {
+    id: quake.id,
+    properties: { mag: Number.isFinite(quake.magnitude) ? quake.magnitude! : null, place: quake.place ?? null, time: quake.time!, url: null },
+    geometry: { coordinates: [Number.isFinite(quake.lng) ? quake.lng! : -80.4, Number.isFinite(quake.lat) ? quake.lat! : 8.46, quake.depth] },
+  };
+}
+
 export async function broadcastEarthquakeAlert(
   event: Earthquake,
   count: number,
   prefs: AlertPreferences,
   isTest = false,
+  // El push ya mostró su notificación: no se muestra otra encima (volvería a sonar).
+  skipNotification = false,
 ) {
   const mag = event.properties.mag === null ? "—" : event.properties.mag.toFixed(1);
   const place = event.properties.place || "Panamá";
@@ -744,14 +809,18 @@ export async function broadcastEarthquakeAlert(
     }
   };
 
-  if (prefs.soundEnabled) {
+  // Con otra pestaña o ventana ya sonando por este mismo sismo, esta no repite sirena ni voz.
+  const audible = isTest || claimAlertAudio(event.id);
+  if (!audible) {
+    // nada que reproducir aquí
+  } else if (prefs.soundEnabled) {
     playEmergencyAlarmSound(speak);
   } else {
     speak();
   }
 
   // 3. Notificación emergente del sistema en el navegador/celular
-  if (prefs.notificationsEnabled && getNotificationPermissionStatus() === "granted") {
+  if (!skipNotification && prefs.notificationsEnabled && getNotificationPermissionStatus() === "granted") {
     const title = isTest
       ? `🧪 [PRUEBA] Alerta sísmica activa en Panamá`
       : `🚨 ¡ALERTA SÍSMICA EN PANAMÁ! · M ${mag}`;

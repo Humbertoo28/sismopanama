@@ -31,6 +31,9 @@ export type WebPushPayload = {
   magnitude?: number;
   place?: string;
   time?: number;
+  lat?: number;
+  lng?: number;
+  depth?: number;
 };
 
 export type PushSubscriptionRecord = {

@@ -82,7 +82,7 @@ export default function PwaInstall() {
                 <span className="alert-bell-icon">📲</span>
                 <div>
                   <h2>Instalar en tu iPhone o iPad</h2>
-                  <p>Agrégala a tu pantalla de inicio en 2 simples pasos:</p>
+                  <p>Agrégala a tu pantalla de inicio en 3 pasos:</p>
                 </div>
               </div>
               <button
@@ -111,6 +111,16 @@ export default function PwaInstall() {
                   <strong style={{ fontSize: 13, color: "#17253c" }}>Agregar a inicio</strong>
                   <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748b" }}>
                     Elige <strong>&quot;Agregar a pantalla de inicio&quot; (➕)</strong> y confirma.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", background: "#f8fafc", padding: 12, borderRadius: 10 }}>
+                <span style={{ fontSize: 20 }}>3️⃣</span>
+                <div>
+                  <strong style={{ fontSize: 13, color: "#17253c" }}>Ábrela desde el ícono y activa las alertas</strong>
+                  <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748b" }}>
+                    Abre <strong>Sismo Panamá</strong> desde tu pantalla de inicio, toca <strong>Alertas</strong> y pulsa <strong>Activar 24/7</strong>. Solo así llegan los avisos con la app cerrada (iOS 16.4 o superior).
                   </p>
                 </div>
               </div>

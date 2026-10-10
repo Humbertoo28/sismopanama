@@ -14,6 +14,7 @@ import PwaInstall from "./pwa-install";
 import {
   ALARM_MAX_AGE_MS,
   broadcastEarthquakeAlert,
+  earthquakeFromPush,
   getNotificationPermissionStatus,
   getWhatsAppShareUrl,
   isSeenQuake,
@@ -121,6 +122,30 @@ export default function Home() {
     }
   }, []);
 
+  // Un push que llega con la app abierta (o en memoria): el service worker no puede sonar, así que le avisa a la
+  // página y esta hace sonar sirena y voz en ese instante. Si la página ya conocía el sismo, no repite nada.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    const onMessage = (message: MessageEvent) => {
+      if (message.data?.type !== "quake-push") return;
+      const event = earthquakeFromPush(message.data.quake ?? {});
+      if (!event) return;
+      const known = loadSeenQuakes();
+      if (isSeenQuake(event, known) || previousEvents.current.some(old => sameEvent(old, event))) return;
+      const remembered = rememberQuakes(known, [event]);
+      seen.current = remembered;
+      saveSeenQuakes(remembered);
+      const prefs = loadAlertPreferences();
+      if (event.properties.mag !== null && event.properties.mag < prefs.minMagnitude) return;
+      const now = Date.now();
+      const quiet = now - event.properties.time > ALARM_MAX_AGE_MS;
+      setAlert({ key: now, event, count: 1, quiet });
+      if (!quiet) broadcastEarthquakeAlert(event, 1, prefs, false, true);
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, []);
+
   useEffect(() => {
     const tick = () => setClock(clockFormat.format(new Date()));
     tick();
@@ -187,7 +212,13 @@ export default function Home() {
         setStatus("ready");
         if (!introFocused.current && data.features.length > 0) {
           introFocused.current = true;
-          setFocus({ id: data.features[0].id, quiet: true });
+          // Al tocar una notificación push la dirección trae ?focus=<id> del sismo avisado: se enfoca ese y no el
+          // último. El id puede ser el de otro catálogo (alias) si el sismo se fusionó después.
+          const wanted = new URLSearchParams(window.location.search).get("focus");
+          const target = wanted ? data.features.find(event => event.id === wanted || event.properties.aliases?.includes(wanted)) : undefined;
+          if (wanted) window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+          if (target) setSelectedId(target.id);
+          setFocus({ id: (target ?? data.features[0]).id, quiet: true });
         }
       } catch (error) {
         if (controller.signal.aborted) return;

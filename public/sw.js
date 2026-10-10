@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v5";
+const CACHE_NAME = "sismo-panama-v7";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -89,6 +89,9 @@ self.addEventListener("push", (event) => {
     vibrate: [400, 150, 400, 150, 400],
     tag: data.id ? `sismo-${data.id}` : "sismo-panama-alert",
     renotify: true,
+    // Con sonido del sistema. Una notificación web no puede reproducir la sirena propia: eso solo lo hace la
+    // página cuando está abierta.
+    silent: false,
     requireInteraction: true,
     data: {
       url: data.url || "/",
@@ -101,7 +104,24 @@ self.addEventListener("push", (event) => {
     ],
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    (async () => {
+      // Un service worker no puede reproducir audio. Si la app está abierta (aunque sea en segundo plano) se le
+      // avisa en el acto para que haga sonar la sirena y la voz, en vez de esperar a su próxima consulta.
+      try {
+        const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        for (const client of open) {
+          client.postMessage({
+            type: "quake-push",
+            quake: { id: data.id, magnitude: data.magnitude, place: data.place, time: data.time, lat: data.lat, lng: data.lng, depth: data.depth },
+          });
+        }
+      } catch {
+        // Sin ventanas abiertas no hay a quién avisar.
+      }
+      await self.registration.showNotification(title, options);
+    })(),
+  );
 });
 
 function urlBase64ToUint8Array(base64String) {

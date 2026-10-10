@@ -52,7 +52,10 @@ function pushPayload(quake: Earthquake, now: number) {
       magnitude: quake.properties.mag ?? 3.0,
       place,
       time: quake.properties.time,
-      url: `/?focus=${encodeURIComponent(quake.id)}`,
+      lat: quake.geometry.coordinates[1],
+      lng: quake.geometry.coordinates[0],
+      depth: quake.geometry.coordinates[2],
+      url: `/?focus=${encodeURIComponent(quake.id)}#mapa`,
     },
   };
 }
