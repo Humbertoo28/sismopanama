@@ -11,6 +11,7 @@ import SeismoTrace from "./seismo-trace";
 import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
 import PwaInstall from "./pwa-install";
+import InAppBrowserNotice from "./in-app-browser-notice";
 import {
   ALARM_MAX_AGE_MS,
   broadcastEarthquakeAlert,
@@ -27,6 +28,12 @@ import {
   type SeenQuake,
 } from "../lib/alert-system";
 import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
+
+// La lista de sismos se consulta cada 10 s; lo que casi no cambia (datos del sismo principal y contraste entre agencias)
+// cada 60 s. Antes eran tres consultas cada 8 s por pestaña abierta: con miles de personas conectadas a la vez eso
+// agotaba las cuotas del servidor. Un sismo tarda minutos en publicarse en los catálogos, así que 2 s más no cambian el aviso.
+const POLL_MS = 10_000;
+const SLOW_POLL_MS = 60_000;
 
 const date = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
@@ -92,6 +99,8 @@ export default function Home() {
   const [catalogs, setCatalogs] = useState<EarthquakeResponse["catalogs"]>();
   const [clock, setClock] = useState<string>("--:--");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [slowKey, setSlowKey] = useState(0);
+  const lastBump = useRef(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [mainshock, setMainshock] = useState<MainshockResponse | null>(null);
@@ -177,6 +186,9 @@ export default function Home() {
           event => !isSeenQuake(event, known) && !previousEvents.current.some(old => sameEvent(old, event)) && Date.now() - event.properties.time < 2 * 3_600_000,
         );
 
+        // Con un sismo nuevo se actualizan ya los contadores de réplicas y el contraste entre agencias.
+        if (!isFirstRun && fresh.length > 0) setSlowKey(key => key + 1);
+
         const prefs = loadAlertPreferences();
         const qualifying = fresh.filter(
           event => event.properties.mag === null || event.properties.mag >= prefs.minMagnitude,
@@ -250,7 +262,7 @@ export default function Home() {
     };
     load();
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [slowKey]);
 
   useEffect(() => {
     if (!alert) return;
@@ -289,13 +301,18 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Sondeo cada 8 segundos para detectar nuevos sismos con mínima latencia
-    const timer = window.setInterval(() => {
-      setRefreshKey(key => key + 1);
-    }, 8_000);
+    const timer = window.setInterval(() => setRefreshKey(key => key + 1), POLL_MS);
+    const slowTimer = window.setInterval(() => setSlowKey(key => key + 1), SLOW_POLL_MS);
 
+    // Al volver a la pestaña se consulta todo de inmediato. visibilitychange, focus y pageshow suelen dispararse
+    // juntos: se atienden como una sola consulta.
     const onVisible = () => {
-      if (!document.hidden) setRefreshKey(key => key + 1);
+      if (document.hidden) return;
+      const at = Date.now();
+      if (at - lastBump.current < 2_000) return;
+      lastBump.current = at;
+      setRefreshKey(key => key + 1);
+      setSlowKey(key => key + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
@@ -303,6 +320,7 @@ export default function Home() {
 
     return () => {
       window.clearInterval(timer);
+      window.clearInterval(slowTimer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("pageshow", onVisible);
@@ -484,6 +502,7 @@ export default function Home() {
         </header>
 
         <div className="content-wrap">
+          <InAppBrowserNotice />
           <section className="page-intro" aria-labelledby="page-title">
             <div>
               <div className="eyebrow"><span className="eyebrow-line" /> OBSERVATORIO SÍSMICO</div>
@@ -503,7 +522,7 @@ export default function Home() {
                 type="button"
                 aria-label="Actualizar datos de sismos"
                 disabled={status === "loading"}
-                onClick={() => setRefreshKey(key => key + 1)}
+                onClick={() => { setRefreshKey(key => key + 1); setSlowKey(key => key + 1); }}
               >
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 <span>Actualizar datos</span>
@@ -682,7 +701,7 @@ export default function Home() {
 
           <section id="fuentes" className="guide-section" aria-labelledby="sources-title">
             <div className="section-heading"><div><span className="section-kicker">FUENTES Y VERIFICACIÓN</span><h2 id="sources-title">De dónde salen los datos</h2></div></div>
-            <Sources refreshKey={refreshKey} />
+            <Sources refreshKey={slowKey} />
           </section>
 
           <footer>

@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       fetchedAt: new Date().toISOString(),
     };
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=15, stale-while-revalidate=60" },
+      headers: { "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120" },
     });
   } catch (error) {
     console.error("USGS mainshock fetch failed:", error);

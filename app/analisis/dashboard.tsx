@@ -10,8 +10,9 @@ import { MAINSHOCK_ID, sameEvent, type Earthquake, type EarthquakeResponse, type
 import { ActivityChart, DepthBars, Legend, MagnitudeBars, TimelineChart, type TimelinePoint } from "./charts";
 import { fmtClock, fmtFull, fmtInt } from "./format";
 
-// Igual que la página principal: el servidor guarda la respuesta 5 s, así que consultar más seguido no sirve de nada.
-const POLL_MS = 8_000;
+// Igual que la página principal. Un sismo tarda minutos en publicarse en los catálogos: consultar más seguido solo gasta
+// cuota del servidor cuando hay mucha gente conectada.
+const POLL_MS = 10_000;
 const TOAST_MS = 20_000;
 const FRESH_MS = 3 * 60_000;
 const REPORT_HOSTS = ["https://earthquake.usgs.gov/", "https://sismosgeociencias.up.ac.pa/", "https://www.emsc-csem.org/"];

@@ -1,0 +1,10 @@
+.iab { display: grid; gap: 10px; margin: 0 0 18px; padding: 16px 18px; border-radius: 14px; border: 2px solid #f5b100; background: #fff7e0; color: #3a2b00; box-shadow: 0 6px 20px #f5b10033; }
+.iab strong { font-family: "Space Grotesk", sans-serif; font-size: 17px; line-height: 1.25; }
+.iab p { margin: 0; font-size: 14px; line-height: 1.45; }
+.iab ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; line-height: 1.45; }
+.iab .iab-address { font-size: 13px; }
+.iab b { font-weight: 800; word-break: break-word; }
+.iab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.iab-actions button { min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid #c98500; background: #fff; color: #3a2b00; font-weight: 700; font-size: 14px; }
+.iab-actions .iab-primary { background: #3a2b00; border-color: #3a2b00; color: #fff; }
+.iab-actions button:focus-visible { outline: 3px solid #0a3a8c; outline-offset: 2px; }
