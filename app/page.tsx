@@ -339,21 +339,25 @@ export default function Home() {
     () => main ? allEvents.filter(event => isAftershock(event, main)) : [],
     [allEvents, main],
   );
-  const featured = mapEvents.find(event => event.id === selectedId) ?? latest;
+  const featured = mapEvents.find(event => event.id === selectedId) ?? newest ?? latest;
   const [recentValue, recentUnit] = latest ? elapsed(latest.properties.time) : ["—", ""];
   const [mainValue, mainUnit] = main ? elapsed(main.properties.time) : ["—", ""];
-  const [newestValue, newestUnit] = newest ? elapsed(newest.properties.time) : ["—", ""];
+  const hero = newest ?? main;
+  const hasDistinctMain = Boolean(main && newest && main.id !== newest.id && !sameEvent(main, newest));
+  const [heroValue, heroUnit] = hero ? elapsed(hero.properties.time) : ["—", ""];
+  const heroSource = SOURCE_NAMES[hero?.properties.source ?? "usgs"];
+  const heroUrl = reportUrl(hero);
   const mainMmi = main?.properties.mmi;
   const mainFelt = main?.properties.felt;
   const mainAlert = main?.properties.alert;
-  const mainUrl = main?.properties.url?.startsWith("https://earthquake.usgs.gov/") ? main.properties.url : "https://earthquake.usgs.gov/earthquakes/map/";
+  const mainUrl = reportUrl(main);
   const tellUsUrl = mainUrl.includes("/eventpage/") ? `${mainUrl}/tellus` : null;
 
-  const share = async () => {
-    if (!main) return;
+  const share = async (target: Earthquake | null) => {
+    if (!target) return;
     const data = {
-      title: `Sismo M ${magText(main)} en Panamá`,
-      text: `Sismo de magnitud ${magText(main)} en Panamá. Información en vivo y qué hacer:`,
+      title: `Sismo M ${magText(target)} en Panamá`,
+      text: `Sismo de magnitud ${magText(target)} en ${placeText(target)}. Información en vivo y qué hacer:`,
       url: window.location.href.split("#")[0],
     };
     try {
@@ -507,56 +511,115 @@ export default function Home() {
             </div>
           </section>
 
-          {main && mainshock && (
-            <section className="mainshock" aria-labelledby="mainshock-title">
+          {hero && (
+            <section className="mainshock" aria-labelledby="hero-quake-title">
               <SeismoTrace replay={replay} />
               <div className="mainshock-head">
-                <div className="mainshock-mag"><strong>{main.properties.mag === null ? "—" : <CountUp value={main.properties.mag} from={0} decimals={1} duration={1500} />}</strong><span>MAGNITUD</span></div>
+                <div className="mainshock-mag">
+                  <strong>
+                    {hero.properties.mag === null ? "—" : <CountUp value={hero.properties.mag} from={0} decimals={1} duration={1500} />}
+                  </strong>
+                  <span>MAGNITUD</span>
+                </div>
                 <div className="mainshock-title">
-                  <span className="mainshock-kicker"><i /> SISMO PRINCIPAL · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}</span>
-                  <h2 id="mainshock-title">{placeText(main)}</h2>
-                  <p>{dateTime.format(new Date(main.properties.time))} · hora de Panamá</p>
-                  {main.properties.status && <span className={`review-chip${main.properties.status === "reviewed" ? " ok" : ""}`}>{main.properties.status === "reviewed" ? "✓ Revisado por el USGS" : "Datos automáticos del USGS, aún sin revisar"}</span>}
+                  <span className="mainshock-kicker">
+                    <i /> {hasDistinctMain ? "ÚLTIMO SISMO REGISTRADO" : "SISMO PRINCIPAL"} · {heroValue === "Ahora" ? "AHORA MISMO" : `HACE ${heroValue} ${heroUnit}`.toUpperCase()}
+                  </span>
+                  <h2 id="hero-quake-title">{placeText(hero)}</h2>
+                  <p>
+                    {dateTime.format(new Date(hero.properties.time))} · hora de Panamá · {depthText(hero)} de profundidad · {heroSource}
+                  </p>
+                  {hero.properties.status && (
+                    <span className={`review-chip${hero.properties.status === "reviewed" ? " ok" : ""}`}>
+                      {hero.properties.status === "reviewed" ? `✓ Revisado por ${heroSource}` : `Datos automáticos de ${heroSource}, preliminar`}
+                    </span>
+                  )}
                 </div>
                 <div className="mainshock-actions">
-                  <a className="primary" href="#recomendaciones">Qué hacer ahora</a>
-                  <button type="button" onClick={() => chooseEvent(main)}>Ver sismo principal en mapa</button>
-                  <button type="button" onClick={share} aria-live="polite">{shared ? "Enlace copiado" : "Compartir"}</button>
+                  <button type="button" className="primary" onClick={() => chooseEvent(hero)}>
+                    📍 Ver en el mapa
+                  </button>
+                  <a href="#recomendaciones">Qué hacer ahora</a>
+                  <button type="button" onClick={() => share(hero)} aria-live="polite">
+                    {shared ? "Enlace copiado" : "Compartir"}
+                  </button>
                   <a
                     className="wide"
-                    href={getWhatsAppShareUrl(main, typeof window !== "undefined" ? window.location.href : "")}
+                    href={getWhatsAppShareUrl(hero, typeof window !== "undefined" ? window.location.href : "")}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ background: "#25d366", color: "#033a17", border: "0", fontWeight: "800", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                   >
                     📲 Mandar alerta a todos por WhatsApp
                   </a>
-                  <a className="wide" href={mainUrl} target="_blank" rel="noopener noreferrer">Reporte del USGS <span aria-hidden="true">↗</span></a>
+                  <a className="wide" href={heroUrl} target="_blank" rel="noopener noreferrer">
+                    Reporte de {heroSource} <span aria-hidden="true">↗</span>
+                  </a>
                 </div>
               </div>
-              {newest && newest.id !== main.id && !sameEvent(newest, main) && (
-                <div className="mainshock-latest" role="group" aria-label="Último sismo registrado">
-                  <div className="latest-mag"><strong>{magText(newest)}</strong><span>M</span></div>
-                  <div className="latest-info">
-                    <span className="latest-kicker"><i /> ÚLTIMO SISMO REGISTRADO · {newestValue === "Ahora" ? "AHORA MISMO" : `HACE ${newestValue} ${newestUnit}`.toUpperCase()}</span>
-                    <strong className="latest-place">{placeText(newest)}</strong>
-                    <small>
-                      {dateTime.format(new Date(newest.properties.time))} · {depthText(newest)} de profundidad · {SOURCE_NAMES[newest.properties.source ?? "usgs"]}
-                      {newest.properties.status === "automatic" && " · preliminar"}
-                    </small>
+
+              {hero.properties.tsunami === 1 && (
+                <p className="mainshock-warning" role="alert">
+                  El USGS marcó este sismo como posible generador de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.
+                </p>
+              )}
+
+              {hasDistinctMain && main && mainshock && (
+                <div className="mainshock-principal" role="group" aria-label="Sismo principal de la secuencia">
+                  <div className="principal-head">
+                    <div className="principal-mag">
+                      <strong>{magText(main)}</strong>
+                      <span>M PRINCIPAL</span>
+                    </div>
+                    <div className="principal-info">
+                      <span className="principal-kicker">
+                        ⭐ SISMO PRINCIPAL DE LA SECUENCIA · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}
+                      </span>
+                      <h3 className="principal-place">{placeText(main)}</h3>
+                      <small>
+                        {dateTime.format(new Date(main.properties.time))} · {depthText(main)} de profundidad · {SOURCE_NAMES[main.properties.source ?? "usgs"]}
+                        {main.properties.status === "reviewed" ? " · revisado" : " · preliminar"}
+                      </small>
+                    </div>
+                    <div className="principal-actions">
+                      <button type="button" onClick={() => chooseEvent(main)}>
+                        📍 Ver sismo principal en mapa
+                      </button>
+                      <a href={mainUrl} target="_blank" rel="noopener noreferrer">
+                        Reporte del USGS <span aria-hidden="true">↗</span>
+                      </a>
+                    </div>
                   </div>
-                  <button type="button" onClick={() => chooseEvent(newest)}>📍 Ver en el mapa</button>
+                  <dl className="mainshock-stats">
+                    <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
+                    {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
+                    {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}</dd><small>estimada por el USGS</small></div>}
+                    {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
+                    <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
+                  </dl>
+                  {main.properties.tsunami === 1 && (
+                    <p className="mainshock-warning" role="alert">
+                      El USGS marcó el sismo principal como posible generador de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.
+                    </p>
+                  )}
+                  {mainshock.aftershocks.tsunami && (
+                    <p className="mainshock-warning" role="alert">
+                      El USGS marcó la réplica de M {magText(mainshock.aftershocks.tsunami)} ({placeText(mainshock.aftershocks.tsunami)}) como posible generadora de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.
+                    </p>
+                  )}
                 </div>
               )}
-              <dl className="mainshock-stats">
-                <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
-                {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
-                {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}</dd><small>estimada por el USGS</small></div>}
-                {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
-                <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
-              </dl>
-              {main.properties.tsunami === 1 && <p className="mainshock-warning" role="alert">El USGS marcó este evento como posible generador de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.</p>}
-              {mainshock.aftershocks.tsunami && <p className="mainshock-warning" role="alert">El USGS marcó la réplica de M {magText(mainshock.aftershocks.tsunami)} ({placeText(mainshock.aftershocks.tsunami)}) como posible generadora de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.</p>}
+
+              {!hasDistinctMain && main && mainshock && (
+                <dl className="mainshock-stats">
+                  <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
+                  {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
+                  {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}</dd><small>estimada por el USGS</small></div>}
+                  {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
+                  <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
+                </dl>
+              )}
+
               <p className="mainshock-note">Cifras del USGS, <a href="#fuentes">contrastadas con otras agencias</a>: se actualizan y pueden cambiar a medida que se revisan. No reemplazan los avisos oficiales de SINAPROC.</p>
             </section>
           )}

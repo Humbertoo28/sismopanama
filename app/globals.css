@@ -17,7 +17,7 @@
 @keyframes quake-ring{0%{box-shadow:0 0 0 0 #da121acc,0 3px 9px #17253c3b}100%{box-shadow:0 0 0 26px #da121a00,0 3px 9px #17253c3b}}@keyframes quake-dot{0%{box-shadow:0 0 0 0 #ff8a92aa}100%{box-shadow:0 0 0 9px #ff8a9200}}
 @media(max-width:760px){.mainshock{padding:20px 16px 16px}.mainshock-head{gap:16px}.mainshock-mag{min-width:84px;height:84px}.mainshock-mag strong{font-size:40px}.mainshock-title h2{font-size:21px}.mainshock-actions{flex-direction:row;width:100%}.mainshock-actions>*{flex:1;padding-inline:8px;white-space:nowrap}.map-legend{row-gap:6px;max-width:none}}
 @media(prefers-reduced-motion:reduce){.quake-marker.main,.quake-marker.latest,.mainshock-kicker i{animation:none}}
-.mainshock-actions{display:grid;grid-template-columns:1fr 1fr;min-width:260px}.mainshock-actions .wide{grid-column:1/-1}.mainshock-actions button{background:transparent;color:#fff;border:1px solid #ffffff38}.mainshock-actions button:hover{background:#ffffff14}.mainshock-actions a.primary{grid-column:1/-1;background:#fff;color:var(--navy);border:0}.mainshock-actions a.primary:hover{background:#ffe3e4}.mainshock-stats small a{color:#ff8a92;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}.mainshock-stats small a:hover{color:#ffb8bd}
+.mainshock-actions{display:grid;grid-template-columns:1fr 1fr;min-width:260px}.mainshock-actions .wide{grid-column:1/-1}.mainshock-actions button{background:transparent;color:#fff;border:1px solid #ffffff38}.mainshock-actions button:hover{background:#ffffff14}.mainshock-actions .primary{grid-column:1/-1;background:#fff;color:var(--navy);border:0}.mainshock-actions .primary:hover{background:#ffe3e4}.mainshock-stats small a{color:#ff8a92;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}.mainshock-stats small a:hover{color:#ffb8bd}
 .filters{flex-wrap:wrap;justify-content:flex-end}.aftershock-toggle{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e7ee;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;color:#26384e;white-space:nowrap;cursor:pointer}.aftershock-toggle input{width:14px;height:14px;margin:0;accent-color:#da121a;cursor:pointer}.events-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .guide-section{margin:37px 0 30px}.guide-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.9fr);gap:20px;align-items:start}.guide-side{display:grid;gap:20px;min-width:0}.guide-card,.check-card,.emergency-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;min-width:0}
 .guide-step{margin-bottom:20px}.guide-label{display:block;font-size:10px;font-weight:800;letter-spacing:.16em;color:#5f6f84;margin-bottom:10px}.guide-chips{display:flex;flex-wrap:wrap;gap:8px}.guide-chips button{border:1px solid #dce3eb;background:#fff;border-radius:100px;padding:9px 15px;font-size:12px;font-weight:600;color:#273950}.guide-chips button:hover{border-color:#b7c3d1}.guide-chips button.selected{background:var(--navy);border-color:var(--navy);color:#fff}.guide-chips button:focus-visible,.guide-tabs button:focus-visible,.check-foot button:focus-visible,.emergency-links a:focus-visible,.emergency-number:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -178,16 +178,19 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .layer-btn:hover{color:#fff;background:#ffffff1f}
 .layer-btn.active{background:#da121a;color:#fff;box-shadow:0 2px 8px #da121a66}
 
-/* Último sismo registrado, dentro de la tarjeta del sismo principal */
-.mainshock-latest{display:flex;align-items:center;gap:18px;margin-top:18px;padding:14px 16px;border-radius:12px;background:#e11d4824;border:1px solid #e11d4866;border-left:4px solid #e11d48}
-.latest-mag{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;width:68px;height:68px;border-radius:12px;background:#e11d48;box-shadow:0 6px 18px #e11d4855}
-.latest-mag strong{font:600 28px/1 "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.04em}
-.latest-mag span{font-size:9px;font-weight:800;letter-spacing:.2em;margin-top:4px}
-.latest-info{flex:1;min-width:0;display:grid;gap:4px}
-.latest-kicker{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;letter-spacing:.16em;color:#ff9db3}
-.latest-kicker i{flex:none;width:8px;height:8px;border-radius:50%;background:#ff9db3;animation:quake-dot 1.8s ease-out infinite}
-.latest-place{font:600 17px/1.3 "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.025em;overflow-wrap:anywhere}
-.latest-info small{font-size:12px;color:#b9c4d6;line-height:1.5}
-.mainshock-latest>button{flex:none;border:0;border-radius:9px;padding:12px 16px;background:#e11d48;color:#fff;font-size:12px;font-weight:700;white-space:nowrap}
-.mainshock-latest>button:hover{background:#f43f5e}
-.mainshock-latest>button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+/* Bloque del sismo principal de la secuencia (cuando sale debajo del último registrado) */
+.mainshock-principal{margin-top:20px;padding:18px 20px;border-radius:12px;background:#ffffff0d;border:1px solid #ffffff1a;border-left:4px solid #da121a}
+.principal-head{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.principal-mag{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;width:68px;height:68px;border-radius:12px;background:#da121a;box-shadow:0 6px 18px #da121a55}
+.principal-mag strong{font:600 28px/1 "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.04em}
+.principal-mag span{font-size:8.5px;font-weight:800;letter-spacing:.16em;margin-top:4px}
+.principal-info{flex:1 1 260px;min-width:0;display:grid;gap:4px}
+.principal-kicker{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;letter-spacing:.16em;color:#ff8a92}
+.principal-place{font:600 18px/1.3 "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.025em;overflow-wrap:anywhere;margin:0}
+.principal-info small{font-size:12px;color:#b9c4d6;line-height:1.5}
+.principal-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.principal-actions button,.principal-actions a{border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;text-align:center;text-decoration:none;transition:background .2s,border-color .2s}
+.principal-actions button{background:#fff;color:var(--navy);border:0;cursor:pointer}
+.principal-actions button:hover{background:#ffe3e4}
+.principal-actions a{border:1px solid #ffffff38;color:#fff}
+.principal-actions a:hover{background:#ffffff14}
