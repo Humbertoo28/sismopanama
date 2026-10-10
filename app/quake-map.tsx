@@ -232,12 +232,19 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       if (isLatest) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-latest";
-        badge.textContent = "📍 ÚLTIMO SISMO REGISTRADO";
+        badge.textContent = mainshock && isAftershock(event, mainshock)
+          ? "📍 ÚLTIMA RÉPLICA · SISMO M 7.7"
+          : "📍 ÚLTIMO SISMO REGISTRADO";
         popup.appendChild(badge);
       } else if (isMain) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-main";
-        badge.textContent = "⭐ SISMO PRINCIPAL";
+        badge.textContent = "⭐ SISMO PRINCIPAL · M 7.7";
+        popup.appendChild(badge);
+      } else if (mainshock && isAftershock(event, mainshock)) {
+        const badge = document.createElement("div");
+        badge.className = "popup-badge-after";
+        badge.textContent = "🔄 RÉPLICA DEL SISMO M 7.7";
         popup.appendChild(badge);
       }
       const title = document.createElement("div");

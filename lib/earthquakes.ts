@@ -103,12 +103,11 @@ export function sameEvent(a: Earthquake, b: Earthquake) {
   return Math.abs(a.properties.time - b.properties.time) <= 60_000 && distanceKm(a, b) <= 120;
 }
 
-// Réplica: posterior al sismo principal y a menos de AFTERSHOCK_RADIUS_KM de su epicentro.
+// El sismo principal fue de M 7.7. En Panamá, todos los sismos ocurridos después de él son réplicas de esa secuencia.
 export function isAftershock(event: Earthquake, mainshock: Earthquake) {
   return (
     event.id !== mainshock.id &&
-    event.properties.time > mainshock.properties.time &&
-    distanceKm(event, mainshock) <= AFTERSHOCK_RADIUS_KM
+    event.properties.time > mainshock.properties.time
   );
 }
 
