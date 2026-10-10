@@ -71,6 +71,7 @@ export default function PwaInstall() {
           <polyline points="9 11 12 14 15 11" />
         </svg>
         <span className="pwa-btn-text">Instalar App Web</span>
+        <span className="pwa-btn-short">Instalar</span>
       </button>
 
       {showIosGuide && (

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./leaflet.css";
 import "./fonts.css";
 import "./globals.css";
+import "./responsive.css";
 
 export const metadata: Metadata = {
   title: "Sismo Panamá — Monitor y Alerta Sísmica",
@@ -23,6 +24,9 @@ export const viewport: Viewport = {
   themeColor: "#072357",
   width: "device-width",
   initialScale: 1,
+  // La app instalada usa la barra de estado translúcida: el contenido llega hasta el borde y el CSS
+  // deja espacio con env(safe-area-inset-*) para el notch, la barra de estado y el indicador de inicio.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

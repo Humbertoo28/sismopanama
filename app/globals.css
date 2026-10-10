@@ -79,6 +79,14 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 
 /* Botón de Alertas en Topbar */
 .alert-topbar-btn{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #dce3eb;border-radius:100px;padding:8px 14px;font-size:11px;font-weight:700;color:#24364e;box-shadow:0 2px 7px #1a2a400a;transition:all .2s ease}
+/* Botón de instalar la app y estado "instalada" */
+.pwa-install-btn{display:inline-flex;align-items:center;gap:7px;background:#e8eefa;color:#0a3a8c;border:1px solid #c9d8f3;border-radius:100px;padding:7px 13px;font-size:11px;font-weight:700;transition:all .15s ease}
+.pwa-install-btn:hover{background:#d5e3fa;transform:translateY(-1px)}
+.pwa-status-pill{display:inline-flex;align-items:center;gap:5px;background:#e7f7ed;color:#137333;border-radius:100px;padding:6px 11px;font-size:10.5px;font-weight:700}
+/* Catálogo de origen cuando el USGS aún no reporta el sismo */
+.source-tag{margin-left:8px;padding:1px 7px;border-radius:100px;background:#e8eefa;font-size:9px;font-style:normal;font-weight:800;letter-spacing:.08em;color:#0a3a8c}
+.alert-btn-short,.pwa-btn-short{display:none}
+.topbar-brand{display:none}
 .alert-topbar-btn:hover{background:#f8fafc;border-color:#b8c7d9;transform:translateY(-1px)}
 .alert-topbar-btn.active{background:#072357;color:#fff;border-color:#072357}
 .alert-topbar-btn.active:hover{background:#0b2f6b}
@@ -169,170 +177,3 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .layer-btn{border:0;background:transparent;color:#b8c9df;font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;transition:all .18s ease;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
 .layer-btn:hover{color:#fff;background:#ffffff1f}
 .layer-btn.active{background:#da121a;color:#fff;box-shadow:0 2px 8px #da121a66}
-
-/* ==========================================================
-   SISTEMA DE DISEÑO RESPONSIVO (TABLETS, CELULARES Y MÓVILES)
-   ========================================================== */
-
-/* Tablets (iPad, iPad Pro/Air/mini, tablets Android: 769px a 1024px) */
-@media (max-width: 1024px) {
-  .app-shell { grid-template-columns: 72px minmax(0, 1fr); }
-  .sidebar { padding: 24px 10px; width: 72px; }
-  .brand { padding: 0 0 32px; justify-content: center; }
-  .brand>span:last-child { display: none; }
-  .side-label, .side-bottom { display: none; }
-  .side-nav { gap: 6px; }
-  .side-nav a { justify-content: center; padding: 0; width: 44px; height: 44px; margin: 0 auto; border-radius: 10px; font-size: 0; }
-  .side-nav a .nav-icon { font-size: 22px; }
-  .topbar { padding: 0 24px; height: 62px; }
-  .breadcrumb { display: none; }
-  .local-time { font-size: 11.5px; }
-  .topbar-right { gap: 10px; }
-  .content-wrap { padding: 28px 24px 20px; }
-  .page-intro { flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 26px; }
-  .page-intro-actions { width: 100%; display: flex; gap: 10px; flex-wrap: wrap; }
-  
-  /* Mapa expandido al 100% en tablets para máxima visibilidad */
-  .map-card { grid-template-columns: 1fr; border-radius: 14px; padding: 8px; }
-  .map-frame { height: 480px; }
-  .map-layer-selector { top: 14px; right: 54px; left: auto; width: max-content; }
-  .map-aside { display: grid; grid-template-columns: auto 1fr auto auto; gap: 18px 24px; padding: 20px 24px; border-top: 1px solid var(--border); align-items: center; }
-  .aside-top { grid-column: 1 / -1; margin-bottom: -6px; }
-  .featured-magnitude { font-size: 54px; margin: 0; }
-  .featured-place { font-size: 16px; min-height: 0; align-self: center; }
-  .featured-details { margin-top: 0; padding-top: 0; border-top: 0; display: flex; gap: 24px; }
-  .featured-link { margin-top: 0; padding-top: 0; white-space: nowrap; }
-
-  /* Rejillas inferiores apiladas */
-  .lower-grid { grid-template-columns: 1fr; gap: 20px; }
-  .guide-grid, .sources-grid { grid-template-columns: 1fr; gap: 20px; }
-}
-
-/* Celulares y pantallas móviles (<768px) */
-@media (max-width: 768px) {
-  .app-shell { display: block; min-height: 100vh; }
-  .sidebar { position: sticky; top: 0; z-index: 1000; width: 100%; height: auto; min-height: 0; padding: 10px 14px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px #07235733; }
-  .brand { padding: 0; }
-  .brand-mark { height: 26px; width: 39px; }
-  .brand strong { font-size: 17px; }
-  .brand small { font-size: 8px; }
-  .brand>span:last-child { display: block; }
-  .side-nav { display: flex; gap: 4px; }
-  .side-nav a, .side-nav a.active, .side-nav a:not(.active) { width: 34px; height: 34px; min-height: 0; font-size: 0; padding: 0; justify-content: center; }
-  .side-nav a .nav-icon { font-size: 18px; line-height: 1; }
-  
-  .topbar { height: 52px; padding: 0 14px; background: #fbfcfe; border-bottom: 1px solid var(--border); }
-  .breadcrumb, .local-time { display: none; }
-  .topbar-right { width: 100%; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
-  .live-pill { display: none; }
-  .alert-topbar-btn { padding: 7px 11px; font-size: 11px; border-radius: 100px; }
-  .pwa-install-btn { padding: 7px 11px; font-size: 11px; border-radius: 100px; }
-  
-  .content-wrap { padding: 18px 14px 20px; }
-  h1 { font-size: clamp(28px, 7.5vw, 40px); margin: 12px 0 14px; }
-  .page-intro p { font-size: 13px; line-height: 1.55; }
-  .page-intro-actions { display: flex; gap: 8px; width: 100%; align-items: stretch; }
-  .intro-alert-btn { flex: 1; padding: 11px 14px; font-size: 11.5px; justify-content: center; text-align: center; }
-  .refresh-button { flex: none; padding: 11px 14px; font-size: 11.5px; justify-content: center; }
-  
-  .status-strip { flex-direction: column; align-items: flex-start; gap: 6px; padding: 11px 13px; font-size: 11px; }
-  
-  .metric-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 24px; }
-  .metric-card { padding: 13px 10px; border-radius: 10px; }
-  .metric-top { font-size: 8px; letter-spacing: .08em; }
-  .metric-icon { display: none; }
-  .metric-main { display: block; margin: 8px 0 4px; }
-  .metric-main strong { font-size: 24px; }
-  .metric-main>span { display: block; font-size: 9.5px; margin-top: 2px; }
-  .metric-card p { font-size: 9px; }
-  
-  /* Mapa en móvil con controles táctiles sin solapamiento */
-  .map-card { display: block; padding: 5px; border-radius: 12px; }
-  .map-frame { height: 380px; border-radius: 8px; }
-  .map-label { top: 10px; left: 10px; padding: 6px 9px; font-size: 9px; }
-  .map-layer-selector { top: 48px; left: 10px; right: auto; width: max-content; padding: 3px; gap: 2px; }
-  .layer-btn { font-size: 10px; padding: 4px 7px; }
-  .layer-text-full { display: none; }
-  .layer-text-short { display: inline; }
-  .map-aside { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 15px 12px; }
-  .featured-magnitude { font-size: 44px; margin: 0; }
-  .featured-place { font-size: 15px; min-height: 0; align-self: center; }
-  .featured-details { grid-column: 1 / -1; display: flex; gap: 24px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px; }
-  .featured-link { grid-column: 1 / -1; padding-top: 2px; }
-  .map-legend { left: 8px; bottom: 8px; right: 8px; padding: 8px 10px; font-size: 9px; gap: 4px; justify-content: space-between; }
-  .map-legend>span { display: none; }
-  
-  .section-heading { flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
-  .section-heading h2 { font-size: 21px; margin: 4px 0 0; }
-  .filters { width: 100%; display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-start; }
-  .magnitude-filter, .aftershock-toggle, .replay-button { flex: 1 1 auto; justify-content: center; min-height: 38px; padding: 7px 11px; font-size: 11px; }
-  
-  .mainshock { padding: 18px 16px 14px; border-radius: 12px; }
-  .mainshock-head { gap: 14px; align-items: flex-start; }
-  .mainshock-mag { min-width: 80px; height: 80px; border-radius: 12px; }
-  .mainshock-mag strong { font-size: 38px; }
-  .mainshock-title h2 { font-size: 20px; margin: 6px 0 4px; }
-  .mainshock-actions { width: 100%; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
-  .mainshock-actions button, .mainshock-actions a { padding: 10px 8px; font-size: 11.5px; min-height: 40px; }
-  .mainshock-actions .wide { grid-column: 1 / -1; }
-  .mainshock-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
-  .mainshock-stats>div { padding: 10px 12px; }
-  .mainshock-stats dd { font-size: 18px; margin: 4px 0 0; }
-  
-  .events-card, .prepared-card, .guide-card, .check-card, .emergency-card, .sources-card { padding: 18px 15px; border-radius: 12px; }
-  .event-row { grid-template-columns: 46px minmax(0, 1fr) auto; gap: 10px; padding: 12px 1px; }
-  .magnitude-badge { width: 46px; height: 38px; font-size: 16px; border-radius: 6px; }
-  .event-text strong { font-size: 12px; }
-  .event-text small { font-size: 10px; }
-  .event-time strong { font-size: 10.5px; }
-  .event-time small { font-size: 9px; }
-  .sequence-card { padding: 18px 15px; }
-  
-  .emergency-number { font-size: 42px; }
-  .emergency-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .emergency-links a { text-align: center; padding: 9px 10px; font-size: 11.5px; min-height: 40px; }
-  .guide-chips button { padding: 8px 11px; font-size: 11.5px; min-height: 38px; }
-  .guide-tabs button { padding: 9px 10px; font-size: 12px; }
-  
-  .live-toast { top: auto; bottom: 12px; left: 12px; right: 12px; max-width: none; border-radius: 12px; padding: 13px 14px; box-shadow: 0 12px 36px #07235766; }
-  
-  .alert-modal-backdrop { padding: 10px; }
-  .alert-modal-card { border-radius: 14px; max-height: 92vh; }
-  .alert-modal-header { padding: 16px 16px 12px; }
-  .alert-modal-body { padding: 14px 16px; max-height: calc(92vh - 120px); gap: 14px; }
-  .alert-setting-row { flex-direction: row; align-items: center; justify-content: space-between; padding-bottom: 12px; }
-  .alert-test-box { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; }
-  .alert-test-actions { width: 100%; display: flex; gap: 6px; }
-  .btn-test-alert { flex: 1; text-align: center; padding: 9px 12px; min-height: 40px; }
-  .broadcast-buttons { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .btn-broadcast { min-height: 40px; }
-  
-  footer { flex-direction: column; gap: 6px; text-align: center; padding: 22px 0 10px; }
-}
-
-/* Teléfonos compactos (<440px) */
-@media (max-width: 440px) {
-  .content-wrap { padding: 14px 10px 16px; }
-  .topbar-right { gap: 5px; }
-  .pwa-btn-text, .alert-btn-text { display: none; }
-  .alert-topbar-btn { padding: 6px 9px; }
-  .alert-topbar-btn:after { content: "Alertas"; font-size: 10px; font-weight: 700; margin-left: 2px; }
-  .pwa-install-btn { padding: 6px 9px; }
-  .pwa-install-btn:after { content: "Instalar"; font-size: 10px; font-weight: 700; margin-left: 2px; }
-  
-  .page-intro-actions { flex-direction: column; }
-  .intro-alert-btn, .refresh-button { width: 100%; }
-  
-  .metric-grid { grid-template-columns: 1fr 1fr; gap: 7px; }
-  .metric-card:first-child { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 13px 15px; }
-  .metric-card:first-child .metric-top { margin: 0; }
-  .metric-card:first-child .metric-main { margin: 0; display: flex; align-items: baseline; gap: 6px; }
-  .metric-card:first-child p { display: none; }
-  
-  .map-frame { height: 340px; }
-  .map-layer-selector { top: 44px; left: 8px; }
-  .layer-btn { font-size: 9px; padding: 3px 6px; }
-  .broadcast-buttons { grid-template-columns: 1fr; }
-  .emergency-number { font-size: 38px; }
-}
-

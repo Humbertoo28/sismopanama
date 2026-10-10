@@ -48,8 +48,8 @@ function depthText(event: Earthquake) {
   return Number.isFinite(depth) ? `${Math.round(depth!)} km` : "No disponible";
 }
 const NAV = [
-  ["inicio", "◫", "Panel general"], ["mapa", "◎", "Mapa sísmico"], ["eventos", "≡", "Últimos eventos"],
-  ["recomendaciones", "✚", "Qué hacer ahora"], ["fuentes", "✓", "Fuentes"], ["preparacion", "✳", "Preparación"],
+  ["inicio", "◫", "Panel general", "Panel"], ["mapa", "◎", "Mapa sísmico", "Mapa"], ["eventos", "≡", "Últimos eventos", "Eventos"],
+  ["recomendaciones", "✚", "Qué hacer ahora", "Qué hacer"], ["fuentes", "✓", "Fuentes", "Fuentes"], ["preparacion", "✳", "Preparación", "Prepárate"],
 ] as const;
 const SPIED = ["inicio", "mapa", "eventos", "recomendaciones", "fuentes"];
 const sinceLabel = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "long" }).format(new Date(SINCE));
@@ -343,9 +343,9 @@ export default function Home() {
         </a>
         <div className="side-label">EXPLORAR</div>
         <nav className="side-nav">
-          {NAV.map(([id, icon, label]) => (
-            <a key={id} href={`#${id}`} className={section === id ? "active" : ""} aria-current={section === id ? "location" : undefined}
-              onClick={() => { navLock.current = performance.now() + 900; setSection(id); }}><span className="nav-icon">{icon}</span> {label}</a>
+          {NAV.map(([id, icon, label, short]) => (
+            <a key={id} href={`#${id}`} title={label} className={section === id ? "active" : ""} aria-current={section === id ? "location" : undefined}
+              onClick={() => { navLock.current = performance.now() + 900; setSection(id); }}><span className="nav-icon">{icon}</span><span className="nav-label">{label}</span><span className="nav-label-short" aria-hidden="true">{short}</span></a>
           ))}
         </nav>
         <div className="side-bottom">
@@ -415,6 +415,10 @@ export default function Home() {
 
       <main id="inicio" className="main-content">
         <header className="topbar">
+          <a className="brand topbar-brand" href="#inicio" aria-label="Sismo Panamá, inicio">
+            <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
+            <span><strong>SISMO</strong><small>PANAMÁ</small></span>
+          </a>
           <div className="breadcrumb">INICIO <span>/</span> PANEL GENERAL</div>
           <div className="topbar-right">
             <span className="local-time">Hora de Panamá · {clock}</span>
@@ -429,6 +433,7 @@ export default function Home() {
                 {permStatus === "granted" ? null : "🔔"}
               </span>
               <span className="alert-btn-text">{permStatus === "granted" ? "Alertas Activas" : "Activar Alertas"}</span>
+              <span className="alert-btn-short">{permStatus === "granted" ? "Activas" : "Alertas"}</span>
             </button>
             <span className="live-pill"><i /> MONITOREO ACTIVO</span>
           </div>
