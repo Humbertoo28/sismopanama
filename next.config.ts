@@ -12,12 +12,12 @@ const production = process.env.NODE_ENV === "production";
 // - img-src incluye los mosaicos de OpenStreetMap, que es lo único de terceros que se carga.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
   "style-src-elem 'self'",
   "style-src-attr 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org",
   "font-src 'self'",
-  "connect-src 'self' https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com",
+  "connect-src 'self' https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com https://va.vercel-scripts.com",
   "worker-src 'self'",
   "manifest-src 'self'",
   "media-src 'self' data: blob:",

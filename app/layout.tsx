@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
 import { SiteStructuredData } from "./structured-data";
 import "./leaflet.css";
@@ -53,7 +54,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <SiteStructuredData />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Estadísticas de visitas de Vercel: sin cookies y sin enlaces. Solo se ven en el panel privado de Vercel. */}
+        <Analytics />
+      </body>
     </html>
   );
 }
