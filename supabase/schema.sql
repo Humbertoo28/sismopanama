@@ -51,9 +51,13 @@ create policy "Allow service_role full access to notified_quakes"
   with check (true);
 
 -- =========================================================================
--- 4. (OPCIONAL) EJECUTAR CHEQUEO AUTOMÁTICO CADA MINUTO CON PG_CRON
--- Requiere habilitar las extensiones 'pg_cron' y 'pg_net' en Supabase:
--- Database > Extensions > pg_cron y pg_net
+-- 4. DISPARADOR DEL CHEQUEO DE PUSH (necesario para avisar al celular con la app cerrada)
+--
+-- Vercel Hobby solo permite crons de una vez al día, así que el chequeo lo dispara Supabase.
+-- Sin esto, el celular solo se entera cuando alguien tiene la página abierta (la consulta de sismos también
+-- revisa los push, pero no hay garantía de que haya alguien conectado).
+-- Requiere habilitar las extensiones 'pg_cron' y 'pg_net' en Supabase (Database > Extensions).
+-- Si en Vercel definiste CRON_SECRET, cambia TU_CRON_SECRET por su valor.
 -- =========================================================================
 
 -- create extension if not exists pg_cron;
@@ -61,10 +65,12 @@ create policy "Allow service_role full access to notified_quakes"
 
 -- select cron.schedule(
 --   'cron-check-sismos-panama',
---   '* * * * *', -- Cada 1 minuto
+--   '30 seconds', -- cada 30 s; el mínimo de la sintaxis cron clásica ('* * * * *') es 1 minuto
 --   $$
 --   select net.http_get(
---     url := 'https://sismopanama.vercel.app/api/cron/check-quakes'
+--     url := 'https://sismopanama.vercel.app/api/cron/check-quakes',
+--     headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET'),
+--     timeout_milliseconds := 25000
 --   );
 --   $$
 -- );

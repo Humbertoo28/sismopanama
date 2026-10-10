@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v4";
+const CACHE_NAME = "sismo-panama-v5";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -102,6 +102,44 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
+});
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+// Android e iPhone renuevan de vez en cuando el "buzón" push del navegador. Si el servidor se queda con el
+// anterior, el aviso se envía a un destino que ya no existe y el celular deja de recibir alertas sin que
+// nadie lo note. Aquí se crea la suscripción nueva y se le dice al servidor, que traspasa el umbral.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const old = event.oldSubscription;
+        let sub = event.newSubscription;
+        if (!sub) {
+          let key = old && old.options && old.options.applicationServerKey;
+          if (!key) {
+            const res = await fetch("/api/push/vapid-public-key");
+            const { publicKey } = await res.json();
+            key = urlBase64ToUint8Array(publicKey);
+          }
+          sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        }
+        const json = sub.toJSON();
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, oldEndpoint: old ? old.endpoint : undefined }),
+        });
+      } catch {
+        // Sin red o sin permiso: la página lo reintenta al abrirse (syncPushSubscription).
+      }
+    })(),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

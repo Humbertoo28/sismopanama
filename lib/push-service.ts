@@ -62,6 +62,8 @@ export async function sendWebPushToSubscription(
       {
         TTL: 60 * 60, // 1 hora de validez
         urgency: "high",
+        // Un servicio de push lento no debe retener la respuesta del resto de dispositivos.
+        timeout: 10_000,
       },
     );
     return { success: true, statusCode: res.statusCode };

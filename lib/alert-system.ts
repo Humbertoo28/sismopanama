@@ -448,6 +448,57 @@ export async function getExistingPushSubscription(): Promise<PushSubscription | 
   }
 }
 
+const STORAGE_PUSH_KEY = "sismo_panama_push_v1";
+
+function rememberPushEnabled(enabled: boolean) {
+  try {
+    if (enabled) localStorage.setItem(STORAGE_PUSH_KEY, "1");
+    else localStorage.removeItem(STORAGE_PUSH_KEY);
+  } catch {
+    // Ignorar si localStorage está bloqueado
+  }
+}
+
+function pushWasEnabled() {
+  try {
+    return localStorage.getItem(STORAGE_PUSH_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function createPushSubscription(reg: ServiceWorkerRegistration) {
+  const keyRes = await fetch("/api/push/vapid-public-key");
+  const { publicKey } = (await keyRes.json()) as { publicKey?: string };
+  if (!publicKey) throw new Error("No se pudo obtener la clave VAPID pública");
+  return reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+}
+
+// Mantiene al día el "buzón" push de este equipo: al abrir la página se vuelve a registrar en el servidor
+// (por si el navegador lo renovó, el servidor lo dio de baja o cambió el umbral de magnitud) y, si el
+// navegador lo borró teniendo el permiso, se vuelve a crear sin pedir nada.
+export async function syncPushSubscription(minMagnitude: number): Promise<void> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  if (Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub && pushWasEnabled()) sub = await createPushSubscription(reg);
+    if (!sub) return;
+    const json = sub.toJSON();
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, minMagnitude }),
+    });
+  } catch (err) {
+    console.warn("No se pudo sincronizar la suscripción push:", err);
+  }
+}
+
 export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
     return { ok: false, error: "Tu navegador no soporta notificaciones Web Push en segundo plano." };
@@ -460,18 +511,7 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
     }
 
     const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-
-    if (!sub) {
-      const keyRes = await fetch("/api/push/vapid-public-key");
-      const { publicKey } = (await keyRes.json()) as { publicKey?: string };
-      if (!publicKey) throw new Error("No se pudo obtener la clave VAPID pública");
-
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-    }
+    const sub = (await reg.pushManager.getSubscription()) ?? (await createPushSubscription(reg));
 
     const subJson = sub.toJSON();
     const saveRes = await fetch("/api/push/subscribe", {
@@ -489,6 +529,7 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
       return { ok: false, error: data.error || "No se pudo registrar la suscripción en el servidor." };
     }
 
+    rememberPushEnabled(true);
     return { ok: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

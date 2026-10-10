@@ -21,6 +21,7 @@ import {
   loadSeenQuakes,
   rememberQuakes,
   saveSeenQuakes,
+  syncPushSubscription,
   stopAlarmSound,
   type SeenQuake,
 } from "../lib/alert-system";
@@ -112,9 +113,11 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(e => {
-        console.warn("No se pudo registrar Service Worker:", e);
-      });
+      navigator.serviceWorker.register("/sw.js")
+        .then(() => syncPushSubscription(loadAlertPreferences().minMagnitude))
+        .catch(e => {
+          console.warn("No se pudo registrar Service Worker:", e);
+        });
     }
   }, []);
 
