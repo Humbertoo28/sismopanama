@@ -446,6 +446,13 @@ export async function sendSystemNotification({
     if ("serviceWorker" in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg && reg.showNotification) {
+        // Safari no implementa "renotify": una notificación con la misma etiqueta reemplaza a la anterior sin sonido.
+        // Se cierra la anterior para que esta suene (por ejemplo, el aviso push del mismo sismo).
+        try {
+          (await reg.getNotifications({ tag })).forEach(previous => previous.close());
+        } catch {
+          // Sin soporte: se muestra igual.
+        }
         await reg.showNotification(title, {
           body,
           icon: "/icon-192.png",

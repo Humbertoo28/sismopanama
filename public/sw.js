@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v8";
+const CACHE_NAME = "sismo-panama-v9";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -124,6 +124,14 @@ self.addEventListener("push", (event) => {
         }
       } catch {
         // Sin ventanas abiertas no hay a quién avisar.
+      }
+      // Safari (iPhone) no implementa "renotify": si ya hay una notificación con la misma etiqueta, la nueva la
+      // reemplaza EN SILENCIO, sin sonido ni vibración. Se cierra la anterior para que esta entre como nueva.
+      try {
+        const previous = await self.registration.getNotifications({ tag: options.tag });
+        previous.forEach((notification) => notification.close());
+      } catch {
+        // Sin soporte para listarlas: se muestra igual.
       }
       await self.registration.showNotification(title, options);
     })(),
