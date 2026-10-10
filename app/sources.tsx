@@ -35,7 +35,7 @@ export default function Sources({ refreshKey }: { refreshKey: number }) {
     const controller = new AbortController();
     const load = async () => {
       try {
-        const response = await fetch("/api/earthquakes/sources", { signal: controller.signal, cache: "no-store" });
+        const response = await fetch("/api/earthquakes/sources", { signal: controller.signal });
         if (!response.ok) throw new Error(`Error ${response.status}`);
         const body: SourcesResponse = await response.json();
         if (!Array.isArray(body.sources)) throw new Error("Respuesta no válida");
