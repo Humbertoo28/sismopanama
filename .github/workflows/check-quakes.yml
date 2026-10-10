@@ -6,10 +6,15 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
+# Solo hace una petición HTTP pública: no necesita ningún permiso sobre el repositorio.
+permissions: {}
+
 jobs:
   check-quakes:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger quake check
         run: |
-          curl -s -f --max-time 25 "https://sismopanama.vercel.app/api/cron/check-quakes" || true
+          curl -s -f --max-time 25 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://sismopanama.vercel.app/api/cron/check-quakes" || true

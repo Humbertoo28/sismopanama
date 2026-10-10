@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
+import { isPushEndpoint, isPushKeys, parseMinMagnitude, readJsonObject } from "@/lib/push-validation";
 
 export const dynamic = "force-dynamic";
 
+const INVALID = { error: "Suscripción Push inválida. Se requiere endpoint, p256dh y auth." };
+
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      endpoint?: string;
-      keys?: { p256dh?: string; auth?: string };
-      minMagnitude?: number;
-      // Endpoint anterior cuando el navegador renovó la suscripción: se traspasa su umbral y se borra.
-      oldEndpoint?: string;
-    };
-    const { endpoint, keys, minMagnitude, oldEndpoint } = body;
+    // endpoint: dirección del buzón push del navegador. oldEndpoint: la anterior cuando el navegador renovó la
+    // suscripción; se traspasa su umbral y se borra.
+    const body = await readJsonObject(req);
+    const endpoint = body?.endpoint;
+    const keys = body?.keys;
+    const oldEndpoint = body?.oldEndpoint;
 
-    if (!endpoint || !keys?.p256dh || !keys?.auth) {
-      return NextResponse.json(
-        { error: "Suscripción Push inválida. Se requiere endpoint, p256dh y auth." },
-        { status: 400 },
-      );
+    if (!isPushEndpoint(endpoint) || !isPushKeys(keys) || (oldEndpoint !== undefined && !isPushEndpoint(oldEndpoint))) {
+      return NextResponse.json(INVALID, { status: 400 });
     }
 
     const supabase = getSupabaseServerClient();
@@ -32,7 +30,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let threshold = Number(minMagnitude) || 0;
+    let threshold = parseMinMagnitude(body?.minMagnitude);
     if (oldEndpoint && oldEndpoint !== endpoint) {
       if (!threshold) {
         const { data: previous } = await supabase
@@ -58,23 +56,20 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error("Error guardando suscripción en Supabase:", error);
-      return NextResponse.json(
-        { error: "Error al guardar suscripción en base de datos: " + error.message },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "No se pudo guardar la suscripción. Inténtalo de nuevo." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: "Suscripción registrada exitosamente" });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Error en /api/push/subscribe:", err);
+    return NextResponse.json({ error: "No se pudo procesar la suscripción." }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { endpoint } = (await req.json()) as { endpoint?: string };
-    if (!endpoint) {
+    const endpoint = (await readJsonObject(req))?.endpoint;
+    if (!isPushEndpoint(endpoint)) {
       return NextResponse.json({ error: "Endpoint requerido" }, { status: 400 });
     }
 
@@ -86,7 +81,7 @@ export async function DELETE(req: NextRequest) {
     await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
     return NextResponse.json({ success: true, message: "Suscripción eliminada" });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Error en DELETE /api/push/subscribe:", err);
+    return NextResponse.json({ error: "No se pudo eliminar la suscripción." }, { status: 500 });
   }
 }

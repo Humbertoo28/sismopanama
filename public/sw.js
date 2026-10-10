@@ -76,6 +76,17 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// Al tocar la notificación solo se abre una página de este mismo sitio. La dirección viene dentro del push; si
+// alguna vez trajera otra (por ejemplo, de un push falsificado), tocarla abriría un sitio ajeno desde la app.
+function sameSitePath(raw) {
+  try {
+    const url = new URL(raw || "/", self.location.origin);
+    return url.origin === self.location.origin ? url.pathname + url.search + url.hash : "/";
+  } catch {
+    return "/";
+  }
+}
+
 // Receptor de Web Push (funciona incluso con la app cerrada / celular bloqueado)
 self.addEventListener("push", (event) => {
   let data = {};
@@ -100,7 +111,7 @@ self.addEventListener("push", (event) => {
     silent: false,
     requireInteraction: true,
     data: {
-      url: data.url || "/",
+      url: sameSitePath(data.url),
       id: data.id,
       timestamp: data.time || Date.now(),
     },

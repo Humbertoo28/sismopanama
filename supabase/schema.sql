@@ -33,6 +33,11 @@ create index if not exists idx_notified_quakes_time on public.notified_quakes(ti
 alter table public.push_subscriptions enable row level security;
 alter table public.notified_quakes enable row level security;
 
+-- Los roles públicos de Supabase (anon / authenticated) no deben tocar estas tablas: la clave "anon" es pública y
+-- cualquiera podría leer las claves de las suscripciones push. Solo el backend usa service_role.
+revoke all on table public.push_subscriptions from anon, authenticated;
+revoke all on table public.notified_quakes from anon, authenticated;
+
 -- Permitir acceso al rol service_role (usado por el backend de Next.js)
 drop policy if exists "Allow service_role full access to push_subscriptions" on public.push_subscriptions;
 create policy "Allow service_role full access to push_subscriptions"
