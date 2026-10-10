@@ -508,6 +508,10 @@ export default function Home() {
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 <span>Actualizar datos</span>
               </button>
+              <a className="refresh-button" href="/analisis">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <span>Gráficos de sismos</span>
+              </a>
             </div>
           </section>
 
@@ -681,7 +685,19 @@ export default function Home() {
             <Sources refreshKey={refreshKey} />
           </section>
 
-          <footer><span>© {new Date().getFullYear()} Sismo Panamá</span><span>Datos: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS Earthquake Catalog</a>, contrastado con <a href="https://www.emsc-csem.org/" target="_blank" rel="noopener noreferrer">EMSC</a> y <a href="https://geofon.gfz.de/" target="_blank" rel="noopener noreferrer">GFZ GEOFON</a> · No sustituye alertas oficiales ni predice sismos.</span></footer>
+          <footer>
+            <span>
+              © {new Date().getFullYear()} Sismo Panamá · Creado por{" "}
+              <a
+                href="https://www.instagram.com/humbertiex_?dlrf=MXZsN3N2ZGpnZGI3&utm_source=qr"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                humbertiex
+              </a>
+            </span>
+            <span>Datos: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS Earthquake Catalog</a>, contrastado con <a href="https://www.emsc-csem.org/" target="_blank" rel="noopener noreferrer">EMSC</a> y <a href="https://geofon.gfz.de/" target="_blank" rel="noopener noreferrer">GFZ GEOFON</a> · No sustituye alertas oficiales ni predice sismos.</span>
+          </footer>
         </div>
       </main>
 
