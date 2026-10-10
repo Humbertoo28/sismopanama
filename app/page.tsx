@@ -289,10 +289,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Sondeo rápido cada 12 segundos para detectar nuevos sismos con mínima latencia
+    // Sondeo cada 8 segundos para detectar nuevos sismos con mínima latencia
     const timer = window.setInterval(() => {
       setRefreshKey(key => key + 1);
-    }, 12_000);
+    }, 8_000);
 
     const onVisible = () => {
       if (!document.hidden) setRefreshKey(key => key + 1);

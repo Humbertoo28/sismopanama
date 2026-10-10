@@ -22,9 +22,9 @@ async function fetchUsgs(since: number): Promise<Earthquake[]> {
 }
 
 const IGC_URL = "https://sismosgeociencias.up.ac.pa/";
-const IGC_MIN_INTERVAL_MS = 20_000;
+const IGC_MIN_INTERVAL_MS = 8_000;
 // El IGC no tiene API: publica una tabla HTML de los últimos 7 días. Se lee con respeto: identificándonos,
-// con caché condicional (ETag) y sin consultar más de una vez cada 20 s por instancia del servidor.
+// con caché condicional (ETag) y sin consultar más de una vez cada 8 s por instancia del servidor.
 let igcCache: { at: number; etag: string | null; events: Earthquake[] } | null = null;
 
 const entities: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " " };
@@ -39,8 +39,25 @@ function igcTime(date: string, clock: string) {
   return Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), hour + 5, Number(t[2]), Number(t[3]));
 }
 
+// Un sismo del IGC es de Panamá si su etiqueta lo dice, pero la etiqueta no es fiable: a veces el IGC la escribe sin
+// país ("Localizado en a 33km al oeste de Tonosí"), y esos sismos, de M 4+ dentro de la secuencia del terremoto, se
+// descartaban hasta que el USGS o el EMSC publicaban el mismo sismo minutos después. Reglas, de la más a la menos clara:
+//  - dice Panamá y no nombra otro país: es de Panamá;
+//  - "Región Fronteriza Panamá-…" con M 3 o más: se siente en Panamá (los de M menor son ruido del otro lado);
+//  - sin ningún país y dentro del territorio panameño (la posición sí es fiable): es de Panamá;
+//  - nombra Costa Rica, Colombia u otro lugar, o cae fuera: no.
+const IGC_BORDER = /Regi[oó]n Fronteriza\s+Panam[aá]/i;
+const IGC_FOREIGN = /Costa Rica|Colombia|Nicaragua|Ecuador|Centroam[eé]rica|Pac[ií]fico|Caribe|Océano|Oceano/i;
+export function isIgcPanamaEvent(place: string, lat: number, lon: number, mag: number) {
+  if (IGC_BORDER.test(place)) return mag >= 3;
+  if (isPanamaPlace(place)) return true;
+  if (IGC_FOREIGN.test(place)) return false;
+  // Sin país en la etiqueta: se decide por la posición (a esta latitud, más al oeste de -83° ya es Costa Rica).
+  return lat >= 6 && lat <= 10.7 && lon >= -83 && lon <= -77;
+}
+
 export function parseIgc(html: string): Earthquake[] {
-  const events: Earthquake[] = [];
+  const events = new Map<string, Earthquake>();
   for (const row of html.match(/<tr[\s\S]*?<\/tr>/gi) ?? []) {
     const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(match => text(match[1]));
     if (cells.length < 8) continue;
@@ -52,22 +69,28 @@ export function parseIgc(html: string): Earthquake[] {
     const depth = /^(\d+(?:\.\d+)?)\s*km$/i.exec(depthText);
     // Se valida todo: lo que llega de una página ajena nunca se da por bueno sin comprobarlo.
     if (!Number.isFinite(time) || !(lat > 4 && lat < 12) || !(lon > -86 && lon < -75) || !(mag >= 0 && mag < 10)) continue;
-    const place = region.replace(/^Localizado en\s+/i, "").slice(0, 120);
-    if (!isPanamaPlace(place)) continue;
-    events.push({
-      id: `igc:${Math.round(time / 1000)}`,
+    let place = region.replace(/^Localizado en\s+/i, "").slice(0, 120);
+    if (!isIgcPanamaEvent(place, lat, lon, mag)) continue;
+    // Sin país en la etiqueta: se completa para que se lea igual que los demás ("Panamá a 33km al oeste de Tonosí").
+    if (/^a\s+\d/i.test(place)) place = `Panamá ${place}`;
+    const id = `igc:${Math.round(time / 1000)}`;
+    const reviewed = /^REVISADO$/i.test(state);
+    // El IGC a veces repite la misma fila: se conserva una, y la revisada si una de las dos lo está.
+    if (events.has(id) && events.get(id)!.properties.status === "reviewed" && !reviewed) continue;
+    events.set(id, {
+      id,
       properties: {
         mag,
         place,
         time,
         url: IGC_URL,
-        status: /^REVISADO$/i.test(state) ? "reviewed" : "automatic",
+        status: reviewed ? "reviewed" : "automatic",
         source: "igc",
       },
       geometry: { coordinates: [lon, lat, depth ? Number(depth[1]) : undefined] },
     });
   }
-  return events;
+  return [...events.values()];
 }
 
 export async function fetchIgc(since: number): Promise<Earthquake[]> {

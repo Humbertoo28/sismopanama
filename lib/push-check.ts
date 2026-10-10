@@ -144,7 +144,10 @@ export async function runQuakeCheckThrottled(events: Earthquake[]) {
   if (now - lastRun < THROTTLE_MS || !getSupabaseServerClient()) return;
   lastRun = now;
   try {
-    await runQuakeCheck(events, now);
+    const result = await runQuakeCheck(events, now);
+    // Solo se escribe cuando hubo algo que avisar: así se ve en los registros si esta tarea posterior a la respuesta
+    // llega a terminar (si la plataforma la cortara, el sismo quedaría reservado sin enviarse).
+    if (result.newQuakes > 0) console.log(`[push] chequeo desde la consulta: ${result.message} enviados=${result.notificationsSent}`);
   } catch (error) {
     console.error("Chequeo de push desde la consulta de sismos:", error);
   }

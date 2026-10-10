@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
     // Con la respuesta ya enviada, se revisa si hay sismos nuevos que avisar por push a los celulares.
     after(() => runQuakeCheckThrottled(events));
-    // Caché ultra-rápida: la página consulta cada ~12 s y un sismo nuevo debe verse de inmediato.
+    // Caché ultra-rápida: la página consulta cada ~8 s y un sismo nuevo debe verse de inmediato.
     return Response.json(result, {
       headers: { "Cache-Control": "public, max-age=5, stale-while-revalidate=10" },
     });

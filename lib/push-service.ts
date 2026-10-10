@@ -87,7 +87,7 @@ export async function sendWebPushToSubscription(
 export async function broadcastPush(
   payload: WebPushPayload,
   minMagnitude: number = 3.0,
-): Promise<{ total: number; sent: number; failed: number; cleaned: number }> {
+): Promise<{ total: number; sent: number; failed: number; cleaned: number; outcomes: Record<string, number> }> {
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     throw new Error("Supabase no está configurado");
@@ -99,13 +99,22 @@ export async function broadcastPush(
     .select("id, endpoint, p256dh, auth, min_magnitude")
     .lte("min_magnitude", payload.magnitude ?? minMagnitude);
 
+  if (error) console.error("[push] no se pudo leer las suscripciones:", error.message);
   if (error || !subs || subs.length === 0) {
-    return { total: 0, sent: 0, failed: 0, cleaned: 0 };
+    return { total: 0, sent: 0, failed: 0, cleaned: 0, outcomes: {} };
   }
 
   let sent = 0;
   let failed = 0;
   const expiredEndpoints: string[] = [];
+  // Qué respondió cada servicio (Apple, Google...) para poder ver por qué un celular no recibe: "apple:201",
+  // "apple:403", "fcm:410"... Sin esto un envío rechazado era invisible.
+  const outcomes: Record<string, number> = {};
+  const errorSamples: string[] = [];
+  const serviceOf = (endpoint: string) => {
+    const host = new URL(endpoint).host;
+    return host.includes("apple") ? "apple" : host.includes("googleapis") ? "fcm" : host.includes("mozilla") ? "mozilla" : host.includes("windows") ? "windows" : "otro";
+  };
 
   await Promise.allSettled(
     subs.map(async (row) => {
@@ -113,10 +122,13 @@ export async function broadcastPush(
         { endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth },
         payload,
       );
+      const outcome = `${serviceOf(row.endpoint)}:${res.success ? "ok" : (res.statusCode ?? "error")}`;
+      outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
       if (res.success) {
         sent++;
       } else {
         failed++;
+        if (errorSamples.length < 3) errorSamples.push(`${outcome} ${String(res.error ?? "").slice(0, 120)}`);
         if (res.expired) {
           expiredEndpoints.push(row.endpoint);
         }
@@ -134,5 +146,6 @@ export async function broadcastPush(
     if (!delError) cleaned = expiredEndpoints.length;
   }
 
-  return { total: subs.length, sent, failed, cleaned };
+  console.log(`[push] ${payload.id ?? "?"} M${payload.magnitude ?? "?"}: ${sent}/${subs.length} aceptados, ${failed} rechazados, ${cleaned} dados de baja`, JSON.stringify(outcomes), errorSamples.length ? JSON.stringify(errorSamples) : "");
+  return { total: subs.length, sent, failed, cleaned, outcomes };
 }
