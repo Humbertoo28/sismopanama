@@ -1,13 +1,17 @@
 import type { Metadata, Viewport } from "next";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
+import { SiteStructuredData } from "./structured-data";
 import "./leaflet.css";
 import "./fonts.css";
 import "./globals.css";
 import "./responsive.css";
 
 export const metadata: Metadata = {
-  title: "Sismo Panamá — Monitor y Alerta Sísmica",
-  description:
-    "Consulta sismos recientes en Panamá con mapa, magnitud, hora local y alertas sonoras en vivo.",
+  metadataBase: new URL(SITE_URL),
+  // Las demás páginas ponen solo su nombre y el sitio completa con "| Sismo Panamá".
+  title: { default: SITE_TITLE, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
@@ -16,7 +20,13 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Sismo Panamá",
+    title: SITE_NAME,
+  },
+  ...pageSocial(SITE_TITLE, SITE_DESCRIPTION, "/"),
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
   },
 };
 
@@ -31,7 +41,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es">
+    <html lang="es-PA">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -41,6 +51,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="theme-color" content="#072357" />
         <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <SiteStructuredData />
       </head>
       <body>{children}</body>
     </html>

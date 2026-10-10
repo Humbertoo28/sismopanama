@@ -9,7 +9,10 @@
   "orientation": "any",
   "background_color": "#072357",
   "theme_color": "#072357",
-  "categories": ["utilities", "news"],
+  "categories": [
+    "utilities",
+    "news"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -39,5 +42,7 @@
       "name": "Guía de seguridad",
       "url": "/#recomendaciones"
     }
-  ]
+  ],
+  "lang": "es-PA",
+  "dir": "ltr"
 }

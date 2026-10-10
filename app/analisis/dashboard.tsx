@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DEFAULT_FILTERS, HOUR, MINUTE, SOURCES, WINDOWS, activitySeries, ago, filterQuakes, median, observedFacts, pickBucket,
   toQuakes, windowStart, type Filters, type Quake, type Source, type WindowKey,
@@ -43,7 +43,7 @@ function Kpi({ label, value, sub, badge }: { label: string; value: string; sub?:
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ children }: { children?: ReactNode }) {
   const [events, setEvents] = useState<Earthquake[] | null>(null);
   const [catalogs, setCatalogs] = useState<EarthquakeResponse["catalogs"]>();
   const [lastOk, setLastOk] = useState<number | null>(null);
@@ -365,6 +365,7 @@ export default function Dashboard() {
             </footer>
           </>
         )}
+        {children}
       </div>
       <div className="an-sr" aria-live="polite">{announcement}</div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { SITE_URL } from "../lib/site";
 import { useEffect, useState } from "react";
 import type { Earthquake } from "../lib/earthquakes";
 import {
@@ -109,7 +110,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
 
   if (!isOpen) return null;
 
-  const currentUrl = typeof window !== "undefined" ? window.location.href : "https://sismo-panama.vercel.app";
+  const currentUrl = typeof window !== "undefined" ? window.location.href : SITE_URL;
   const shareEvent: Earthquake = latestEvent ?? {
     id: "sample",
     properties: {

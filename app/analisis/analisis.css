@@ -139,6 +139,11 @@
 .an-more { margin-top: 12px; }
 .an-data summary { cursor: pointer; font-weight: 700; padding: 2px 0; }
 .an-data[open] summary { margin-bottom: 14px; }
+.an-about { background: var(--an-surface); border: 1px solid var(--an-grid); border-radius: 14px; padding: 20px; max-width: 90ch; }
+.an-about h2 { font-size: 17px; }
+.an-about h3 { font-size: 14px; margin: 14px 0 4px; }
+.an-about p { color: var(--an-muted); }
+.an-about a { color: #1c4f94; text-decoration: underline; }
 .an-foot { color: var(--an-muted); font-size: 12.5px; display: grid; gap: 8px; max-width: 90ch; }
 .an-foot a { color: #1c4f94; text-decoration: underline; }
 .an-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
