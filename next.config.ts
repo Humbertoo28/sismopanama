@@ -50,7 +50,17 @@ const nextConfig: NextConfig = {
   // El sitio no usa next/image: se desactiva el optimizador para no exponer ese endpoint.
   images: { unoptimized: true },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      {
+        source: "/fonts/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
+        source: "/:file((?:favicon\\.svg|icon-192\\.png|icon-512\\.png|manifest\\.json))",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+    ];
   },
 };
 

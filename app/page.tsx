@@ -32,7 +32,7 @@ import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeRespons
 // La lista de sismos se consulta cada 10 s; lo que casi no cambia (datos del sismo principal y contraste entre agencias)
 // cada 60 s. Antes eran tres consultas cada 8 s por pestaña abierta: con miles de personas conectadas a la vez eso
 // agotaba las cuotas del servidor. Un sismo tarda minutos en publicarse en los catálogos, así que 2 s más no cambian el aviso.
-const POLL_MS = 10_000;
+const POLL_MS = 25_000;
 const SLOW_POLL_MS = 60_000;
 
 const date = new Intl.DateTimeFormat("es-PA", {
