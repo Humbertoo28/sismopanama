@@ -272,15 +272,18 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
               <strong>Magnitud mínima</strong>
               <span>Filtra temblores leves o solo sismos perceptibles.</span>
             </div>
+            {/* El valor guardado es un número (5) y React lo compara como texto con el de la opción: "5" no es igual a
+                "5.0", así que el selector volvía a mostrar "Todos" aunque la elección sí se guardaba. Los valores de
+                las opciones se escriben igual que el número: 0, 3, 4, 5. */}
             <select
               className="mag-threshold-select"
-              value={prefs.minMagnitude}
+              value={String(prefs.minMagnitude)}
               onChange={e => updatePref("minMagnitude", Number(e.target.value))}
             >
               <option value="0">Todos los sismos (M ≥ 0.0)</option>
-              <option value="3.0">Sismos perceptibles (M ≥ 3.0)</option>
-              <option value="4.0">Moderados a fuertes (M ≥ 4.0)</option>
-              <option value="5.0">Solo sismos mayores (M ≥ 5.0)</option>
+              <option value="3">Sismos perceptibles (M ≥ 3.0)</option>
+              <option value="4">Moderados a fuertes (M ≥ 4.0)</option>
+              <option value="5">Solo sismos mayores (M ≥ 5.0)</option>
             </select>
           </div>
 

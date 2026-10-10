@@ -12,7 +12,7 @@ import { fmtClock, fmtFull, fmtInt } from "./format";
 
 // Igual que la página principal. Un sismo tarda minutos en publicarse en los catálogos: consultar más seguido solo gasta
 // cuota del servidor cuando hay mucha gente conectada.
-const POLL_MS = 10_000;
+const POLL_MS = 25_000;
 const TOAST_MS = 20_000;
 const FRESH_MS = 3 * 60_000;
 const REPORT_HOSTS = ["https://earthquake.usgs.gov/", "https://sismosgeociencias.up.ac.pa/", "https://www.emsc-csem.org/"];
