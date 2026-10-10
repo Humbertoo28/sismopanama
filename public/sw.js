@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v7";
+const CACHE_NAME = "sismo-panama-v8";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -22,14 +22,20 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => {
-        return Promise.all(
-          keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)),
-        );
-      })
-      .then(() => self.clients.claim()),
+    (async () => {
+      const keys = await caches.keys();
+      // Hay un caché de otra versión solo si esto es una actualización (no la primera instalación).
+      const upgraded = keys.some((key) => key !== CACHE_NAME);
+      await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+      await self.clients.claim();
+      if (upgraded) {
+        // Una pestaña o ventana abierta antes de esta versión sigue ejecutando el código viejo (otra voz, otra lógica de
+        // alertas) y alertaría por su cuenta, además de la nueva: se oyen dos alertas, a veces con voces distintas.
+        // Se recargan para que todas usen la misma versión.
+        const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        await Promise.all(open.map((client) => (client.navigate ? client.navigate(client.url).catch(() => {}) : null)));
+      }
+    })(),
   );
 });
 

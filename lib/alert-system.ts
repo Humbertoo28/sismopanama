@@ -115,6 +115,11 @@ export function unlockAudioAndSpeech() {
       const dummy = new SpeechSynthesisUtterance(" ");
       dummy.volume = 0.01;
       dummy.rate = 2.0;
+      const quietVoice = pickSpanishVoice(cachedVoices);
+      if (quietVoice) {
+        dummy.voice = quietVoice;
+        dummy.lang = quietVoice.lang;
+      }
       window.speechSynthesis.speak(dummy);
     }
   } catch {}
@@ -347,21 +352,24 @@ export function playVoiceAlert(text: string) {
     }
     synth.cancel();
 
-    // Pequeño retardo (60ms) necesario para WebKit / iOS Safari tras llamar a cancel()
-    window.setTimeout(() => {
+    const speak = (attempt: number) => {
       try {
         if (synth.paused) {
           synth.resume();
         }
-        const utterance = new SpeechSynthesisUtterance(text);
-        activeUtterance = utterance;
-
-        // Las voces se piden en el momento de hablar: la lista guardada puede estar incompleta si el navegador aún
-        // no terminó de cargar las suyas.
+        // Las voces se piden en el momento de hablar: la lista guardada puede estar incompleta.
         const fresh = synth.getVoices();
         const voices = fresh.length > 0 ? fresh : cachedVoices.length > 0 ? cachedVoices : loadVoices();
-        const esVoice = pickSpanishVoice(voices);
+        // Sin voces cargadas, hablar usaría la voz por defecto del sistema, que puede ser masculina: se espera un
+        // instante a que el navegador termine de cargar las suyas.
+        if (voices.length === 0 && attempt < 6) {
+          window.setTimeout(() => speak(attempt + 1), 250);
+          return;
+        }
 
+        const utterance = new SpeechSynthesisUtterance(text);
+        activeUtterance = utterance;
+        const esVoice = pickSpanishVoice(voices);
         if (esVoice) {
           utterance.voice = esVoice;
           utterance.lang = esVoice.lang;
@@ -385,7 +393,9 @@ export function playVoiceAlert(text: string) {
       } catch (err) {
         console.warn("Error en synth.speak:", err);
       }
-    }, 60);
+    };
+    // Pequeño retardo (60ms) necesario para WebKit / iOS Safari tras llamar a cancel()
+    window.setTimeout(() => speak(0), 60);
   } catch (e) {
     console.warn("No se pudo iniciar voz de alerta:", e);
   }
