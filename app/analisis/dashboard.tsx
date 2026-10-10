@@ -10,7 +10,9 @@ import { MAINSHOCK_ID, sameEvent, type Earthquake, type EarthquakeResponse, type
 import { ActivityChart, DepthBars, Legend, MagnitudeBars, TimelineChart, type TimelinePoint } from "./charts";
 import { fmtClock, fmtFull, fmtInt } from "./format";
 
-const POLL_MS = 20_000;
+// Igual que la página principal: el servidor guarda la respuesta 5 s, así que consultar más seguido no sirve de nada.
+const POLL_MS = 8_000;
+const TOAST_MS = 20_000;
 const FRESH_MS = 3 * 60_000;
 const REPORT_HOSTS = ["https://earthquake.usgs.gov/", "https://sismosgeociencias.up.ac.pa/", "https://www.emsc-csem.org/"];
 const SOURCE_NAMES: Record<Source, string> = { usgs: "USGS", igc: "IGC", emsc: "EMSC" };
@@ -55,6 +57,7 @@ export default function Dashboard() {
   const [limit, setLimit] = useState(12);
   const [fresh, setFresh] = useState<Record<string, number>>({});
   const [announcement, setAnnouncement] = useState("");
+  const [toast, setToast] = useState<{ key: number; id: string; title: string; place: string } | null>(null);
   const previous = useRef<Earthquake[] | null>(null);
   const inflight = useRef(false);
 
@@ -72,7 +75,10 @@ export default function Dashboard() {
         if (added.length) {
           setFresh((current) => ({ ...current, ...Object.fromEntries(added.map((event) => [event.id, arrived])) }));
           const top = added.reduce((best, event) => ((event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best));
-          setAnnouncement(`Nuevo sismo registrado${top.properties.mag === null ? "" : ` de magnitud ${top.properties.mag.toFixed(1)}`}.`);
+          const mag = top.properties.mag === null ? "" : ` M ${top.properties.mag.toFixed(1)}`;
+          const title = added.length > 1 ? `${added.length} sismos nuevos · el mayor${mag}` : `Nuevo sismo${mag ? ` ·${mag}` : ""}`;
+          setAnnouncement(`${title}.`);
+          setToast({ key: arrived, id: top.id, title, place: top.properties.place || "Ubicación no especificada" });
         }
       }
       previous.current = data.features;
@@ -92,9 +98,32 @@ export default function Dashboard() {
     void load();
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, POLL_MS);
     const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    // Al volver a la pestaña o recuperar la conexión se consulta de inmediato, sin esperar al siguiente turno.
     document.addEventListener("visibilitychange", onVisible);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+    window.addEventListener("online", onVisible);
+    // Si el celular recibe el aviso push de un sismo, el service worker se lo comunica a la página: se consulta en
+    // ese instante (y de nuevo unos segundos después, por si la respuesta guardada del servidor aún no lo incluye).
+    const retries: number[] = [];
+    const onWorkerMessage = (message: MessageEvent) => {
+      if (message.data?.type !== "quake-push") return;
+      void load();
+      retries.push(window.setTimeout(() => void load(), 4_000), window.setTimeout(() => void load(), 10_000));
+    };
+    navigator.serviceWorker?.addEventListener("message", onWorkerMessage);
+    return () => {
+      window.clearInterval(timer);
+      retries.forEach((id) => window.clearTimeout(id));
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onVisible);
+      navigator.serviceWorker?.removeEventListener("message", onWorkerMessage);
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -164,10 +193,19 @@ export default function Dashboard() {
         </span>
       </header>
 
+      {toast && (
+        <div className="an-toast" role="status" key={toast.key}>
+          <i aria-hidden="true" />
+          <div><strong>{toast.title}</strong><span>{toast.place}</span></div>
+          <button type="button" className="an-btn" onClick={() => { setSelectedId(toast.id); setToast(null); document.getElementById("an-tl-title")?.scrollIntoView({ block: "center", behavior: "smooth" }); }}>Ver</button>
+          <button type="button" className="an-toast-close" aria-label="Cerrar aviso" onClick={() => setToast(null)}>×</button>
+        </div>
+      )}
+
       <div className="an-wrap">
         <section className="an-intro" aria-labelledby="an-title">
           <h1 id="an-title">Sismos registrados</h1>
-          <p>Gráficos interactivos con los sismos que publican USGS, IGC y EMSC, tal como los publican. Se actualizan solos cada pocos segundos.</p>
+          <p>Gráficos interactivos con los sismos que publican USGS, IGC y EMSC, tal como los publican. Se actualizan solos: cada vez que entra un sismo nuevo aparece un aviso y los gráficos se ponen al día.</p>
         </section>
 
         {!events && (

@@ -62,6 +62,17 @@
 .an-btn-ghost { background: var(--an-surface); color: var(--an-ink); border-color: #d5dce6; }
 .an-btn-ghost:hover { background: var(--an-hover); }
 
+/* ---- aviso de sismo nuevo ---- */
+.an-toast { position: fixed; z-index: 50; top: calc(12px + env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: min(440px, calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; background: var(--an-surface); border: 1px solid var(--an-coral); border-left-width: 6px; border-radius: 12px; padding: 12px 12px 12px 14px; box-shadow: 0 12px 32px #1d2c4240; animation: an-slide 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.an-toast i { width: 10px; height: 10px; border-radius: 50%; background: var(--an-coral); flex: none; animation: an-pulse-red 1.4s ease-out infinite; }
+.an-toast > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.an-toast strong { font-family: "Space Grotesk", sans-serif; font-size: 16px; }
+.an-toast span { color: var(--an-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-toast-close { border: 0; background: none; color: var(--an-muted); font-size: 24px; line-height: 1; min-width: 40px; min-height: 40px; border-radius: 10px; }
+.an-toast-close:hover { background: var(--an-hover); color: var(--an-ink); }
+@keyframes an-slide { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+@keyframes an-pulse-red { 0% { box-shadow: 0 0 0 0 #da121a80; } 100% { box-shadow: 0 0 0 10px #da121a00; } }
+
 /* ---- tarjetas e indicadores ---- */
 .an-card { background: var(--an-surface); border: 1px solid var(--an-grid); border-radius: 14px; padding: 20px; box-shadow: 0 2px 10px #1d2c4208; min-width: 0; }
 .an-card h2 { font-size: 17px; letter-spacing: -0.005em; }
@@ -146,6 +157,6 @@
   .an-detail-actions .an-btn { flex: 1 1 auto; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .an-live i { animation: none; }
+  .an-live i, .an-toast, .an-toast i { animation: none; }
   .an-hbar-track > div { transition: none; }
 }
