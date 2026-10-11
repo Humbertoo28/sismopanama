@@ -250,7 +250,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
 
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
+        html: `<span class="quake-marker${m >= 5 ? " high" : m >= 3 ? " m-mid" : " m-low"}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const marker = L.marker([lat, lng], {
