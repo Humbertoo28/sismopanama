@@ -208,7 +208,10 @@ a, button, label, select, summary, input { touch-action: manipulation; }
   .section-heading h2, .card-heading h2 { font-size: 23px; }
   .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
   .magnitude-filter, .aftershock-toggle, .replay-button { min-height: 46px; padding: 0 12px; font-size: 12.5px; display: flex; align-items: center; justify-content: center; }
-  .magnitude-filter select { font-size: 16px; padding: 10px 2px; }
+  /* Las opciones largas ("M 3.0+ (Perceptibles)", "Últimas 24 horas") ensanchaban el selector más que su caja y
+     cortaban la etiqueta: se apila la etiqueta sobre el selector y este se encoge al ancho disponible. */
+  .magnitude-filter { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 6px 12px; min-width: 0; overflow: hidden; }
+  .magnitude-filter select { font-size: 16px; padding: 2px 0 4px; margin-left: 0; width: 100%; min-width: 0; text-overflow: ellipsis; }
   .aftershock-toggle input { width: 18px; height: 18px; }
   .replay-button { grid-column: 1 / -1; }
 
