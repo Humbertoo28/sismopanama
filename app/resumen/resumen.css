@@ -19,3 +19,5 @@
 html[data-a11y-contrast="high"] .rs-card{border-color:#3b4756}
 html[data-a11y-contrast="high"] :is(.rs-updated,.rs-downloads span,.rs-note){color:#10151c}
 .rs-warn{border-color:#8a4b00;background:#fef7e0;color:#4a2c00}
+.rs-ago{color:#4a5568;font-weight:700}
+html[data-a11y-contrast="high"] .rs-ago{color:#10151c}

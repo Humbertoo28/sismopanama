@@ -64,7 +64,14 @@ export function quakeSentence(event: Earthquake) {
 }
 
 export type SummarySection = { heading: string; lines: string[]; ordered?: boolean };
-export type QuakeSummary = { title: string; updated: string; sections: SummarySection[] };
+export type QuakeSummary = {
+  title: string;
+  updated: string;
+  /** Cuándo consultó el servidor los catálogos (ms) y cuándo ocurrió el sismo más reciente (ms): la página los usa para decir "hace N minutos". */
+  dataTime: number;
+  latestTime: number | null;
+  sections: SummarySection[];
+};
 
 const HOUR = 3_600_000;
 
@@ -130,7 +137,7 @@ export function buildSummary(events: Earthquake[], now: number, options: Summary
     ],
   });
 
-  return { title: "Resumen de sismos en Panamá", updated: `Datos del ${whenWords(options.dataTime ?? now)}`, sections };
+  return { title: "Resumen de sismos en Panamá", updated: `Datos del ${whenWords(options.dataTime ?? now)}`, dataTime: options.dataTime ?? now, latestTime: recent[0]?.properties.time ?? null, sections };
 }
 
 /** El mismo resumen como texto plano (una frase por línea). */
