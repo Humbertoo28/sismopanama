@@ -61,6 +61,11 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
       {
+        // Leaflet va incluido en el proyecto y no cambia: una semana de caché (y hasta un mes mientras se renueva).
+        source: "/leaflet.js",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
+      },
+      {
         source: "/vendor/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },

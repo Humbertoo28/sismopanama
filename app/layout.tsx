@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
+import SampledAnalytics from "./sampled-analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
 import { SiteStructuredData } from "./structured-data";
 import "./leaflet.css";
@@ -56,8 +56,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
-        {/* Estadísticas de visitas de Vercel: sin cookies y sin enlaces. Solo se ven en el panel privado de Vercel. */}
-        <Analytics />
+        {/* Estadísticas de visitas de Vercel: sin cookies y sin enlaces. Solo se ven en el panel privado de Vercel.
+            Es una muestra del 10 % de las visitas (cada evento se cobra); ver sampled-analytics.tsx. */}
+        <SampledAnalytics />
       </body>
     </html>
   );
