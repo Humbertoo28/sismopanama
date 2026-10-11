@@ -530,10 +530,29 @@ async function createPushSubscription(reg: ServiceWorkerRegistration) {
   const keyRes = await fetch("/api/push/vapid-public-key");
   const { publicKey } = (await keyRes.json()) as { publicKey?: string };
   if (!publicKey) throw new Error("No se pudo obtener la clave VAPID pública");
-  return reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
-  });
+  const keyBuffer = urlBase64ToUint8Array(publicKey);
+
+  try {
+    return await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: keyBuffer,
+    });
+  } catch (initialErr) {
+    // Si el registro falló por una suscripción previa corrupta o desfasada, desuscribir y reintentar una vez
+    try {
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await existing.unsubscribe();
+        return await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: keyBuffer,
+        });
+      }
+    } catch {
+      // Si el reintento falla, propagar el error inicial
+    }
+    throw initialErr;
+  }
 }
 
 // Mantiene al día el "buzón" push de este equipo: al abrir la página se vuelve a registrar en el servidor
@@ -576,7 +595,7 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
   try {
     const perm = await Notification.requestPermission();
     if (perm !== "granted") {
-      return { ok: false, error: "Permiso de notificaciones denegado." };
+      return { ok: false, error: "Permiso de notificaciones denegado en tu navegador." };
     }
 
     const reg = await navigator.serviceWorker.ready;
@@ -601,8 +620,17 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
     rememberPushEnabled(true);
     return { ok: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message };
+    const raw = err instanceof Error ? err.message : String(err);
+    let friendly = raw;
+
+    if (/push service error/i.test(raw)) {
+      friendly =
+        "El servicio de alertas de tu celular (Google Play/FCM) no respondió. Si usas Brave activa los servicios de Google en Configuración, desactiva el ahorro de batería o modo incógnito, o pulsa Activar 24/7 de nuevo.";
+    } else if (/permission denied|denied/i.test(raw)) {
+      friendly = "Permiso de notificaciones bloqueado en los ajustes de tu navegador.";
+    }
+
+    return { ok: false, error: friendly };
   }
 }
 
