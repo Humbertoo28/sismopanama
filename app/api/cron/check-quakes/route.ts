@@ -4,7 +4,7 @@ import { fetchPanamaEvents } from "@/lib/catalogs";
 import { runQuakeCheck } from "@/lib/push-check";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // el envío a miles de dispositivos puede pasar de 30 s
+export const maxDuration = 120; // amplio tiempo para despachar a decenas de miles de dispositivos en Vercel Pro
 
 // Comparación en tiempo constante (no revela cuántos caracteres del secreto se acertaron).
 function sameSecret(given: string | null, expected: string) {

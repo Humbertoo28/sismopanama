@@ -15,6 +15,6 @@ jobs:
     steps:
       - name: Trigger quake check
         run: |
-          curl -s -f --max-time 25 \
+          curl -s -f --max-time 60 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "https://sismopanama.vercel.app/api/cron/check-quakes" || true

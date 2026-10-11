@@ -12,9 +12,8 @@ export const DEFAULT_VAPID_PRIVATE_KEY =
 export const VAPID_SUBJECT =
   process.env.VAPID_SUBJECT || "mailto:alerta@sismopanama.com";
 
-// Conexiones reutilizadas hacia Google, Apple y Mozilla: sin esto cada aviso abre una conexión TLS nueva (100-200 ms de
-// protocolo) y con miles de dispositivos el envío tarda varias veces más.
-const pushAgent = new https.Agent({ keepAlive: true, maxSockets: 300 });
+// Conexiones reutilizadas hacia Google, Apple y Mozilla: maxSockets alto para despachar en paralelo a miles de dispositivos en segundos.
+const pushAgent = new https.Agent({ keepAlive: true, maxSockets: 500 });
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
@@ -103,10 +102,9 @@ export async function sendWebPushToSubscription(
 
 type PushSubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: string; min_magnitude: number };
 const SUBSCRIPTION_PAGE = 1000;
-const MAX_CONCURRENT_SENDS = 250;
-// La función tiene 60 s (maxDuration). Se deja de empezar envíos nuevos un poco antes para terminar limpio y dejar
-// constancia en el registro de cuántos dispositivos quedaron sin aviso.
-export const PUSH_BUDGET_MS = 50_000;
+const MAX_CONCURRENT_SENDS = 350;
+// Tiempo máximo para despachar (en Vercel Pro con maxDuration ampliado).
+export const PUSH_BUDGET_MS = 90_000;
 
 export async function broadcastPush(
   payload: WebPushPayload,
@@ -119,24 +117,41 @@ export async function broadcastPush(
     throw new Error("Supabase no está configurado");
   }
 
-  // Obtenemos todas las suscripciones activas cuyo umbral sea <= a la magnitud del sismo. Se lee por páginas: la API
-  // de Supabase corta cada consulta en 1000 filas, y sin paginar los dispositivos que pasaran de ese número quedaban
-  // sin aviso (y como el registro es público, alguien podía llenar la tabla para desplazar a los reales).
-  const subs: PushSubscriptionRow[] = [];
-  for (let from = 0; ; from += SUBSCRIPTION_PAGE) {
-    const { data, error } = await supabase
-      .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth, min_magnitude")
-      .lte("min_magnitude", payload.magnitude ?? minMagnitude)
-      .order("id")
-      .range(from, from + SUBSCRIPTION_PAGE - 1);
-    if (error) {
-      console.error("[push] no se pudo leer las suscripciones:", error.message);
-      break;
-    }
-    subs.push(...(data as PushSubscriptionRow[]));
-    if (data.length < SUBSCRIPTION_PAGE) break;
+  // Obtenemos la primera página y el conteo total en paralelo para despachar sin demoras.
+  const { data: firstPage, error: firstErr, count } = await supabase
+    .from("push_subscriptions")
+    .select("id, endpoint, p256dh, auth, min_magnitude", { count: "exact" })
+    .lte("min_magnitude", payload.magnitude ?? minMagnitude)
+    .order("created_at", { ascending: false })
+    .range(0, SUBSCRIPTION_PAGE - 1);
+
+  if (firstErr) {
+    console.error("[push] no se pudo leer las suscripciones:", firstErr.message);
+    return { total: 0, sent: 0, failed: 0, cleaned: 0, unsent: 0, outcomes: {} };
   }
+
+  const subs: PushSubscriptionRow[] = (firstPage as PushSubscriptionRow[]) ?? [];
+  const totalCount = count ?? subs.length;
+
+  // Descargar todas las páginas restantes EN PARALELO simultáneo (1 solo viaje de red)
+  if (totalCount > SUBSCRIPTION_PAGE) {
+    const pagePromises = [];
+    for (let from = SUBSCRIPTION_PAGE; from < totalCount; from += SUBSCRIPTION_PAGE) {
+      pagePromises.push(
+        supabase
+          .from("push_subscriptions")
+          .select("id, endpoint, p256dh, auth, min_magnitude")
+          .lte("min_magnitude", payload.magnitude ?? minMagnitude)
+          .order("created_at", { ascending: false })
+          .range(from, Math.min(from + SUBSCRIPTION_PAGE - 1, totalCount - 1))
+      );
+    }
+    const pages = await Promise.all(pagePromises);
+    for (const page of pages) {
+      if (page.data) subs.push(...(page.data as PushSubscriptionRow[]));
+    }
+  }
+
   if (subs.length === 0) {
     return { total: 0, sent: 0, failed: 0, cleaned: 0, unsent: 0, outcomes: {} };
   }
