@@ -13,6 +13,7 @@ type Props = {
 };
 
 type Tier = "low" | "mid" | "high" | "main";
+type View = "auto" | "hours" | "each";
 
 const HOUR = 3_600_000;
 const HEIGHT = 260;
@@ -25,7 +26,9 @@ const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", hou
 // dibujan cómo se va apagando la secuencia.
 export default function SequenceChart({ mainshock, aftershocks, selectedId, replay, onSelect }: Props) {
   const box = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(640);
+  // En el celular, cientos de puntos en 300 px no se leen: ahí se empieza con la vista por bloques de horas.
+  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 640 : Math.min(640, window.innerWidth - 56)));
+  const [view, setView] = useState<View>("auto");
 
   useEffect(() => {
     const element = box.current;
@@ -75,6 +78,15 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
     labeled.add(item.event.id);
   });
 
+  const mode = view === "auto" ? (width < 560 ? "hours" : "each") : view;
+  // Vista por horas: bloques lo bastante grandes para que no pasen de ~10 filas. Durante la reproducción solo cuentan
+  // las réplicas que ya "ocurrieron", así las barras crecen con la secuencia.
+  const binHours = [3, 6, 12, 24, 48].find(h => Math.ceil(Math.max(last - start, HOUR) / (h * HOUR)) <= 10) ?? 168;
+  const shown = replay === null ? aftershocks : replay.index === 0 ? [] : aftershocks.filter(event => event.properties.time <= replay.time);
+  const rows = Array.from({ length: Math.floor((last - start) / (binHours * HOUR)) + 1 }, (_, n) => ({ n, events: [] as Earthquake[] }));
+  shown.forEach(event => rows[Math.floor((event.properties.time - start) / (binHours * HOUR))]?.events.push(event));
+  const peak = Math.max(1, ...rows.map(row => row.events.length));
+
   const onKey = (event: KeyboardEvent, quake: Earthquake) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -83,6 +95,34 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
 
   return (
     <div className="sequence-chart" ref={box}>
+      <div className="segmented seq-toggle" role="group" aria-label="Vista de la secuencia">
+        <button type="button" className={mode === "hours" ? "selected" : ""} aria-pressed={mode === "hours"} onClick={() => setView("hours")}>Por horas</button>
+        <button type="button" className={mode === "each" ? "selected" : ""} aria-pressed={mode === "each"} onClick={() => setView("each")}>Cada sismo</button>
+      </div>
+      {mode === "hours" ? (
+        <div className="seq-hours" aria-label="Réplicas por bloque de horas desde el sismo principal">
+          <button type="button" className="seq-hour-main" onClick={() => onSelect(mainshock)} aria-label={`Sismo principal, magnitud ${mainshock.properties.mag?.toFixed(1) ?? "desconocida"}, ${clock.format(new Date(start))}. Ver en el mapa`}>
+            <b>M {mainshock.properties.mag?.toFixed(1) ?? "—"}</b><span>Sismo principal · {clock.format(new Date(start))}</span>
+          </button>
+          <div className="seq-hours-head" aria-hidden="true"><span>Horas</span><span>Réplicas</span><span /><span>Más fuerte</span></div>
+          {rows.map(row => {
+            const top = row.events.reduce<Earthquake | null>((best, event) => (best === null || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
+            const topMag = top?.properties.mag ?? null;
+            const tier = topMag === null ? "none" : topMag >= 5 ? "high" : topMag >= 4 ? "mid" : "low";
+            const from = row.n * binHours;
+            const active = selectedId !== null && row.events.some(event => event.id === selectedId);
+            return (
+              <button key={row.n} type="button" className={`seq-hour${active ? " selected" : ""}`} disabled={top === null} onClick={() => top && onSelect(top)}
+                aria-label={`De ${from} a ${from + binHours} horas después del sismo principal: ${row.events.length} ${row.events.length === 1 ? "réplica" : "réplicas"}${topMag === null ? "" : `, la más fuerte de magnitud ${topMag.toFixed(1)}. Ver en el mapa`}`}>
+                <span className="seq-hour-range">{from}–{from + binHours} h</span>
+                <span className="seq-hour-track"><i className={tier} style={{ width: `${(row.events.length / peak) * 100}%` }} /></span>
+                <span className="seq-hour-count">{row.events.length}</span>
+                <span className={`seq-hour-max ${tier}`}>{topMag === null ? "—" : `M ${topMag.toFixed(1)}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
       <svg width={width} height={HEIGHT} viewBox={`0 0 ${width} ${HEIGHT}`} role="group" aria-label={`Línea de tiempo: el sismo principal y ${aftershocks.length} ${aftershocks.length === 1 ? "réplica" : "réplicas"}`}>
         {mags.map(mag => (
           <g key={mag} className="seq-grid">
@@ -113,6 +153,13 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
           );
         })}
       </svg>
+      )}
+      <p className="sequence-note">
+        {mode === "hours"
+          ? `Cada fila agrupa las réplicas por bloques de ${binHours} horas desde el sismo principal: la barra es cuántas hubo y la etiqueta, la más fuerte del bloque. Toca una fila para verla en el mapa.`
+          : "Cada punto es un sismo: la altura es la magnitud y la posición, las horas desde el sismo principal. Los puntos grandes son los de M 5 o más. Pulsa uno para verlo en el mapa."}
+        {" "}Las réplicas suelen espaciarse con el paso de las horas.
+      </p>
     </div>
   );
 }

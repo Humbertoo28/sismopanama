@@ -690,7 +690,6 @@ export default function Home() {
                 <span className="section-kicker">SECUENCIA SÍSMICA</span>
                 <h3>El sismo principal y sus réplicas</h3>
                 <SequenceChart mainshock={main} aftershocks={sequenceAftershocks} selectedId={selectedId} replay={replay} onSelect={chooseEvent} />
-                <p className="sequence-note">Cada punto es un sismo: la altura es la magnitud y la posición, las horas desde el sismo principal. Los puntos grandes son los de M 5 o más. Pulsa uno para verlo en el mapa. Las réplicas suelen espaciarse con el paso de las horas.</p>
               </div>
             )}
           </section>
