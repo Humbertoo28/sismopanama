@@ -1,4 +1,4 @@
-/* Página de resumen en texto: lectura lineal y sencilla (lector de pantalla, línea braille, texto grande). Los tamaños usan
+/* Página de resumen en texto: lectura lineal y sencilla (lector de pantalla, texto grande). Los tamaños usan
    calc(Npx*var(--ts,1)) para respetar el tamaño de texto que elige la persona. */
 .rs-header{padding:18px 20px 0;max-width:820px;margin:0 auto}
 .rs-header a{display:inline-block;padding:10px 0;color:#0a3a8c;font:700 calc(15px*var(--ts,1)) "DM Sans",sans-serif;text-decoration:underline;text-underline-offset:3px}

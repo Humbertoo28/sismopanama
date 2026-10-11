@@ -2,9 +2,8 @@ import { MAINSHOCK_ID, isAftershock, type Earthquake } from "./earthquakes";
 import { placeLabel, whereText } from "./place-of";
 import { provinceOfEvent } from "./province-of";
 
-// Resumen de los sismos en frases cortas y sencillas, sin símbolos: sirve para leerlo con lector de pantalla y línea braille,
-// y es el texto que se descarga (en texto, braille Unicode y BRF). Los números van con palabras ("7 coma 7", "11 horas con
-// 52 minutos") para no depender de signos que cambian de un país a otro en braille.
+// Resumen de los sismos en frases cortas y sencillas, sin símbolos: sirve para leerlo con lector de pantalla y es el texto que
+// se descarga. Los números van con palabras ("7 coma 7", "11 horas con 52 minutos") para que se lean igual en voz alta.
 
 const COMPASS: Record<string, string> = {
   N: "norte", S: "sur", E: "este", W: "oeste", NE: "noreste", NW: "noroeste", SE: "sureste", SW: "suroeste",

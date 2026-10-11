@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { toBraille, toBrf } from "../../lib/braille";
 import type { EarthquakeResponse } from "../../lib/earthquakes";
 import { buildSummary, summaryToText, type QuakeSummary } from "../../lib/quake-summary";
 import { SITE_URL, pageSocial } from "../../lib/site";
@@ -8,8 +7,8 @@ import { BreadcrumbStructuredData } from "../structured-data";
 import Downloads from "./downloads";
 import "./resumen.css";
 
-const TITLE = "Resumen de sismos en texto sencillo y braille";
-const DESCRIPTION = "Los sismos y réplicas de Panamá en frases cortas y sin símbolos, pensadas para lector de pantalla y línea braille, con descarga en texto, braille Unicode y BRF para impresora braille.";
+const TITLE = "Resumen de sismos en texto sencillo";
+const DESCRIPTION = "Los sismos y réplicas de Panamá en frases cortas y sin símbolos, fáciles de leer, con descarga en texto.";
 
 export const metadata: Metadata = {
   title: TITLE, // el sitio añade "| Sismo Panamá"
@@ -37,10 +36,9 @@ async function loadSummary(): Promise<QuakeSummary | null> {
 export default async function ResumenPage() {
   const summary = await loadSummary();
   const text = summary ? summaryToText(summary) : "";
-  const braille = text ? toBraille(text) : "";
   return (
     <>
-      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Resumen en texto y braille", path: "/resumen" }]} />
+      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Resumen en texto sencillo", path: "/resumen" }]} />
       <header className="rs-header">
         <Link href="/">← Volver al panel principal</Link>
       </header>
@@ -61,7 +59,7 @@ export default async function ResumenPage() {
                 )}
               </section>
             ))}
-            <Downloads text={text} braille={braille} brf={toBrf(braille)} />
+            <Downloads text={text} />
           </>
         ) : (
           <p className="rs-card">No se pudo consultar los catálogos de sismos en este momento. Vuelve a intentarlo en unos minutos o consulta los avisos oficiales de SINAPROC.</p>

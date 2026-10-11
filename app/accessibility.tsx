@@ -194,7 +194,7 @@ export default function Accessibility() {
             <span aria-hidden="true">{speaking ? "⏹" : "🔊"}</span> {speaking ? "Detener la lectura" : "Escuchar el último sismo"}
           </button>
           {!latest && <p className="a11y-note">La lectura en voz alta está disponible en la página principal.</p>}
-          <Link href="/resumen" className="a11y-link" onClick={() => setOpen(false)}>Resumen en texto y braille</Link>
+          <Link href="/resumen" className="a11y-link" onClick={() => setOpen(false)}>Resumen en texto sencillo</Link>
           <button type="button" className="a11y-reset" onClick={() => change({ ...DEFAULTS })}>Restablecer</button>
         </div>
       )}
