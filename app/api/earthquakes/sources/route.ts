@@ -144,7 +144,7 @@ export async function GET(request: Request) {
 
     const result: SourcesResponse = { sources, fetchedAt: new Date().toISOString() };
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=600" },
+      headers: { "Cache-Control": "public, max-age=120, s-maxage=600, stale-while-revalidate=1800" },
     });
   } catch (error) {
     console.error("Sources fetch failed:", error);

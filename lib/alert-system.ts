@@ -555,23 +555,40 @@ async function createPushSubscription(reg: ServiceWorkerRegistration) {
   }
 }
 
-// Mantiene al día el "buzón" push de este equipo: al abrir la página se vuelve a registrar en el servidor
-// (por si el navegador lo renovó, el servidor lo dio de baja o cambió el umbral de magnitud) y, si el
-// navegador lo borró teniendo el permiso, se vuelve a crear sin pedir nada.
-export async function syncPushSubscription(minMagnitude: number): Promise<void> {
+const LAST_SYNC_KEY = "sismo_panama_push_last_sync";
+const SYNC_INTERVAL_MS = 24 * 3_600_000; // 24 horas
+
+// Mantiene al día el "buzón" push de este equipo: solo sincroniza con el servidor si han pasado 24 h
+// o si force=true (cambio de magnitud o re-suscripción manual), eliminando cientos de miles de funciones serverless.
+export async function syncPushSubscription(minMagnitude: number, force = false): Promise<void> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
   if (Notification.permission !== "granted") return;
+
+  if (!force) {
+    try {
+      const last = localStorage.getItem(LAST_SYNC_KEY);
+      if (last && Date.now() - Number(last) < SYNC_INTERVAL_MS) return;
+    } catch {
+      // Ignorar si localStorage está deshabilitado
+    }
+  }
+
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub && pushWasEnabled()) sub = await createPushSubscription(reg);
     if (!sub) return;
     const json = sub.toJSON();
-    await fetch("/api/push/subscribe", {
+    const res = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, minMagnitude }),
     });
+    if (res.ok) {
+      try {
+        localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+      } catch {}
+    }
   } catch (err) {
     console.warn("No se pudo sincronizar la suscripción push:", err);
   }

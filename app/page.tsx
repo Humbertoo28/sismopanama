@@ -29,11 +29,10 @@ import {
 } from "../lib/alert-system";
 import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
-// La lista de sismos se consulta cada 10 s; lo que casi no cambia (datos del sismo principal y contraste entre agencias)
-// cada 60 s. Antes eran tres consultas cada 8 s por pestaña abierta: con miles de personas conectadas a la vez eso
-// agotaba las cuotas del servidor. Un sismo tarda minutos en publicarse en los catálogos, así que 2 s más no cambian el aviso.
+// La lista de sismos en tiempo real se consulta cada 35 s.
+// El sismo principal histórico y conteo de réplicas se consulta cada 5 min (300 s) para proteger cuotas del servidor.
 const POLL_MS = 35_000;
-const SLOW_POLL_MS = 60_000;
+const SLOW_POLL_MS = 300_000;
 
 const date = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
@@ -320,7 +319,6 @@ export default function Home() {
       if (at - lastBump.current < 2_000) return;
       lastBump.current = at;
       setRefreshKey(key => key + 1);
-      setSlowKey(key => key + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
@@ -725,7 +723,7 @@ export default function Home() {
 
           <section id="fuentes" className="guide-section" aria-labelledby="sources-title">
             <div className="section-heading"><div><span className="section-kicker">FUENTES Y VERIFICACIÓN</span><h2 id="sources-title">De dónde salen los datos</h2></div></div>
-            <Sources refreshKey={slowKey} />
+            <Sources />
           </section>
 
           <footer>

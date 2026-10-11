@@ -48,8 +48,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
     const updated = { ...prefs, [key]: value };
     setPrefs(updated);
     saveAlertPreferences(updated);
-    // El umbral también lo usa el servidor para decidir a quién enviar el push: se mantiene al día.
-    if (key === "minMagnitude") syncPushSubscription(Number(value));
+    // El umbral también lo usa el servidor para decidir a quién enviar el push: se fuerza la sincronización de inmediato.
+    if (key === "minMagnitude") syncPushSubscription(Number(value), true);
   };
 
   const handleRequestPermission = async () => {

@@ -27,7 +27,7 @@ function magnitudeSummary(values: number[]) {
   return low === high ? `Las ${values.length} agencias coinciden: magnitud ${low}.` : `Las ${values.length} agencias reportan entre M ${low} y M ${high}.`;
 }
 
-export default function Sources({ refreshKey }: { refreshKey: number }) {
+export default function Sources({ refreshKey }: { refreshKey?: number } = {}) {
   const [data, setData] = useState<SourcesResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -49,7 +49,7 @@ export default function Sources({ refreshKey }: { refreshKey: number }) {
     };
     load();
     return () => controller.abort();
-  }, [refreshKey]);
+  }, []);
 
   const rows = data?.sources ?? [];
   const summary = magnitudeSummary(rows.flatMap(row => row.magnitude === null ? [] : [row.magnitude]));
