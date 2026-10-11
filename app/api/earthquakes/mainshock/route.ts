@@ -1,5 +1,6 @@
 import {
   MAINSHOCK_ID,
+  SINCE,
   isAftershock,
   type Earthquake,
   type MainshockResponse,
@@ -26,8 +27,8 @@ export async function GET(request: Request) {
     const mainshock = (await queryUsgs({ eventid: MAINSHOCK_ID })) as Earthquake | null;
     if (!mainshock || !isValid(mainshock)) throw new Error("Respuesta inválida del catálogo");
 
-    // Mismas fuentes que la lista de sismos (USGS + EMSC), para que el conteo de réplicas coincida.
-    const { events } = await fetchPanamaEvents(mainshock.properties.time);
+    // Mismas fuentes y misma fecha de inicio que la lista de sismos (USGS + EMSC), para que el conteo de réplicas coincida exactamente.
+    const { events } = await fetchPanamaEvents(SINCE);
     const aftershocks = events.filter((item) => isAftershock(item, mainshock));
     const strongest = aftershocks.reduce<Earthquake | null>(
       (best, event) =>
