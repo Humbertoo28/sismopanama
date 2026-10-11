@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { EarthquakeResponse } from "../../lib/earthquakes";
-import { buildSummary, summaryToText, type QuakeSummary } from "../../lib/quake-summary";
+import { buildSummary, type QuakeSummary } from "../../lib/quake-summary";
 import { SITE_URL, pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
-import Downloads from "./downloads";
+import LiveSummary from "./live-summary";
 import "./resumen.css";
 
 const TITLE = "Resumen de sismos en texto sencillo";
@@ -16,17 +16,19 @@ export const metadata: Metadata = {
   ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/resumen"),
 };
 
-// Se regenera como mucho cada dos minutos: no consulta los catálogos con cada visita.
-export const revalidate = 120;
+// La primera versión se regenera como mucho cada minuto (para que cargue ya con datos); después la página se actualiza sola.
+export const revalidate = 60;
 
 // Se lee la propia API del sitio (que ya viene en caché de la red) y no los catálogos directamente: sus consultas van sin
-// caché y volverían dinámica esta página, que debe regenerarse como mucho cada dos minutos.
+// caché y volverían dinámica esta página, que debe regenerarse como mucho cada minuto.
 async function loadSummary(): Promise<QuakeSummary | null> {
   try {
-    const response = await fetch(`${SITE_URL}/api/earthquakes`, { next: { revalidate: 120 } });
+    const response = await fetch(`${SITE_URL}/api/earthquakes`, { next: { revalidate: 60 } });
     if (!response.ok) throw new Error(`La API de sismos respondió ${response.status}`);
     const data = (await response.json()) as EarthquakeResponse;
-    return Array.isArray(data.features) && data.features.length ? buildSummary(data.features, Date.now()) : null;
+    return Array.isArray(data.features) && data.features.length
+      ? buildSummary(data.features, Date.now(), { dataTime: Date.parse(data.fetchedAt) || Date.now(), catalogs: data.catalogs })
+      : null;
   } catch (error) {
     console.error("Resumen de sismos no disponible:", error);
     return null;
@@ -35,7 +37,6 @@ async function loadSummary(): Promise<QuakeSummary | null> {
 
 export default async function ResumenPage() {
   const summary = await loadSummary();
-  const text = summary ? summaryToText(summary) : "";
   return (
     <>
       <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Resumen en texto sencillo", path: "/resumen" }]} />
@@ -43,27 +44,8 @@ export default async function ResumenPage() {
         <Link href="/">← Volver al panel principal</Link>
       </header>
       <main className="rs-main">
-        <h1>{summary?.title ?? "Resumen de sismos en Panamá"}</h1>
-        {summary ? (
-          <>
-            <p className="rs-updated">{summary.updated}. La página se actualiza sola cada pocos minutos.</p>
-            {summary.sections.map((section, index) => (
-              <section key={section.heading} className="rs-card" aria-labelledby={`rs-s${index}`}>
-                <h2 id={`rs-s${index}`}>{section.heading}</h2>
-                {section.ordered ? (
-                  <ol>{section.lines.map(line => <li key={line}>{line}</li>)}</ol>
-                ) : section.lines.length === 1 ? (
-                  <p>{section.lines[0]}</p>
-                ) : (
-                  <ul>{section.lines.map(line => <li key={line}>{line}</li>)}</ul>
-                )}
-              </section>
-            ))}
-            <Downloads text={text} />
-          </>
-        ) : (
-          <p className="rs-card">No se pudo consultar los catálogos de sismos en este momento. Vuelve a intentarlo en unos minutos o consulta los avisos oficiales de SINAPROC.</p>
-        )}
+        <h1>Resumen de sismos en Panamá</h1>
+        <LiveSummary initial={summary} />
       </main>
     </>
   );

@@ -68,7 +68,14 @@ export type QuakeSummary = { title: string; updated: string; sections: SummarySe
 
 const HOUR = 3_600_000;
 
-export function buildSummary(events: Earthquake[], now: number): QuakeSummary {
+export type SummaryOptions = {
+  /** Cuándo consultó el servidor los catálogos (EarthquakeResponse.fetchedAt); por omisión, ahora. */
+  dataTime?: number;
+  /** Qué catálogos respondieron; si alguno no, el resumen lo dice. */
+  catalogs?: { usgs: boolean; igc: boolean; emsc: boolean };
+};
+
+export function buildSummary(events: Earthquake[], now: number, options: SummaryOptions = {}): QuakeSummary {
   const recent = [...events].sort((a, b) => b.properties.time - a.properties.time);
   const strongest = recent.reduce<Earthquake | null>((best, event) => (!best || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
   const main = recent.find(event => event.id === MAINSHOCK_ID) ?? strongest;
@@ -83,6 +90,10 @@ export function buildSummary(events: Earthquake[], now: number): QuakeSummary {
     byProvince.set(name, (byProvince.get(name) ?? 0) + 1);
   }
   const top = [...byProvince.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const down = options.catalogs
+    ? (["usgs", "igc", "emsc"] as const).filter(key => !options.catalogs![key]).map(key => key.toUpperCase())
+    : [];
 
   const sections: SummarySection[] = [];
   if (recent[0]) sections.push({ heading: "Último sismo registrado", lines: [quakeSentence(recent[0])] });
@@ -115,10 +126,11 @@ export function buildSummary(events: Earthquake[], now: number): QuakeSummary {
       "Los datos vienen del USGS, del Instituto de Geociencias de la Universidad de Panamá y del EMSC, combinados sin duplicados.",
       "Las magnitudes pueden cambiar cuando las agencias las revisan.",
       "Esta información es de referencia y no sustituye los avisos oficiales.",
+      ...(down.length ? [`En este momento no responde: ${down.join(", ")}. Los datos pueden estar incompletos.`] : []),
     ],
   });
 
-  return { title: "Resumen de sismos en Panamá", updated: `Actualizado el ${whenWords(now)}`, sections };
+  return { title: "Resumen de sismos en Panamá", updated: `Datos del ${whenWords(options.dataTime ?? now)}`, sections };
 }
 
 /** El mismo resumen como texto plano (una frase por línea). */
