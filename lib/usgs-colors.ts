@@ -30,10 +30,11 @@ export function intensityColor(value: number, alpha = 1) {
 }
 
 
-// Deslizamiento de la falla: de azul oscuro (casi nada) a blanco (el máximo del modelo).
+// Deslizamiento de la falla: de violeta oscuro (casi nada) a amarillo claro (el máximo del modelo). Una paleta cálida
+// que destaca sobre el azul de la caja y sobre la imagen satelital.
 export function slipColor(slip: number, max: number, alpha = 1) {
   const t = max > 0 ? Math.min(1, Math.max(0, slip / max)) : 0;
-  const stops: [number, number, number][] = [[24, 52, 120], [40, 150, 230], [140, 235, 255], [255, 255, 255]];
+  const stops: [number, number, number][] = [[52, 12, 104], [150, 28, 118], [232, 72, 52], [255, 172, 32], [255, 246, 176]];
   const x = t * (stops.length - 1);
   const i = Math.min(stops.length - 2, Math.floor(x));
   const [r, g, b] = stops[i].map((c, k) => Math.round(c + (stops[i + 1][k] - c) * (x - i)));

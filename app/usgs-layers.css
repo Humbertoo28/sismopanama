@@ -31,7 +31,10 @@
 .q3-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: #e3ecf8; font-size: calc(10.5px*var(--ts,1)); font-weight: 600; }
 .q3-legend > span { display: inline-flex; align-items: center; white-space: nowrap; }
 .q3-dot { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 50%; border: 1px solid #ffffffd0; box-sizing: border-box; }
-.q3-dot.hollow { background: transparent; border: 1.6px solid #f08a24; }
+.q3-dot.hollow { background: transparent; border: 1.6px solid #e3ecf8; }
+.q3-depthscale { display: inline-flex; align-items: center; gap: 6px; }
+.q3-depthscale b { font-weight: 800; color: #fff; }
+.q3-depthscale i { display: block; width: 96px; height: 9px; border-radius: 5px; border: 1px solid #ffffff59; box-sizing: border-box; }
 .q3-note { margin: 0; color: #b9c9de; font-size: calc(10.5px*var(--ts,1)); line-height: 1.4; }
 .q3-more { color: #b9c9de; font-size: calc(10.5px*var(--ts,1)); line-height: 1.45; }
 .q3-more summary { cursor: pointer; font-weight: 700; color: #dbe6f5; width: fit-content; padding: 2px 0; }
@@ -113,3 +116,10 @@ html[data-a11y-motion="reduce"] .q3-canvas.quake-shake { animation: none; }
 .usgs-source { color: #4a5568; font-size: calc(12.5px*var(--ts,1)); }
 .usgs-source a, .usgs-retry { color: #0b4fc7; font-weight: 700; }
 .usgs-retry { border: 0; background: none; font: inherit; font-weight: 700; text-decoration: underline; padding: 0; cursor: pointer; }
+
+/* Nombres y límites de provincias en el mapa 2D (de zoom 7 a 10). */
+.leaflet-container:not(.show-provinces) .province-label,
+.leaflet-container:not(.show-provinces) .province-line { display: none; }
+.province-label-wrap { background: none !important; border: 0 !important; }
+.province-label { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; color: #fff; font: 800 calc(11px*var(--ts,1))/1 "Space Grotesk", system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 0 3px #04101f, 0 0 7px #04101f, 0 1px 2px #04101f; opacity: .92; }
+@media (max-width: 700px) { .province-label { font-size: calc(9.5px*var(--ts,1)); letter-spacing: .1em; } }

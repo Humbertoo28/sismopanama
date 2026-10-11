@@ -2,11 +2,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Leaflet se carga como script global y no trae tipos. */
 
 import Script from "next/script";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { isAftershock, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
 import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
 import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
+import { PROVINCE_LABELS } from "../lib/province-labels";
+import { PROVINCES } from "../lib/provinces";
 import { intensityColor, slipColor } from "../lib/usgs-colors";
 import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
@@ -80,17 +82,32 @@ const TILE_CONFIG: Record<
 
 const STEP_MS = 900;
 const RECENT_MS = 3 * 3_600_000;
+const MAP_MODE_KEY = "sismo_map_mode";
+const MAP_MODE_EVENT = "sismo-map-mode";
+const subscribeMapMode = (notify: () => void) => {
+  window.addEventListener("storage", notify);
+  window.addEventListener(MAP_MODE_EVENT, notify);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener(MAP_MODE_EVENT, notify);
+  };
+};
+// Lo elegido en esta visita manda aunque el navegador no deje guardar (modo privado).
+let chosenMapMode: MapLayerMode | null = null;
+const readMapMode = (): MapLayerMode => {
+  if (chosenMapMode) return chosenMapMode;
+  try {
+    const saved = localStorage.getItem(MAP_MODE_KEY);
+    return saved === "esri" || saved === "streets" || saved === "satellite" ? saved : "satellite";
+  } catch {
+    return "satellite";
+  }
+};
 export default function QuakeMap({ events, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
-  const [mapMode, setMapMode] = useState<MapLayerMode>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("sismo_map_mode") as MapLayerMode | null;
-      if (saved && (saved === "satellite" || saved === "esri" || saved === "streets")) {
-        return saved;
-      }
-    }
-    return "satellite";
-  });
+  // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
+  // navegador, pasa al guardado sin el aviso de que el HTML no coincide.
+  const mapMode = useSyncExternalStore(subscribeMapMode, readMapMode, () => "satellite" as MapLayerMode);
   // Vista 3D y capas con datos del USGS (ruptura de la falla y «lo que se sintió»), compartidas por el mapa y el 3D.
   const [view3d, setView3d] = useState(false);
   const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false });
@@ -130,14 +147,13 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
 
   const handleModeChange = (mode: MapLayerMode) => {
     setView3d(false);
-    setMapMode(mode);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("sismo_map_mode", mode);
-      } catch {
-        // Ignorar si localStorage está bloqueado
-      }
+    chosenMapMode = mode;
+    try {
+      localStorage.setItem(MAP_MODE_KEY, mode);
+    } catch {
+      // Sin almacenamiento, la elección vale solo hasta recargar.
     }
+    window.dispatchEvent(new Event(MAP_MODE_EVENT));
   };
 
   useEffect(() => {
@@ -152,6 +168,28 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     // Los datos del USGS van por debajo de los marcadores pero sobre el sombreado de fuera de Panamá.
     map.createPane("felt").style.zIndex = "405";
     map.createPane("rupture").style.zIndex = "410";
+    // Límites y nombres de provincias y comarcas: aparecen al acercar (zoom 7 a 10) y no estorban al tocar los sismos.
+    const provincePane = map.createPane("provinces");
+    provincePane.style.zIndex = "420";
+    provincePane.style.pointerEvents = "none";
+    for (const division of PROVINCES) {
+      L.polygon(division.rings.map(ring => ring.map(([lng, lat]) => [lat, lng])), {
+        pane: "provinces", className: "province-line", interactive: false, color: "#ffffff", weight: 1, opacity: 0.5, fill: false,
+      }).addTo(map);
+    }
+    for (const label of PROVINCE_LABELS) {
+      const name = label.name.replace(/[&<>"]/g, "");
+      L.marker([label.lat, label.lng], {
+        pane: "provinces", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "province-label-wrap", html: `<span class="province-label" aria-hidden="true">${name}</span>`, iconSize: [0, 0] }),
+      }).addTo(map);
+    }
+    const syncProvinces = () => {
+      const zoom = map.getZoom();
+      map.getContainer().classList.toggle("show-provinces", zoom >= 7 && zoom <= 10);
+    };
+    map.on("zoomend", syncProvinces);
+    syncProvinces();
 
     // Panamá resaltado: se atenúa suavemente lo que queda fuera de su contorno y se dibuja el borde.
     const rings = PANAMA_RINGS.map(ring => ring.map(([lng, lat]) => [lat, lng]));
@@ -170,6 +208,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     const markers = markersRef.current;
     return () => {
       map.off("zoomend", markDetail);
+      map.off("zoomend", syncProvinces);
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -364,6 +403,16 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     usgsLayerRef.current = group;
   }, [layers, usgsDetail, ready]);
 
+  // La primera vez que se abre el 3D se enciende la ruptura de la falla (es lo que más se luce); luego manda lo que elija la persona.
+  const autoRupture = useRef(true);
+  const openView3d = () => {
+    setView3d(true);
+    if (autoRupture.current) {
+      autoRupture.current = false;
+      loadMainshockDetail();
+      setLayers(current => ({ ...current, rupture: true }));
+    }
+  };
   const toggleLayer = (name: "rupture" | "felt" | "shaking") => {
     loadMainshockDetail();
     setLayers(current => ({ ...current, [name]: !current[name] }));
@@ -595,7 +644,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
           type="button"
           className={`layer-btn${view3d ? " active" : ""}`}
           aria-pressed={view3d}
-          onClick={() => setView3d(true)}
+          onClick={openView3d}
           title="Vista 3D: cada sismo a su profundidad bajo la superficie"
         >
           <span aria-hidden="true">🧊</span>
