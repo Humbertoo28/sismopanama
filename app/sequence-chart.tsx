@@ -12,13 +12,17 @@ type Props = {
   onSelect: (event: Earthquake) => void;
 };
 
+type Tier = "low" | "mid" | "high" | "main";
+
 const HOUR = 3_600_000;
-const HEIGHT = 210;
+const HEIGHT = 260;
 const MARGIN = { top: 24, right: 18, bottom: 32, left: 34 };
 const INSET = 18; // separa el sismo principal del eje vertical
 const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", hour: "numeric", minute: "2-digit", hour12: true });
 
-// Cada sismo es una barra: la altura es la magnitud y la posición, las horas desde el sismo principal.
+// Cada sismo es un punto: la altura es la magnitud y la posición, las horas desde el sismo principal. Con cientos de
+// réplicas, solo los de M 5 o más tienen barra y peso visual; el resto son puntos pequeños y translúcidos que, juntos,
+// dibujan cómo se va apagando la secuencia.
 export default function SequenceChart({ mainshock, aftershocks, selectedId, replay, onSelect }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
@@ -52,6 +56,25 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
   const hours = Array.from({ length: Math.floor(span / (step * HOUR)) + 1 }, (_, i) => i * step);
   const mags = Array.from({ length: highMag - 3 }, (_, i) => i + 4);
 
+  const items = sequence.map((event, i) => {
+    const mag = event.properties.mag;
+    const m = mag ?? 0;
+    const tier: Tier = event.id === mainshock.id ? "main" : m >= 5 ? "high" : m >= 4 ? "mid" : "low";
+    const radius = tier === "main" ? 10 : tier === "high" ? 5 + (m - 5) * 2.2 : tier === "mid" ? 3.2 + (m - 4) * 1.4 : 2.6;
+    return { event, i, mag, tier, radius, cx: x(event.properties.time), cy: y(mag ?? lowMag) };
+  });
+  // Los más fuertes se dibujan encima (y reciben el toque cuando se solapan con puntos pequeños).
+  const rank = { low: 0, mid: 1, high: 2, main: 3 };
+  const drawn = [...items].sort((a, b) => rank[a.tier] - rank[b.tier] || (a.mag ?? 0) - (b.mag ?? 0));
+  // Etiqueta con la magnitud al sismo principal y a las réplicas de M 6 o más, sin que se pisen entre sí.
+  const labeled = new Set<string>();
+  const placed: { cx: number; cy: number }[] = [];
+  [...items].filter(item => item.tier === "main" || (item.mag ?? 0) >= 6).sort((a, b) => (b.mag ?? 0) - (a.mag ?? 0)).forEach(item => {
+    if (placed.some(other => Math.abs(other.cx - item.cx) < 54 && Math.abs(other.cy - item.cy) < 14)) return;
+    placed.push(item);
+    labeled.add(item.event.id);
+  });
+
   const onKey = (event: KeyboardEvent, quake: Earthquake) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -71,25 +94,21 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
         {hours.map(hour => (
           <text key={hour} className="seq-tick" x={x(start + hour * HOUR)} y={HEIGHT - 10} textAnchor="middle">{hour === 0 ? "0 h" : `+${hour} h`}</text>
         ))}
-        {sequence.map((event, i) => {
-          const mag = event.properties.mag;
-          const isMain = event.id === mainshock.id;
-          const cx = x(event.properties.time);
-          const cy = y(mag ?? lowMag);
-          const radius = Math.min(13, Math.max(5, 4.5 + ((mag ?? 3.5) - 3) * 1.4));
+        {drawn.map(({ event, i, mag, tier, radius, cx, cy }) => {
+          const isMain = tier === "main";
           const pending = replay !== null && (replay.index === 0 || event.properties.time > replay.time);
           const now = replay !== null && replay.index > 0 && event.properties.time === replay.time;
           const label = `Sismo de magnitud ${mag === null ? "desconocida" : mag.toFixed(1)}, ${clock.format(new Date(event.properties.time))}, ${event.properties.place ?? "lugar no especificado"}`;
           return (
-            <g key={event.id} className={`seq-item${isMain ? " main" : ""}${pending ? " pending" : ""}${now ? " now" : ""}${selectedId === event.id ? " selected" : ""}`}
+            <g key={event.id} className={`seq-item ${tier}${pending ? " pending" : ""}${now ? " now" : ""}${selectedId === event.id ? " selected" : ""}`}
               style={{ "--i": i } as CSSProperties} role="button" tabIndex={0} aria-label={`${label}. Ver en el mapa`}
               onClick={() => onSelect(event)} onKeyDown={key => onKey(key, event)}>
               <title>{label}</title>
               <line className="seq-stem" x1={cx} x2={cx} y1={baseY} y2={cy} pathLength={1} />
               <circle className="seq-ring" cx={cx} cy={cy} r={radius + 6} />
               <circle className="seq-dot" cx={cx} cy={cy} r={radius} />
-              <circle className="seq-hit" cx={cx} cy={cy} r={Math.max(radius + 6, 15)} />
-              {isMain && <text className="seq-label" x={cx + radius + 7} y={cy + 4}>M {mag?.toFixed(1)}</text>}
+              <circle className="seq-hit" cx={cx} cy={cy} r={tier === "low" ? 6 : tier === "mid" ? radius + 4 : radius + 6} />
+              {labeled.has(event.id) && <text className="seq-label" x={cx + radius + (isMain ? 7 : 5)} y={cy + 4}>M {mag?.toFixed(1)}</text>}
             </g>
           );
         })}
