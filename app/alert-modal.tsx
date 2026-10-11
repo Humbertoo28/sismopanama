@@ -280,7 +280,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             </div>
             {/* El valor guardado es un número (5) y React lo compara como texto con el de la opción: "5" no es igual a
                 "5.0", así que el selector volvía a mostrar "Todos" aunque la elección sí se guardaba. Los valores de
-                las opciones se escriben igual que el número: 0, 3, 4, 5. */}
+                las opciones se escriben igual que el número: 0, 3, 4, 5, 6, 7. */}
             <select
               className="mag-threshold-select"
               value={String(prefs.minMagnitude)}
@@ -290,6 +290,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
               <option value="3">Sismos perceptibles (M ≥ 3.0)</option>
               <option value="4">Moderados a fuertes (M ≥ 4.0)</option>
               <option value="5">Solo sismos mayores (M ≥ 5.0)</option>
+              <option value="6">Solo muy fuertes (M ≥ 6.0)</option>
+              <option value="7">Solo los mayores (M ≥ 7.0)</option>
             </select>
           </div>
 
