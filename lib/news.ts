@@ -6,6 +6,7 @@
 // dominio oficial de esa misma entidad por HTTPS, y la pantalla lo muestra siempre como texto (nunca como HTML).
 
 import https from "node:https";
+import { SINCE } from "./earthquakes";
 import { rootCertificates } from "node:tls";
 import { SECTIGO_DV_R36_PEM } from "./news-certs";
 
@@ -68,6 +69,8 @@ export interface OfficialNews {
   latest: NewsItem[];
   /** Fecha de la publicación más antigua de MEDUCA que se revisó: hasta dónde llega la búsqueda de avisos de clases. */
   meducaCoversSince: string | null;
+  /** Fecha del último comunicado que publicó cada entidad (de cualquier tema), para decirlo cuando no hay nada desde el 9 de octubre. */
+  lastPublished: { sinaproc: string | null; meduca: string | null };
   fetchedAt: string;
 }
 
@@ -85,7 +88,7 @@ const RETRY_DELAY_MS = 800;
 const MAX_TITLE = 200;
 const MAX_SUMMARY = 280;
 
-const SEISMIC_TITLE = /sismo|s[ií]smic|tembl|terremot|tsunami|r[eé]plica/i;
+export const SEISMIC_TITLE = /sismo|s[ií]smic|tembl|terremot|tsunami|r[eé]plica/i;
 // Avisos de clases: "suspende clases", "clases seguirán suspendidas", "se retoman las clases", "retornan a los centros educativos".
 const CLASS_WORDS = /clases|jornada|centros educativos|escuelas|colegios|aulas/i;
 const SUSPENDED = /suspend|suspens/i;
@@ -219,7 +222,7 @@ async function getPosts(source: NewsSource, params: Record<string, string | numb
 }
 
 // Un reintento corto evita que un tropiezo momentáneo de la entidad deje la sección vacía durante los 10 minutos siguientes.
-async function withRetry<T>(task: () => Promise<T>): Promise<T> {
+export async function withRetry<T>(task: () => Promise<T>): Promise<T> {
   try {
     return await task();
   } catch {
@@ -258,13 +261,19 @@ export async function fetchOfficialNews(): Promise<OfficialNews> {
   if (meduca.status === "rejected") console.error("[noticias] MEDUCA no respondió:", meduca.reason);
   if (sinaproc.status === "rejected" && meduca.status === "rejected") throw sinaproc.reason;
 
+  // Solo se muestra lo publicado desde el sismo del 9 de octubre: lo anterior es de otros eventos y confunde.
+  const sinceQuake = (items: NewsItem[]) => items.filter(item => Date.parse(item.publishedAt) >= SINCE);
   const pool = [...(sinaproc.status === "fulfilled" ? sinaproc.value.pool : []), ...(meduca.status === "fulfilled" ? meduca.value.pool : [])];
   return {
     available: { sinaproc: sinaproc.status === "fulfilled", meduca: meduca.status === "fulfilled" },
-    seismic: unique(pool.filter(item => item.sismico)).slice(0, SEISMIC_COUNT),
-    classes: unique(pool.filter(item => item.source === "meduca" && item.clases)).slice(0, CLASSES_COUNT),
-    latest: sinaproc.status === "fulfilled" ? sinaproc.value.latest : [],
+    seismic: sinceQuake(unique(pool.filter(item => item.sismico))).slice(0, SEISMIC_COUNT),
+    classes: sinceQuake(unique(pool.filter(item => item.source === "meduca" && item.clases))).slice(0, CLASSES_COUNT),
+    latest: sinaproc.status === "fulfilled" ? sinceQuake(sinaproc.value.latest) : [],
     meducaCoversSince: meduca.status === "fulfilled" ? meduca.value.coversSince : null,
+    lastPublished: {
+      sinaproc: sinaproc.status === "fulfilled" ? sinaproc.value.latest[0]?.publishedAt ?? null : null,
+      meduca: meduca.status === "fulfilled" ? meduca.value.pool[0]?.publishedAt ?? null : null,
+    },
     fetchedAt: new Date().toISOString(),
   };
 }

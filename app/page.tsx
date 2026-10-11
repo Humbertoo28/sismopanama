@@ -624,7 +624,7 @@ export default function Home() {
               </a>
               <a className="refresh-button" href="/noticias">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM9 8h6M9 12h6M9 16h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span>Noticias oficiales</span>
+                <span>Noticias</span>
               </a>
             </div>
           </section>
