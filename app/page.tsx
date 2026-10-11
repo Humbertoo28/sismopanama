@@ -422,6 +422,14 @@ export default function Home() {
     }
   };
   const chooseEvent = (event: Earthquake) => {
+    // Si algún filtro (provincia, magnitud, período, solo réplicas) deja fuera ese sismo, el mapa no tiene su marcador y
+    // "Ver en el mapa" no haría nada: se quitan los filtros para poder llevarte a él.
+    if (!mapEvents.some(item => item.id === event.id)) {
+      setProvince("all");
+      setMinimum(0);
+      setTimeRange("all");
+      setOnlyAftershocks(false);
+    }
     setSelectedId(event.id);
     setFocus({ id: event.id });
     document.getElementById("mapa")?.scrollIntoView({ behavior: "smooth", block: "start" });
