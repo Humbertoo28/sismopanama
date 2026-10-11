@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { fetchOfficialNews, SOURCES, type NewsItem, type NewsSource, type OfficialNews } from "../../lib/news";
+import { OFFICIAL_ACCOUNTS, type OfficialAccount } from "../../lib/official-accounts";
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import "./noticias.css";
@@ -48,6 +49,26 @@ function SourceDown({ source }: { source: NewsSource }) {
       No se pudo consultar a {source.name} en este momento; se intentará de nuevo en unos minutos. Puedes leerlo directamente en{" "}
       <SourceLink source={source} />.
     </p>
+  );
+}
+
+function AccountList({ accounts }: { accounts: OfficialAccount[] }) {
+  return (
+    <ul className="nw-accounts">
+      {accounts.map(account => (
+        <li key={account.id} className="nw-account">
+          <h3>{account.name}</h3>
+          <p>{account.role}</p>
+          <ul className="nw-links" aria-label={`Redes de ${account.name}`}>
+            {account.links.map(link => (
+              <li key={link.url}>
+                <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -101,6 +122,19 @@ export default async function NoticiasPage() {
           emergencia, sigue siempre las indicaciones de <SourceLink source={SINAPROC} />, de <SourceLink source={MEDUCA} /> y de las
           autoridades de tu zona.
         </aside>
+
+        <section className="nw-section" aria-labelledby="nw-accounts-title">
+          <h2 id="nw-accounts-title">Cuentas oficiales en redes</h2>
+          <p className="nw-lead">
+            Las entidades suelen avisar primero en sus redes que en su sitio web. Estas son las cuentas que cada una publica en su
+            página oficial (la del IGC se confirmó en su perfil de X). Esta página no copia lo que publican: te lleva a ellas.
+          </p>
+          <AccountList accounts={OFFICIAL_ACCOUNTS.filter(account => account.primary)} />
+          <details className="nw-more">
+            <summary>Más cuentas: educación, salud y universidades</summary>
+            <AccountList accounts={OFFICIAL_ACCOUNTS.filter(account => !account.primary)} />
+          </details>
+        </section>
 
         {news ? (
           <>

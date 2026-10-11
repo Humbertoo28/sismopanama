@@ -48,6 +48,16 @@
 .nw-item { background: var(--nw-surface); border: 1px solid var(--nw-line); border-radius: 14px; padding: 16px 18px; display: grid; gap: 8px; box-shadow: 0 2px 10px #1d2c4208; }
 .nw-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--nw-muted); font-size: 13px; }
 .nw-tag { background: var(--nw-tag-bg); color: var(--nw-tag-ink); font-weight: 800; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+.nw-accounts { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.nw-account { background: var(--nw-surface); border: 1px solid var(--nw-line); border-radius: 14px; padding: 14px 18px; display: grid; gap: 6px; box-shadow: 0 2px 10px #1d2c4208; }
+.nw-account h3 { font-size: 17px; line-height: 1.25; }
+.nw-account p { color: var(--nw-muted); font-size: 13px; }
+.nw-links { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.nw-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid #d5dce6; border-radius: 999px; background: var(--nw-surface); color: var(--nw-link); font-weight: 700; font-size: 13px; text-decoration: none; }
+.nw-links a:hover { background: #eef2f7; }
+.nw-more .nw-accounts { margin-top: 10px; }
+.nw-more > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; font-size: 14px; color: var(--nw-link); }
+.nw-more[open] > summary { margin-bottom: 4px; }
 .nw-tag-classes { background: #e8f0fc; color: #1c4f94; }
 .nw-down { background: #fff7e0; border: 1px solid #f5b100; border-radius: 12px; padding: 10px 14px; color: #3a2b00; font-size: 14px; }
 .nw-down a { color: #3a2b00; font-weight: 700; text-decoration: underline; }
