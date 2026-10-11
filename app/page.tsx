@@ -169,7 +169,7 @@ export default function Home() {
       const timeout = window.setTimeout(() => controller.abort(), 35_000);
       try {
         const response = await fetch("/api/earthquakes", {
-          signal: controller.signal, cache: "no-store",
+          signal: controller.signal,
         });
         if (!response.ok) throw new Error(`Error ${response.status}`);
         const data: EarthquakeResponse = await response.json();
@@ -249,7 +249,7 @@ export default function Home() {
     const load = async () => {
       try {
         const response = await fetch("/api/earthquakes/mainshock", {
-          signal: controller.signal, cache: "no-store",
+          signal: controller.signal,
         });
         if (!response.ok) throw new Error(`Error ${response.status}`);
         const data: MainshockResponse = await response.json();
