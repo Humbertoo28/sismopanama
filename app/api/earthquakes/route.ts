@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     // Caché corta: un sismo nuevo se ve en segundos. s-maxage hace que la red de Vercel responda a casi todas las
     // visitas sin despertar el servidor (con mucha gente conectada, esa es la diferencia entre aguantar y caerse).
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=5, s-maxage=15, stale-while-revalidate=60" },
+      headers: { "Cache-Control": "public, max-age=10, s-maxage=30, stale-while-revalidate=90" },
     });
   } catch (error) {
     console.error("Catálogos sísmicos no disponibles:", error);
