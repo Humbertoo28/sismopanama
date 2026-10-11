@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Earthquake } from "./earthquakes";
+import { locationText } from "./place-of";
 import { broadcastPush } from "./push-service";
 import { getSupabaseServerClient } from "./supabase";
 
@@ -47,7 +48,7 @@ function pushPayload(quake: Earthquake, now: number) {
     place,
     payload: {
       title: `🚨 Sismo M${mag} en Panamá`,
-      body: `${place}${minutes >= 3 ? ` · hace ${minutes} min` : ""}. Pulsa para ver mapa y recomendaciones de seguridad.`,
+      body: `${place} · ${locationText(quake)}${minutes >= 3 ? ` · hace ${minutes} min` : ""}. Pulsa para ver mapa y recomendaciones de seguridad.`,
       id: quake.id,
       magnitude: quake.properties.mag ?? 3.0,
       place,

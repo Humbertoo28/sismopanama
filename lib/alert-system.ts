@@ -1,4 +1,5 @@
 import { kmBetween, type Earthquake } from "./earthquakes";
+import { locationText, spokenWhere, whereText } from "./place-of";
 
 export type AlertPreferences = {
   notificationsEnabled: boolean;
@@ -804,6 +805,7 @@ export function getWhatsAppShareText(event: Earthquake, currentUrl: string): str
     ``,
     `🔴 *Magnitud:* M ${mag}`,
     `📍 *Lugar:* ${place}`,
+    `🗺️ *Zona:* ${whereText(event)}`,
     `🕒 *Hora:* ${time} (hora de Panamá)`,
     `📏 *Profundidad:* ${depth}`,
     event.properties.tsunami === 1 ? `⚠️ *Alerta:* Posible riesgo de tsunami (tsunami.gov)` : ``,
@@ -863,7 +865,7 @@ export async function broadcastEarthquakeAlert(
   // 2. Sirena de alarma y locución por voz en español
   const voiceMsg = isTest
     ? `Prueba de alerta sísmica en Panamá. Sirena, voz y notificaciones activas.`
-    : `Alerta sísmica en Panamá. Sismo de magnitud ${event.properties.mag === null ? "desconocida" : event.properties.mag.toFixed(1).replace(".", " coma ")}, ${spokenPlace(event.properties.place)}. Mantén la calma.`;
+    : `Alerta sísmica en Panamá. Sismo de magnitud ${event.properties.mag === null ? "desconocida" : event.properties.mag.toFixed(1).replace(".", " coma ")}, ${spokenPlace(event.properties.place)}, ${spokenWhere(event)}. Mantén la calma.`;
 
   const speak = () => {
     if (prefs.voiceEnabled) {
@@ -888,7 +890,7 @@ export async function broadcastEarthquakeAlert(
       : `🚨 ¡ALERTA SÍSMICA EN PANAMÁ! · M ${mag}`;
     const body = isTest
       ? `El sistema de alertas de sismos funciona correctamente con sonido y notificaciones.`
-      : `${place} · Profundidad: ${depth} · ${timeStr}. Mantén la calma y consulta el mapa.`;
+      : `${place} · ${locationText(event)} · Profundidad: ${depth} · ${timeStr}. Mantén la calma y consulta el mapa.`;
 
     await sendSystemNotification({
       title,

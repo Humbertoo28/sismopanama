@@ -27,7 +27,7 @@ import {
   stopAlarmSound,
   type SeenQuake,
 } from "../lib/alert-system";
-import { PLACE_BY_ID, cityMatches, placeKey, placeLabel, placeName } from "../lib/place-of";
+import { PLACE_BY_ID, cityMatches, placeKey, placeLabel, placeName, whereText } from "../lib/place-of";
 import { DISTRICTS } from "../lib/places";
 import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
@@ -517,6 +517,7 @@ export default function Home() {
               {alert.quiet && ` · hace ${agoText(Math.round((alert.key - alert.event.properties.time) / 60_000))}`}
               {alert.event.properties.tsunami === 1 && " · Riesgo potencial de tsunami (tsunami.gov)"}
             </div>
+            <div className="live-toast-where">📍 {whereText(alert.event)}</div>
           </div>
           <div className="live-toast-actions">
             <button

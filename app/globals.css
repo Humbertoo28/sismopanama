@@ -222,3 +222,4 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .seq-scope{font-weight:600;color:#da121a}.province-outline{stroke-linejoin:round}
 .leaflet-tooltip.place-label{background:#072357;border:0;border-radius:6px;box-shadow:0 2px 8px #0a1a3366;color:#fff;font:700 11px "DM Sans",sans-serif;padding:3px 8px}.leaflet-tooltip-right.place-label:before{border-right-color:#072357}
 .replay-button:disabled:not(.stop){cursor:not-allowed}
+.live-toast-where{margin-top:3px;font-size:11.5px;font-weight:700;color:#ff8a92}

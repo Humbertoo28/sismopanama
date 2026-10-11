@@ -1,7 +1,7 @@
 import type { Earthquake } from "./earthquakes";
 import { MAX_REFERENCE_KM, nearestIn, resolveReference } from "./place-reference";
 import { PLACES, type Place } from "./places";
-import { PROVINCE_BY_ID, provinceOfEvent } from "./province-of";
+import { PROVINCE_BY_ID, provinceLabel, provinceOfEvent } from "./province-of";
 
 // A qué ciudad o localidad pertenece un sismo (cabeceras de corregimiento, distrito y provincia de GeoNames): la que cita
 // su propia etiqueta y, si no cita ninguna, la más cercana dentro de su provincia (ver placeOfEvent).
@@ -59,4 +59,26 @@ export function districtKey(event: Earthquake) {
 export function cityMatches(event: Earthquake, city: string) {
   if (city === "all") return true;
   return city.startsWith("d:") ? districtKey(event) === city.slice(2) : placeKey(event) === city;
+}
+
+/** Provincia y ciudad, para mostrar tal cual: "Los Santos · Tonosí". */
+export function whereText(event: Earthquake) {
+  const match = placeOfEvent(event);
+  return match ? `${provinceLabel(event)} · ${placeName(match.place)}` : provinceLabel(event);
+}
+
+/** Para textos que ya citan la ciudad (el título del sismo): la provincia y, solo si el título no cita ninguna, "cerca de X". */
+export function locationText(event: Earthquake) {
+  const match = placeOfEvent(event);
+  return !match || resolveReference(event) ? provinceLabel(event) : `${provinceLabel(event)} · cerca de ${placeName(match.place)}`;
+}
+
+/** Lo mismo pensado para leerse en voz alta: "provincia de Los Santos", "en el mar frente a Veraguas, cerca de Tonosí". */
+export function spokenWhere(event: Earthquake) {
+  const province = provinceOfEvent(event);
+  const near = placeOfEvent(event);
+  const city = !near || resolveReference(event) ? "" : `, cerca de ${near.place.name}`;
+  if (!province) return `en el mar, lejos de la costa${city}`;
+  if (province.offshore) return `en el mar frente a ${province.name}${city}`;
+  return `${PROVINCE_BY_ID.get(province.id)?.kind === "comarca" ? "comarca" : "provincia de"} ${province.name}${city}`;
 }
