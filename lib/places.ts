@@ -24,6 +24,7 @@ export const DISTRICTS: Record<string, District> = {
   "0305": {"name": "Santa Isabel", "lat": 9.51, "lng": -79.322},
   "0306": {"name": "Omar Torrijos Herrera", "lat": 8.862, "lng": -80.601},
   "0401": {"name": "Alanje", "lat": 8.386, "lng": -82.619},
+  "x-coiba": {"name": "Coiba", "lat": 7.503, "lng": -81.695},
   "0402": {"name": "Barú", "lat": 8.345, "lng": -82.888},
   "0403": {"name": "Boquerón", "lat": 8.617, "lng": -82.567},
   "0404": {"name": "Boquete", "lat": 8.757, "lng": -82.417},
@@ -642,6 +643,9 @@ const ROWS: [string, string, number, number, string, string][] = [
   ["10348681", "Guayabito", 8.54, -81.482, "veraguas", "1205"],
   ["10348668", "Güibale", 8.514, -81.359, "veraguas", "1205"],
   ["10348671", "Paredón Arriba", 8.455, -81.194, "veraguas", "1205"],
+  ["x-coiba", "Coiba", 7.503, -81.695, "veraguas", "x-coiba"],
+  ["3703239", "Pedasí", 7.53, -80.027, "los-santos", "0705"],
+  ["3713114", "Paso Canoas", 8.535, -82.837, "chiriqui", "0402"],
 ];
 
 export const PLACES: Place[] = ROWS.map(([id, name, lat, lng, province, district]) => ({ id, name, lat, lng, province, district }));

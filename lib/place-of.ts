@@ -1,12 +1,11 @@
 import type { Earthquake } from "./earthquakes";
+import { MAX_REFERENCE_KM, nearestIn, resolveReference } from "./place-reference";
 import { PLACES, type Place } from "./places";
 import { PROVINCE_BY_ID, provinceOfEvent } from "./province-of";
 
-// A qué ciudad o localidad queda más cerca un sismo (cabeceras de corregimiento, distrito y provincia de GeoNames), como
-// hace el USGS en su etiqueta. Si el sismo cae en una provincia, se busca solo entre las localidades de esa provincia:
-// así la lista de ciudades de cada provincia es coherente con el filtro de provincia.
+// A qué ciudad o localidad pertenece un sismo (cabeceras de corregimiento, distrito y provincia de GeoNames): la que cita
+// su propia etiqueta y, si no cita ninguna, la más cercana dentro de su provincia (ver placeOfEvent).
 export const PLACE_BY_ID = new Map<string, Place>(PLACES.map(place => [place.id, place]));
-const MAX_KM = 150;
 
 const nameCount = new Map<string, number>();
 const byProvince = new Map<string, Place[]>();
@@ -20,32 +19,22 @@ export function placeName(place: Place) {
   return (nameCount.get(place.name) ?? 0) > 1 ? `${place.name} (${PROVINCE_BY_ID.get(place.province)?.name ?? "?"})` : place.name;
 }
 
-function nearestIn(list: Place[], lat: number, lng: number) {
-  const kx = Math.cos((lat * Math.PI) / 180) * 111.32;
-  const ky = 110.57;
-  let best: Place | null = null;
-  let bestKm = Infinity;
-  for (const place of list) {
-    const km = Math.hypot((place.lng - lng) * kx, (place.lat - lat) * ky);
-    if (km < bestKm) {
-      bestKm = km;
-      best = place;
-    }
-  }
-  return best ? { place: best, km: bestKm } : null;
-}
-
 export type PlaceMatch = { place: Place; km: number } | null;
 
-// Cada consulta trae de nuevo todos los sismos: se recuerda el resultado por posición.
+// La ciudad del sismo es el lugar que cita su propio título, para que el filtro coincida con lo que se lee en la lista (el
+// IGC usa pocas ciudades grandes: Tonosí, Soná, Coiba, Santiago…, por eso "Tonosí" reúne tantos sismos). Si el título no cita
+// ninguno (EMSC solo da coordenadas), se usa la localidad más cercana dentro de la provincia del sismo.
 const cache = new Map<string, PlaceMatch>();
 export function placeOfEvent(event: Earthquake): PlaceMatch {
   const [lng, lat] = event.geometry.coordinates;
-  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)}|${event.properties.place ?? ""}`;
   if (!cache.has(key)) {
-    const province = provinceOfEvent(event);
-    const found = nearestIn((province && byProvince.get(province.id)) || PLACES, lat, lng);
-    cache.set(key, found && found.km <= MAX_KM ? found : null);
+    let found: PlaceMatch = resolveReference(event);
+    if (!found) {
+      const province = provinceOfEvent(event);
+      found = nearestIn((province && byProvince.get(province.id)) || PLACES, lat, lng);
+    }
+    cache.set(key, found && found.km <= MAX_REFERENCE_KM ? found : null);
   }
   return cache.get(key) ?? null;
 }

@@ -1,4 +1,5 @@
 import type { Earthquake } from "./earthquakes";
+import { resolveReference } from "./place-reference";
 import { PROVINCES, type Province } from "./provinces";
 
 // A qué provincia o comarca pertenece un sismo, según sus coordenadas. Muchas réplicas caen en el mar frente a la
@@ -56,12 +57,22 @@ export function provinceOf(lat: number, lng: number): ProvinceMatch {
   return nearest && nearestKm <= NEAR_KM ? { id: nearest.id, name: nearest.name, offshore: true } : null;
 }
 
-// Cada consulta trae de nuevo todos los sismos: se recuerda el resultado por posición.
+// Cada consulta trae de nuevo todos los sismos: se recuerda el resultado por posición y título.
 const cache = new Map<string, ProvinceMatch>();
 export function provinceOfEvent(event: Earthquake): ProvinceMatch {
   const [lng, lat] = event.geometry.coordinates;
-  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-  if (!cache.has(key)) cache.set(key, provinceOf(lat, lng));
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)}|${event.properties.place ?? ""}`;
+  if (!cache.has(key)) {
+    let match = provinceOf(lat, lng);
+    // Un sismo en el mar queda en la provincia de la ciudad que cita su título ("al sur de Tonosí" = Los Santos), y no en la
+    // costa más cercana, para que la ciudad siempre quede dentro de su provincia en los filtros.
+    if (!match || match.offshore) {
+      const reference = resolveReference(event);
+      const province = reference ? PROVINCE_BY_ID.get(reference.place.province) : undefined;
+      if (province) match = { id: province.id, name: province.name, offshore: true };
+    }
+    cache.set(key, match);
+  }
   return cache.get(key) ?? null;
 }
 
