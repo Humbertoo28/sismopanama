@@ -226,7 +226,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       const marker = L.marker([lat, lng], {
         icon,
         zIndexOffset: isLatest ? 1200 : (isMain ? 800 : 0),
-        title: `${isLatest ? "Último sismo - " : isMain ? "Sismo principal - " : ""}M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
+        title: `${isLatest ? (mainshock && isAftershock(event, mainshock) ? "Última réplica - " : "Último sismo - ") : isMain ? "Sismo principal - " : ""}M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
       }).addTo(layer);
       const popup = document.createElement("div");
       if (isLatest) {

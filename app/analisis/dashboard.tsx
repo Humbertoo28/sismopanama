@@ -258,10 +258,10 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
             </div>
 
             <section className="an-kpis" aria-label="Resumen">
-              <Kpi label="Sismos" value={fmtInt.format(shown.length)} sub={`de ${fmtInt.format(inSequence)} desde el sismo principal`} />
-              <Kpi label="Último sismo" value={latest ? `M ${latest.mag.toFixed(1)}` : "—"} sub={latest ? ago(now - latest.time) : "Sin datos"} badge={latest && isFresh(latest.id) ? "NUEVO" : undefined} />
-              <Kpi label="Mayor magnitud" value={strongest ? `M ${strongest.mag.toFixed(1)}` : "—"} sub={strongest ? ago(now - strongest.time) : "Sin datos"} />
-              <Kpi label="Últimas 3 horas" value={fmtInt.format(recent3h)} sub={`sismos registrados (${(recent3h / 3).toFixed(1)} por hora)`} />
+              <Kpi label="Total réplicas" value={fmtInt.format(shown.length)} sub={`de ${fmtInt.format(inSequence)} desde el sismo principal`} />
+              <Kpi label="Última réplica" value={latest ? `M ${latest.mag.toFixed(1)}` : "—"} sub={latest ? ago(now - latest.time) : "Sin datos"} badge={latest && isFresh(latest.id) ? "NUEVA" : undefined} />
+              <Kpi label="Mayor réplica" value={strongest ? `M ${strongest.mag.toFixed(1)}` : "—"} sub={strongest ? ago(now - strongest.time) : "Sin datos"} />
+              <Kpi label="Últimas 3 horas" value={fmtInt.format(recent3h)} sub={`réplicas registradas (${(recent3h / 3).toFixed(1)} por hora)`} />
               <Kpi label="Profundidad mediana" value={medianDepth === null ? "—" : `${Math.round(medianDepth)} km`} sub={`${fmtInt.format(depths.length)} con dato`} />
             </section>
 
