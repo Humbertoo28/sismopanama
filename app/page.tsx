@@ -93,6 +93,7 @@ function agoText(minutes: number) {
 
 export default function Home() {
   const [minimum, setMinimum] = useState(0);
+  const [timeRange, setTimeRange] = useState<"all" | "24h" | "6h">("all");
   const [allEvents, setAllEvents] = useState<Earthquake[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
@@ -333,10 +334,21 @@ export default function Home() {
 
   const main = mainshock?.mainshock ?? null;
   const events = useMemo(
-    () => allEvents.filter(event =>
-      (event.properties.mag === null ? minimum === 0 : event.properties.mag >= minimum) &&
-      (!onlyAftershocks || !main || isAftershock(event, main))),
-    [allEvents, minimum, onlyAftershocks, main],
+    () => {
+      const now = Date.now();
+      return allEvents.filter(event => {
+        const magOk = event.properties.mag === null ? minimum === 0 : event.properties.mag >= minimum;
+        const afterOk = !onlyAftershocks || !main || isAftershock(event, main);
+        const timeOk =
+          timeRange === "all"
+            ? true
+            : timeRange === "24h"
+            ? now - event.properties.time <= 24 * 3_600_000
+            : now - event.properties.time <= 6 * 3_600_000;
+        return magOk && afterOk && timeOk;
+      });
+    },
+    [allEvents, minimum, onlyAftershocks, main, timeRange],
   );
   const listEvents = useMemo(
     () => sort === "magnitude" ? [...events].sort((a, b) => (b.properties.mag ?? -10) - (a.properties.mag ?? -10)) : events,
@@ -667,7 +679,7 @@ export default function Home() {
           </section>
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
-            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="2.5">M 2.5+</option><option value="4.5">M 4.5+</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && <button type="button" className="replay-button" onClick={() => setReplayKey(key => key + 1)} disabled={replay !== null}>{replay ? "Reproduciendo…" : "▶ Reproducir secuencia"}</button>}</div></div>
+            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3.0">M 3.0+ (Perceptibles)</option><option value="3.5">M 3.5+</option><option value="4.0">M 4.0+</option><option value="5.0">M 5.0+ (Fuertes)</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 horas</option><option value="6h">Últimas 6 horas</option></select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && <button type="button" className="replay-button" onClick={() => setReplayKey(key => key + 1)} disabled={replay !== null}>{replay ? "Reproduciendo…" : "▶ Reproducir secuencia"}</button>}</div></div>
             <div className="map-card">
               <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>{main && <><div><i className="legend-circle main" /> Sismo principal</div><div><i className="legend-circle after" /> Réplica</div></>}</div></div>
               <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div></div><a className="featured-link" href={reportUrl(featured)} target="_blank" rel="noopener noreferrer">{`Ver en ${SOURCE_NAMES[featured?.properties.source ?? "usgs"]}`} <span aria-hidden="true">↗</span></a></div>

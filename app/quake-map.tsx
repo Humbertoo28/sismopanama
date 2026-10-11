@@ -208,24 +208,54 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, o
       const mag = event.properties.mag;
       const isLatest = event.id === latestEvent?.id;
       const isMain = event.id === mainshock?.id;
+
+      const ageHours = (now - event.properties.time) / 3_600_000;
+      const isVeryRecent = ageHours <= 3;
+      const isRecent12h = ageHours <= 12;
+      const isAged = ageHours > 24;
+
+      // Escala de tamaños balanceada: las réplicas viejas son pequeños puntos sutiles
+      let baseSize = 8;
+      const m = mag ?? 0;
+      if (m >= 6.0) baseSize = 22;
+      else if (m >= 5.0) baseSize = 16;
+      else if (m >= 4.0) baseSize = 12;
+      else if (m >= 3.0) baseSize = 9;
+      else baseSize = 7;
+
       const size = isLatest
-        ? Math.max(34, Math.min(46, 22 + (mag ?? 0) * 3.4))
+        ? 30
         : isMain
-        ? 34
-        : Math.max(12, Math.min(34, 11 + (mag ?? 0) * 3.4));
+        ? 32
+        : isVeryRecent
+        ? baseSize + 3
+        : baseSize;
+
       const kind = isLatest ? " latest" : isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
-      const recent = !isMain && !isLatest && now - event.properties.time < RECENT_MS ? " recent" : "";
+      const ageClass = isVeryRecent ? " recent-3h" : isRecent12h ? " recent-12h" : isAged ? " aged" : "";
+      const recent = !isMain && !isLatest && isVeryRecent ? " recent" : "";
       const highlight = fresh.current?.id === event.id && now < fresh.current.until ? " fresh" : "";
       const hiddenByReplay = replayHidden.current?.has(event.id) ? " replay-hidden" : "";
       const hasRipples = isLatest || (isMain && !latestEvent);
+
+      const zIndex = isLatest
+        ? 1500
+        : isMain
+        ? 1400
+        : isVeryRecent
+        ? 800 + Math.round(m * 20)
+        : isRecent12h
+        ? 400 + Math.round(m * 10)
+        : 50 + Math.round(m * 5);
+
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
+        html: `<span class="quake-marker${(mag ?? 0) >= 5 ? " high" : ""}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const marker = L.marker([lat, lng], {
         icon,
-        zIndexOffset: isLatest ? 1200 : (isMain ? 800 : 0),
+        zIndexOffset: zIndex,
         title: `${isLatest ? (mainshock && isAftershock(event, mainshock) ? "Última réplica - " : "Último sismo - ") : isMain ? "Sismo principal - " : ""}M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
       }).addTo(layer);
       const popup = document.createElement("div");
