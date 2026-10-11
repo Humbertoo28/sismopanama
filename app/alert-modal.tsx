@@ -1,7 +1,7 @@
 "use client";
 
 import { SITE_URL } from "../lib/site";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Earthquake } from "../lib/earthquakes";
 import {
   broadcastEarthquakeAlert,
@@ -42,6 +42,45 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
         setIsPushSubscribed(Boolean(sub));
       });
     }
+  }, [isOpen]);
+
+  // Teclado y lectores de pantalla: al abrirse el foco entra en la ventana, Escape la cierra, Tab no se escapa de ella y al
+  // cerrarse el foco vuelve al botón que la abrió. onClose se guarda en una ref para no reenfocar en cada render.
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const card = () => document.querySelector<HTMLElement>(".alert-modal-card");
+    const focusable = () =>
+      [...(card()?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select, input:not([disabled]), summary') ?? [])].filter(el => el.offsetParent !== null);
+    const timer = window.setTimeout(() => (card()?.querySelector<HTMLElement>(".alert-modal-close") ?? card())?.focus(), 0);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        stopAlarmSound();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("keydown", onKey);
+      opener?.focus?.();
+    };
   }, [isOpen]);
 
   const updatePref = <K extends keyof AlertPreferences>(key: K, value: AlertPreferences[K]) => {
@@ -127,7 +166,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
 
   return (
     <div className="alert-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="alert-modal-title">
-      <div className="alert-modal-card">
+      <div className="alert-modal-card" tabIndex={-1}>
         <header className="alert-modal-header">
           <div className="alert-modal-title-box">
             <span className="alert-bell-icon" aria-hidden="true">🔔</span>
@@ -159,6 +198,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 <input
                   type="checkbox"
                   checked={prefs.notificationsEnabled}
+                  aria-label="Notificaciones en pantalla"
                   onChange={e => updatePref("notificationsEnabled", e.target.checked)}
                 />
                 <span className="toggle-slider" />
@@ -180,7 +220,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             <div className="alert-setting-info">
               <strong style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span>📲</span> Alertas con la app cerrada
-                <span style={{ fontSize: "10px", background: "#0284c7", color: "#fff", padding: "2px 6px", borderRadius: "4px", fontWeight: "700" }}>24/7</span>
+                <span style={{ fontSize: "10px", background: "#0369a1", color: "#fff", padding: "2px 6px", borderRadius: "4px", fontWeight: "700" }}>24/7</span>
               </strong>
               <span>
                 Recibe avisos aunque no tengas la página web abierta.
@@ -203,7 +243,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 type="button"
                 className="perm-req-btn"
                 style={{
-                  background: isPushSubscribed ? "#047857" : "#0284c7",
+                  background: isPushSubscribed ? "#047857" : "#0369a1",
                   fontSize: "11px",
                   padding: "8px 12px",
                   whiteSpace: "nowrap",
@@ -250,7 +290,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
               <input
                 type="checkbox"
                 checked={prefs.soundEnabled}
-                onChange={e => updatePref("soundEnabled", e.target.checked)}
+                aria-label="Sirena de alarma"
+                  onChange={e => updatePref("soundEnabled", e.target.checked)}
               />
               <span className="toggle-slider" />
             </label>
@@ -266,7 +307,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
               <input
                 type="checkbox"
                 checked={prefs.voiceEnabled}
-                onChange={e => updatePref("voiceEnabled", e.target.checked)}
+                aria-label="Voz en español"
+                  onChange={e => updatePref("voiceEnabled", e.target.checked)}
               />
               <span className="toggle-slider" />
             </label>
@@ -283,6 +325,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 las opciones se escriben igual que el número: 0, 3, 4, 5, 6, 7. */}
             <select
               className="mag-threshold-select"
+              aria-label="Magnitud mínima para avisarme"
               value={String(prefs.minMagnitude)}
               onChange={e => updatePref("minMagnitude", Number(e.target.value))}
             >

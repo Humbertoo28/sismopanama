@@ -29,6 +29,7 @@ import {
 } from "../lib/alert-system";
 import { PLACE_BY_ID, cityMatches, placeKey, placeLabel, placeName, whereText } from "../lib/place-of";
 import { DISTRICTS } from "../lib/places";
+import { setLatestQuake } from "../lib/latest-quake";
 import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
 import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
@@ -436,6 +437,8 @@ export default function Home() {
   const replayScope = selectedPlace?.name ?? provinceName;
   // Con una provincia elegida, la tarjeta muestra el último sismo de esa provincia y no el último de todo el país.
   const featured = mapEvents.find(event => event.id === selectedId) ?? (province === "all" ? newest ?? latest : latest);
+  // El panel de accesibilidad lee en voz alta el último sismo registrado.
+  useEffect(() => { setLatestQuake(newest); }, [newest]);
   const [recentValue, recentUnit] = latest ? elapsed(latest.properties.time) : ["—", ""];
   const [mainValue, mainUnit] = main ? elapsed(main.properties.time) : ["—", ""];
   const hero = newest ?? main;
@@ -486,9 +489,9 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Navegación principal">
-        <a className="brand" href="#inicio" aria-label="Sismo Panamá, inicio">
+        <a className="brand" href="#inicio" aria-label="SISMO PANAMÁ, inicio">
           <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
-          <span><strong>SISMO</strong><small>PANAMÁ</small></span>
+          <span><strong>SISMO</strong>{" "}<small>PANAMÁ</small></span>
         </a>
         <div className="side-label">EXPLORAR</div>
         <nav className="side-nav">
@@ -565,9 +568,9 @@ export default function Home() {
 
       <main id="inicio" className="main-content">
         <header className="topbar">
-          <a className="brand topbar-brand" href="#inicio" aria-label="Sismo Panamá, inicio">
+          <a className="brand topbar-brand" href="#inicio" aria-label="SISMO PANAMÁ, inicio">
             <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
-            <span><strong>SISMO</strong><small>PANAMÁ</small></span>
+            <span><strong>SISMO</strong>{" "}<small>PANAMÁ</small></span>
           </a>
           <div className="breadcrumb">INICIO <span>/</span> PANEL GENERAL</div>
           <div className="topbar-right">
@@ -707,10 +710,10 @@ export default function Home() {
                   </div>
                   <dl className="mainshock-stats">
                     <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
-                    {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
-                    {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}</dd><small>estimada por el USGS</small></div>}
-                    {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
-                    <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
+                    {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span><small>impacto estimado (USGS)</small></dd></div>}
+                    {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}<small>estimada por el USGS</small></dd></div>}
+                    {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></dd></div>}
+                    <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></dd></div>
                   </dl>
                   {main.properties.tsunami === 1 && (
                     <p className="mainshock-warning" role="alert">
@@ -728,10 +731,10 @@ export default function Home() {
               {!hasDistinctMain && main && mainshock && (
                 <dl className="mainshock-stats">
                   <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
-                  {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span></dd><small>impacto estimado (USGS)</small></div>}
-                  {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}</dd><small>estimada por el USGS</small></div>}
-                  {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /></dd><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></div>}
-                  <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /></dd><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></div>
+                  {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span><small>impacto estimado (USGS)</small></dd></div>}
+                  {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}<small>estimada por el USGS</small></dd></div>}
+                  {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></dd></div>}
+                  <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></dd></div>
                 </dl>
               )}
 

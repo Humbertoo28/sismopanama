@@ -1,6 +1,8 @@
 import { shakeFor } from "../lib/earthquakes";
 
-export const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Movimiento reducido: lo pide el sistema o el interruptor "Reducir animaciones" del panel de accesibilidad.
+export const reducedMotion = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.a11yMotion === "reduce";
 
 // Chrome bloquea vibrate (y lo registra como error) si el usuario aún no ha tocado la página.
 export function vibrate(ms: number) {

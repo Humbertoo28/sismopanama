@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Accessibility, { SkipLink } from "./accessibility";
 import SampledAnalytics from "./sampled-analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
 import { SiteStructuredData } from "./structured-data";
@@ -6,6 +7,7 @@ import "./leaflet.css";
 import "./fonts.css";
 import "./globals.css";
 import "./responsive.css";
+import "./accessibility.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -42,7 +44,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es-PA">
+    <html lang="es-PA" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -53,9 +55,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <SiteStructuredData />
+        {/* Aplica las opciones de accesibilidad guardadas antes de pintar la página (ver accessibility.tsx). Texto fijo. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var s=JSON.parse(localStorage.getItem("sismo_panama_a11y_v1")||"null");if(s){var r=document.documentElement;if(s.scale)r.style.setProperty("--ts",String(s.scale));if(s.contrast)r.dataset.a11yContrast="high";if(s.motion)r.dataset.a11yMotion="reduce";if(s.links)r.dataset.a11yLinks="underline";if(s.spacing)r.dataset.a11ySpacing="wide"}}catch(e){}`,
+          }}
+        />
       </head>
       <body>
+        <SkipLink />
         {children}
+        <Accessibility />
         {/* Estadísticas de visitas de Vercel: sin cookies y sin enlaces. Solo se ven en el panel privado de Vercel.
             Es una muestra del 10 % de las visitas (cada evento se cobra); ver sampled-analytics.tsx. */}
         <SampledAnalytics />

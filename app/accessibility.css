@@ -1,0 +1,71 @@
+/* Accesibilidad: enlace para saltar al contenido, anillo de foco visible, panel de opciones y los modos que activan. Los
+   tamaños usan calc(Npx * var(--ts, 1)): --ts es el tamaño de texto que elige la persona (1, 1.15 o 1.3). */
+
+.skip-link{position:fixed;left:12px;top:-80px;z-index:3000;padding:12px 18px;border-radius:10px;background:#0a1a33;color:#fff;font:700 calc(14px*var(--ts,1)) "DM Sans",sans-serif;text-decoration:none;box-shadow:0 6px 24px #0009;transition:top .15s}
+.skip-link:focus{top:12px}
+main:focus{outline:none}
+
+/* Foco del teclado: anillo oscuro pegado al elemento y aro ámbar por fuera, visible sobre fondos claros y oscuros. */
+:where(a,button,select,input,summary,textarea,[tabindex]):focus-visible{outline:2px solid #0b1f3b;outline-offset:2px;box-shadow:0 0 0 5px #ffbf47}
+
+/* Botón flotante y panel */
+.a11y-fab{position:fixed;right:18px;bottom:18px;z-index:1700;display:flex;align-items:center;gap:8px;min-height:48px;padding:0 18px 0 14px;border:2px solid #fff;border-radius:100px;background:#0a3a8c;color:#fff;font:700 calc(13px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer;box-shadow:0 8px 24px #072357aa}
+.a11y-fab:hover{background:#0d4aae}
+.a11y-panel{position:fixed;right:18px;bottom:78px;z-index:1701;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;padding:16px;border:1px solid #cfd8e3;border-radius:16px;background:#fff;color:#17253c;box-shadow:0 18px 50px #0a1a3340;font-family:"DM Sans",sans-serif}
+.a11y-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.a11y-head strong{font:700 calc(16px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif}
+.a11y-close{width:40px;height:40px;border:0;border-radius:10px;background:#eef2f7;color:#17253c;font-size:calc(16px*var(--ts,1));cursor:pointer}
+.a11y-group{margin:6px 0 10px}
+.a11y-label{display:block;margin-bottom:6px;font-size:calc(12.5px*var(--ts,1));font-weight:700;color:#3a4658}
+.a11y-scales{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.a11y-scales button{min-height:46px;border:2px solid #cfd8e3;border-radius:10px;background:#fff;color:#17253c;font:700 calc(15px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer}
+.a11y-scales button.on{border-color:#0a3a8c;background:#e8eefa;color:#0a3a8c}
+.a11y-switch{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:56px;margin:0 0 8px;padding:8px 12px;border:1px solid #dbe3ec;border-radius:12px;background:#f6f8fa;color:#17253c;text-align:left;font-family:inherit;cursor:pointer}
+.a11y-switch-text{display:grid;gap:2px;min-width:0}
+.a11y-switch-text strong{font-size:calc(13.5px*var(--ts,1));font-weight:700}
+.a11y-switch-text small{font-size:calc(11.5px*var(--ts,1));color:#4a5568;line-height:1.35}
+.a11y-track{position:relative;flex:none;width:46px;height:26px;border-radius:100px;background:#8a95a5;transition:background .15s}
+.a11y-track i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s}
+.a11y-switch[aria-checked="true"] .a11y-track{background:#0a3a8c}
+.a11y-switch[aria-checked="true"] .a11y-track i{transform:translateX(20px)}
+.a11y-action{width:100%;min-height:48px;margin:2px 0 8px;border:0;border-radius:12px;background:#0a3a8c;color:#fff;font:700 calc(14px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer}
+.a11y-action:disabled{background:#8a95a5;cursor:not-allowed}
+.a11y-note{margin:0 0 8px;font-size:calc(11.5px*var(--ts,1));color:#4a5568}
+.a11y-reset{width:100%;min-height:44px;border:1px solid #cfd8e3;border-radius:12px;background:#fff;color:#17253c;font:700 calc(13px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer}
+@media(max-width:700px){
+  .a11y-fab{right:12px;bottom:calc(84px + env(safe-area-inset-bottom));width:52px;height:52px;padding:0;justify-content:center}
+  .a11y-fab span{display:none}
+  .a11y-panel{right:12px;left:12px;width:auto;bottom:calc(146px + env(safe-area-inset-bottom));max-height:calc(100dvh - 170px - env(safe-area-inset-bottom))}
+}
+
+/* Reducir animaciones (además de lo que ya pide el dispositivo) */
+html[data-a11y-motion="reduce"] *,html[data-a11y-motion="reduce"] *:before,html[data-a11y-motion="reduce"] *:after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+html[data-a11y-motion="reduce"] body:before{display:none}
+
+/* Subrayar enlaces */
+html[data-a11y-links="underline"] a{text-decoration:underline!important;text-underline-offset:3px}
+
+/* Más espacio en el texto */
+html[data-a11y-spacing="wide"] body{line-height:1.75;letter-spacing:.02em;word-spacing:.1em}
+html[data-a11y-spacing="wide"] :is(p,li,small,dd,dt,span,label,strong){line-height:1.7}
+
+/* Alto contraste: textos grises muy oscuros sobre fondo claro, blancos sobre fondo azul, bordes marcados */
+html[data-a11y-contrast="high"] :is(.page-intro p,.status-left span,.metric-top,.metric-main>span,.metric-card p,.segmented button,.magnitude-filter,.map-legend,.map-legend>span,.aside-top,.featured-details span,.map-caption,.results-count,.event-text small,.event-time small,.event-time strong,.empty-state,footer,footer a,.popup-meta,.alert-modal-close,.seq-hours-head,.seq-hour-max,.check-list label.checked .check-text strong,.sequence-note,.alert-setting-info span,.breadcrumb,.local-time,.a11y-switch-text small,.a11y-note){color:#10151c!important}
+html[data-a11y-contrast="high"] :is(.side-nav a,.side-label,.side-bottom p,.brand small,.prepared-card p,.prepared-steps small,.mainshock-title p,.mainshock-stats dt,.mainshock-stats small,.mainshock-note,.principal-info small,.live-toast-desc,.toast-close){color:#fff!important}
+html[data-a11y-contrast="high"] :is(.metric-card,.events-card,.map-card,.sequence-card,.event-row,.magnitude-filter,.aftershock-toggle,.replay-button,.segmented,.guide-card,.check-card,.emergency-card,.sources-card){border-color:#3b4756!important}
+html[data-a11y-contrast="high"] .event-row{border-top:1px solid #6b7686!important}
+html[data-a11y-contrast="high"] .seq-hour{border-color:#6b7686}
+html[data-a11y-contrast="high"] .seq-hour-track{background:#c4ccd7}
+html[data-a11y-contrast="high"] :is(.a11y-panel,.a11y-switch,.a11y-scales button,.a11y-reset){border-color:#3b4756}
+
+/* Con texto grande, lo que en el celular iba en una sola línea se acomoda en varias y la barra inferior no crece más de lo
+   que cabe: sin esto, un contador o una etiqueta ensanchaban toda la página. */
+@media(max-width:700px){
+  .events-tools{flex-wrap:wrap}
+  .results-count{white-space:normal;text-align:center}
+  .side-nav a,.side-nav a.active,.side-nav a:not(.active){font-size:calc(10px*min(var(--ts,1),1.12))}
+  .nav-label-short{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+}
+
+/* Texto solo para lectores de pantalla */
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Earthquake, ReplayStep } from "../lib/earthquakes";
 import { reducedMotion, shakeElement } from "./shake";
 
@@ -101,9 +101,10 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
       </div>
       {mode === "hours" ? (
         <div className="seq-hours" aria-label="Réplicas por bloque de horas desde el sismo principal">
-          <button type="button" className="seq-hour-main" onClick={() => onSelect(mainshock)} aria-label={`Sismo principal, magnitud ${mainshock.properties.mag?.toFixed(1) ?? "desconocida"}, ${clock.format(new Date(start))}. Ver en el mapa`}>
-            <b>M {mainshock.properties.mag?.toFixed(1) ?? "—"}</b><span>Sismo principal · {clock.format(new Date(start))}</span>
+          <button type="button" className="seq-hour-main" onClick={() => onSelect(mainshock)} aria-describedby="seq-main-desc">
+            <b>M {mainshock.properties.mag?.toFixed(1) ?? "—"}</b>{" "}<span>Sismo principal · {clock.format(new Date(start))}</span>
           </button>
+          <span id="seq-main-desc" className="sr-only">Ver el sismo principal en el mapa</span>
           <div className="seq-hours-head" aria-hidden="true"><span>Horas</span><span>Réplicas</span><span /><span>Más fuerte</span></div>
           {rows.map(row => {
             const top = row.events.reduce<Earthquake | null>((best, event) => (best === null || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
@@ -112,13 +113,16 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
             const from = row.n * binHours;
             const active = selectedId !== null && row.events.some(event => event.id === selectedId);
             return (
-              <button key={row.n} type="button" className={`seq-hour${active ? " selected" : ""}`} disabled={top === null} onClick={() => top && onSelect(top)}
-                aria-label={`De ${from} a ${from + binHours} horas después del sismo principal: ${row.events.length} ${row.events.length === 1 ? "réplica" : "réplicas"}${topMag === null ? "" : `, la más fuerte de magnitud ${topMag.toFixed(1)}. Ver en el mapa`}`}>
+              <Fragment key={row.n}>
+              <button type="button" className={`seq-hour${active ? " selected" : ""}`} disabled={top === null} onClick={() => top && onSelect(top)}
+                aria-describedby={`seq-hour-desc-${row.n}`}>
                 <span className="seq-hour-range">{from}–{from + binHours} h</span>
                 <span className="seq-hour-track"><i className={tier} style={{ width: `${(row.events.length / peak) * 100}%` }} /></span>
                 <span className="seq-hour-count">{row.events.length}</span>
                 <span className={`seq-hour-max ${tier}`}>{topMag === null ? "—" : `M ${topMag.toFixed(1)}`}</span>
               </button>
+              <span id={`seq-hour-desc-${row.n}`} className="sr-only">{`De ${from} a ${from + binHours} horas después del sismo principal: ${row.events.length} ${row.events.length === 1 ? "réplica" : "réplicas"}${topMag === null ? "" : `, la más fuerte de magnitud ${topMag.toFixed(1)}. Ver en el mapa`}`}</span>
+              </Fragment>
             );
           })}
         </div>
@@ -141,9 +145,11 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
           const label = `Sismo de magnitud ${mag === null ? "desconocida" : mag.toFixed(1)}, ${clock.format(new Date(event.properties.time))}, ${event.properties.place ?? "lugar no especificado"}`;
           return (
             <g key={event.id} className={`seq-item ${tier}${pending ? " pending" : ""}${now ? " now" : ""}${selectedId === event.id ? " selected" : ""}`}
-              style={{ "--i": i } as CSSProperties} role="button" tabIndex={0} aria-label={`${label}. Ver en el mapa`}
+              style={{ "--i": i } as CSSProperties} role="button" tabIndex={0} aria-label={`${label}${labeled.has(event.id) ? ` M ${mag?.toFixed(1)}` : ""}. Ver en el mapa`}
               onClick={() => onSelect(event)} onKeyDown={key => onKey(key, event)}>
-              <title>{label}</title>
+              {/* Los puntos con etiqueta visible ("M 6.6") no llevan <title>: su texto entraría en el texto visible y el nombre
+                  accesible ya lo dice todo. Los demás lo conservan como información al pasar el cursor. */}
+              {!labeled.has(event.id) && <title>{label}</title>}
               <line className="seq-stem" x1={cx} x2={cx} y1={baseY} y2={cy} pathLength={1} />
               <circle className="seq-ring" cx={cx} cy={cy} r={radius + 6} />
               <circle className="seq-dot" cx={cx} cy={cy} r={radius} />

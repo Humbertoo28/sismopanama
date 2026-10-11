@@ -459,7 +459,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
         onLoad={() => setReady(true)}
         onReady={() => setReady(true)}
       />
-      <div id="leaflet-map" role="img" aria-label="Mapa interactivo de sismos en Panamá" />
+      <div id="leaflet-map" role="group" aria-label="Mapa interactivo de sismos en Panamá" />
       <div className="map-layer-selector" role="group" aria-label="Modo de visualización del mapa">
         <button
           type="button"
