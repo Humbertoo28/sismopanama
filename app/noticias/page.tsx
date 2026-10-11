@@ -158,20 +158,12 @@ export default async function NoticiasPage() {
           <h2 id="nw-media-title">Titulares de los medios</h2>
           <p className="nw-lead">
             Lo que publican <SourceLink source={MEDIA.telemetro} /> y <SourceLink source={MEDIA.tvn} /> sobre el sismo, desde el 9 de
-            octubre: aquí ves solo el titular, y la nota completa está en cada medio. Son medios privados: esto no es información oficial.
+            octubre: aquí ves solo el titular, y la nota completa está en cada medio.
           </p>
           {media && !media.available.telemetro && <SourceDown source={MEDIA.telemetro} />}
           {media && !media.available.tvn && <SourceDown source={MEDIA.tvn} />}
           {media && media.items.length > 0 && (
-            <>
-              <p className="nw-count">
-                {media.total > media.items.length
-                  ? `Se muestran los ${media.items.length} titulares más recientes de los ${media.total} que hay desde el 9 de octubre`
-                  : `Hay ${media.total} ${media.total === 1 ? "titular" : "titulares"} desde el 9 de octubre`}{" "}
-                ({MEDIA.telemetro.name}: {media.perSource.telemetro}, {MEDIA.tvn.name}: {media.perSource.tvn}).
-              </p>
-              <MediaList items={media.items} />
-            </>
+            <MediaList items={media.items} />
           )}
           {media && media.items.length === 0 && media.available.telemetro && media.available.tvn && (
             <p className="nw-empty">No se encontraron titulares sobre el sismo en {MEDIA.telemetro.name} ni en {MEDIA.tvn.name} desde el 9 de octubre.</p>
