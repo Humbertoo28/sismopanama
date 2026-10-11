@@ -5,6 +5,7 @@ import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { isAftershock, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
 import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
+import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
 
@@ -16,6 +17,8 @@ type Props = {
   replayKey: number;
   // Provincia o comarca (id de lib/provinces.ts) que se está mirando: se dibuja su borde y el mapa se acerca a ella.
   region: string | null;
+  // Ciudad o localidad elegida: se marca con su nombre y el mapa se acerca a ella y a sus sismos.
+  place: { name: string; lat: number; lng: number } | null;
   onSelect: (id: string) => void;
   onReplay: (step: ReplayStep | null) => void;
 };
@@ -70,7 +73,7 @@ const TILE_CONFIG: Record<
 
 const STEP_MS = 900;
 const RECENT_MS = 3 * 3_600_000;
-export default function QuakeMap({ events, mainshock, focus, alert, replayKey, region, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, mainshock, focus, alert, replayKey, region, place, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   const [mapMode, setMapMode] = useState<MapLayerMode>(() => {
     if (typeof window !== "undefined") {
@@ -86,6 +89,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
   const tileLayerRef = useRef<any>(null);
   const overlayLayerRef = useRef<any>(null);
   const regionLayerRef = useRef<any>(null);
+  const placeLayerRef = useRef<any>(null);
   const hadRegion = useRef(false);
   const markersRef = useRef<Map<string, any>>(new Map());
   const focusedRef = useRef<Props["focus"]>(null);
@@ -156,6 +160,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       tileLayerRef.current = null;
       overlayLayerRef.current = null;
       regionLayerRef.current = null;
+      placeLayerRef.current = null;
       hadRegion.current = false;
       builtKey.current = "";
       markers.clear();
@@ -289,7 +294,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       title.textContent = `M ${mag === null ? "—" : mag.toFixed(1)} · ${event.properties.place || "Ubicación no especificada"}`;
       const meta = document.createElement("div");
       meta.className = "popup-meta";
-      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"} · ${provinceLabel(event)}${event.properties.source === "emsc" ? " · Fuente: EMSC" : event.properties.source === "igc" ? " · Fuente: IGC" : ""}`;
+      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"} · ${provinceLabel(event)} · cerca de ${placeLabel(event)}${event.properties.source === "emsc" ? " · Fuente: EMSC" : event.properties.source === "igc" ? " · Fuente: IGC" : ""}`;
       // appendChild y no append: los tipos de workers-types pisan Element.append.
       popup.appendChild(title);
       popup.appendChild(meta);
@@ -303,18 +308,24 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     if (events.length) popIn.current = false;
   }, [events, mainshock, ready]);
 
-  // Al elegir una provincia o comarca: se dibuja su borde y el mapa se acerca; al volver a "Todas", regresa a la vista general.
+  // Al elegir una provincia o comarca se dibuja su borde y el mapa se acerca; al elegir además una ciudad se marca con su
+  // nombre y el mapa se acerca a ella y a sus sismos. Al volver a "Todas", regresa a la vista general.
+  const placeLat = place?.lat ?? null;
+  const placeLng = place?.lng ?? null;
+  const placeName = place?.name ?? null;
   useEffect(() => {
     const map = mapRef.current;
     const L = (window as any).L;
     if (!ready || !map || !L) return;
-    if (regionLayerRef.current) {
-      map.removeLayer(regionLayerRef.current);
-      regionLayerRef.current = null;
+    for (const layerRef of [regionLayerRef, placeLayerRef]) {
+      if (layerRef.current) {
+        map.removeLayer(layerRef.current);
+        layerRef.current = null;
+      }
     }
     const province = region ? PROVINCE_BY_ID.get(region) : undefined;
     const still = reducedMotion();
-    if (!province) {
+    if (!province && placeLat === null) {
       if (hadRegion.current) {
         hadRegion.current = false;
         const zoom = window.innerWidth < 760 ? 6 : 7;
@@ -324,16 +335,26 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       return;
     }
     hadRegion.current = true;
-    const rings = province.rings.map(ring => ring.map(([lng, lat]) => [lat, lng]));
-    regionLayerRef.current = L.polygon(rings, {
-      className: "province-outline", color: "#ffffff", weight: 2.5, dashArray: "8 6",
-      fillColor: "#ffffff", fillOpacity: 0.09, interactive: false,
-    }).addTo(map);
+    if (province) {
+      const rings = province.rings.map(ring => ring.map(([lng, lat]) => [lat, lng]));
+      regionLayerRef.current = L.polygon(rings, {
+        className: "province-outline", color: "#ffffff", weight: 2.5, dashArray: "8 6",
+        fillColor: "#ffffff", fillOpacity: 0.09, interactive: false,
+      }).addTo(map);
+    }
+    let bounds = province ? L.latLngBounds(province.bounds) : null;
+    if (placeLat !== null && placeLng !== null) {
+      placeLayerRef.current = L.circleMarker([placeLat, placeLng], {
+        radius: 6, color: "#ffffff", weight: 2.5, fillColor: "#072357", fillOpacity: 1, interactive: false,
+      }).bindTooltip(placeName, { permanent: true, direction: "right", offset: [9, 0], className: "place-label" }).addTo(map);
+      // Se enmarca la ciudad junto con los sismos que se están viendo (ya filtrados por esa ciudad).
+      bounds = L.latLngBounds([[placeLat, placeLng], ...latest.current.events.map(event => [event.geometry.coordinates[1], event.geometry.coordinates[0]])]);
+    }
     map.closePopup();
-    const bounds = L.latLngBounds(province.bounds);
-    if (still) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 10, animate: false });
-    else map.flyToBounds(bounds, { padding: [30, 30], maxZoom: 10, duration: 1.1 });
-  }, [region, ready]);
+    const maxZoom = placeLat !== null ? 11 : 10;
+    if (still) map.fitBounds(bounds, { padding: [40, 40], maxZoom, animate: false });
+    else map.flyToBounds(bounds, { padding: [40, 40], maxZoom, duration: 1.1 });
+  }, [region, placeLat, placeLng, placeName, ready]);
 
   useEffect(() => {
     if (!focus || focusedRef.current === focus || !mapRef.current) return;

@@ -27,7 +27,9 @@ import {
   stopAlarmSound,
   type SeenQuake,
 } from "../lib/alert-system";
-import { FAR_OFFSHORE, provinceKey, provinceLabel } from "../lib/province-of";
+import { PLACE_BY_ID, cityMatches, placeKey, placeLabel, placeName } from "../lib/place-of";
+import { DISTRICTS } from "../lib/places";
+import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
 import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
@@ -97,6 +99,8 @@ export default function Home() {
   const [timeRange, setTimeRange] = useState<"all" | "24h" | "6h">("all");
   // "all", el id de una provincia o comarca (ver lib/provinces.ts) o "mar" (lejos de toda costa).
   const [province, setProvince] = useState("all");
+  // "all" o el id de GeoNames de una ciudad o localidad (lib/places.ts); depende de la provincia elegida.
+  const [city, setCity] = useState("all");
   const [allEvents, setAllEvents] = useState<Earthquake[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
@@ -351,10 +355,11 @@ export default function Home() {
             ? now - event.properties.time <= 24 * 3_600_000
             : now - event.properties.time <= 6 * 3_600_000;
         const provinceOk = province === "all" || provinceKey(event) === province;
-        return magOk && afterOk && timeOk && provinceOk;
+        const cityOk = cityMatches(event, city);
+        return magOk && afterOk && timeOk && provinceOk && cityOk;
       });
     },
-    [allEvents, minimum, onlyAftershocks, main, timeRange, province],
+    [allEvents, minimum, onlyAftershocks, main, timeRange, province, city],
   );
   const listEvents = useMemo(
     () => sort === "magnitude" ? [...events].sort((a, b) => (b.properties.mag ?? -10) - (a.properties.mag ?? -10)) : events,
@@ -377,15 +382,49 @@ export default function Home() {
     for (const event of allEvents) counts.set(provinceKey(event), (counts.get(provinceKey(event)) ?? 0) + 1);
     return counts;
   }, [allEvents]);
+  // Ciudades que tienen sismos dentro de la provincia elegida (o de todo el país), con su conteo; las de más sismos primero.
+  const cityOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const event of allEvents) {
+      if (province !== "all" && provinceKey(event) !== province) continue;
+      const key = placeKey(event);
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .flatMap(([id, count]) => { const place = PLACE_BY_ID.get(id); return place ? [{ place, count }] : []; })
+      .sort((a, b) => b.count - a.count || a.place.name.localeCompare(b.place.name, "es"));
+  }, [allEvents, province]);
+  // Las ciudades se agrupan por distrito (Tonosí: El Cacao, Cañas, Flores…); cada grupo tiene su opción "Todo el distrito".
+  const cityGroups = useMemo(() => {
+    const groups = new Map<string, { code: string; name: string; province: string; total: number; options: typeof cityOptions }>();
+    for (const option of cityOptions) {
+      const code = option.place.district;
+      const group = groups.get(code) ?? { code, name: DISTRICTS[code]?.name ?? option.place.name, province: option.place.province, total: 0, options: [] };
+      group.total += option.count;
+      group.options.push(option);
+      groups.set(code, group);
+    }
+    return [...groups.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "es"));
+  }, [cityOptions]);
+  // Lo que se marca en el mapa: la localidad elegida o el centro del distrito elegido.
+  const selectedPlace = useMemo(() => {
+    if (city === "all") return null;
+    if (city.startsWith("d:")) {
+      const district = DISTRICTS[city.slice(2)];
+      return district ? { name: `Distrito de ${district.name}`, lat: district.lat, lng: district.lng } : null;
+    }
+    const place = PLACE_BY_ID.get(city);
+    return place ? { name: placeName(place), lat: place.lat, lng: place.lng } : null;
+  }, [city]);
   const provinceName = province === "all" ? null : province === FAR_OFFSHORE ? "Mar adentro" : PROVINCES.find(item => item.id === province)?.name ?? null;
   // El sismo principal se dibuja siempre, salvo que se esté mirando una provincia que no lo contiene.
   const mapEvents = useMemo(
-    () => main && !events.some(event => event.id === main.id) && (province === "all" || provinceKey(main) === province) ? [...events, main] : events,
-    [events, main, province],
+    () => main && !events.some(event => event.id === main.id) && (province === "all" || provinceKey(main) === province) && cityMatches(main, city) ? [...events, main] : events,
+    [events, main, province, city],
   );
   const sequenceAftershocks = useMemo(
-    () => main ? allEvents.filter(event => isAftershock(event, main) && (province === "all" || provinceKey(event) === province)) : [],
-    [allEvents, main, province],
+    () => main ? allEvents.filter(event => isAftershock(event, main) && (province === "all" || provinceKey(event) === province) && cityMatches(event, city)) : [],
+    [allEvents, main, province, city],
   );
   // Con una provincia elegida, la tarjeta muestra el último sismo de esa provincia y no el último de todo el país.
   const featured = mapEvents.find(event => event.id === selectedId) ?? (province === "all" ? newest ?? latest : latest);
@@ -426,6 +465,7 @@ export default function Home() {
     // "Ver en el mapa" no haría nada: se quitan los filtros para poder llevarte a él.
     if (!mapEvents.some(item => item.id === event.id)) {
       setProvince("all");
+      setCity("all");
       setMinimum(0);
       setTimeRange("all");
       setOnlyAftershocks(false);
@@ -702,25 +742,25 @@ export default function Home() {
           </section>
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
-            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3">M 3.0+ Sentidos</option><option value="3.5">M 3.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+ Fuertes</option><option value="6">M 6.0+</option><option value="7">M 7.0+</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 h</option><option value="6h">Últimas 6 h</option></select></label><label className="magnitude-filter">Provincia <select aria-label="Filtrar por provincia o comarca" value={province} onChange={event => { setProvince(event.target.value); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option><optgroup label="Provincias">{PROVINCES.filter(item => item.kind === "provincia").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup><optgroup label="Comarcas indígenas">{PROVINCES.filter(item => item.kind === "comarca").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup>{(provinceCounts.get(FAR_OFFSHORE) ?? 0) > 0 && <option value={FAR_OFFSHORE}>Mar adentro · {provinceCounts.get(FAR_OFFSHORE)}</option>}</select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && (replay === null
+            <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3">M 3.0+ Sentidos</option><option value="3.5">M 3.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+ Fuertes</option><option value="6">M 6.0+</option><option value="7">M 7.0+</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 h</option><option value="6h">Últimas 6 h</option></select></label><label className="magnitude-filter">Provincia <select aria-label="Filtrar por provincia o comarca" value={province} onChange={event => { setProvince(event.target.value); setCity("all"); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option><optgroup label="Provincias">{PROVINCES.filter(item => item.kind === "provincia").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup><optgroup label="Comarcas indígenas">{PROVINCES.filter(item => item.kind === "comarca").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup>{(provinceCounts.get(FAR_OFFSHORE) ?? 0) > 0 && <option value={FAR_OFFSHORE}>Mar adentro · {provinceCounts.get(FAR_OFFSHORE)}</option>}</select></label><label className="magnitude-filter">Ciudad <select aria-label="Filtrar por ciudad o localidad" value={city} onChange={event => { setCity(event.target.value); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option>{cityGroups.map(group => <optgroup key={group.code} label={province === "all" ? `${PROVINCE_BY_ID.get(group.province)?.name ?? ""} · ${group.name}` : group.name}>{group.options.length > 1 && <option value={`d:${group.code}`}>Todo {group.name} · {group.total}</option>}{group.options.map(({ place, count }) => <option key={place.id} value={place.id}>{place.name} · {count}</option>)}</optgroup>)}</select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && (replay === null
               ? <button type="button" className="replay-button" onClick={startReplay}>▶ Reproducir secuencia</button>
               : <div className="replay-pair"><button type="button" className="replay-button stop" onClick={stopReplay}>■ Parar</button><button type="button" className="replay-button" onClick={startReplay}>↻ Reiniciar</button></div>)}</div></div>
             <div className="map-card">
-              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} region={province === "all" || province === FAR_OFFSHORE ? null : province} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<span className="replay-actions"><button type="button" className="stop" onClick={stopReplay}>■ Parar</button><button type="button" onClick={startReplay}>↻ Reiniciar</button></span><i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>{main && <div><i className="legend-circle main" /> Sismo principal</div>}</div></div>
-              <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div><div><span>PROVINCIA</span><strong>{featured ? provinceLabel(featured) : "—"}</strong></div></div><a className="featured-link" href={reportUrl(featured)} target="_blank" rel="noopener noreferrer">{`Ver en ${SOURCE_NAMES[featured?.properties.source ?? "usgs"]}`} <span aria-hidden="true">↗</span></a></div>
+              <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} region={province === "all" || province === FAR_OFFSHORE ? null : province} place={selectedPlace} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<span className="replay-actions"><button type="button" className="stop" onClick={stopReplay}>■ Parar</button><button type="button" onClick={startReplay}>↻ Reiniciar</button></span><i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>{main && <div><i className="legend-circle main" /> Sismo principal</div>}</div></div>
+              <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div><div><span>PROVINCIA</span><strong>{featured ? provinceLabel(featured) : "—"}</strong></div><div><span>CIUDAD MÁS CERCANA</span><strong>{featured ? placeLabel(featured, true) : "—"}</strong></div></div><a className="featured-link" href={reportUrl(featured)} target="_blank" rel="noopener noreferrer">{`Ver en ${SOURCE_NAMES[featured?.properties.source ?? "usgs"]}`} <span aria-hidden="true">↗</span></a></div>
             </div>
-            <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información. Límites provinciales: © colaboradores de OpenStreetMap (ODbL), vía geoBoundaries.</p>
+            <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información. Límites provinciales: © colaboradores de OpenStreetMap (ODbL), vía geoBoundaries. Localidades: GeoNames (CC BY 4.0).</p>
             {main && sequenceAftershocks.length > 0 && (
               <div className="sequence-card">
                 <span className="section-kicker">SECUENCIA SÍSMICA</span>
-                <h3>El sismo principal y sus réplicas{provinceName && <span className="seq-scope"> · {provinceName}</span>}</h3>
+                <h3>El sismo principal y sus réplicas{(provinceName || selectedPlace) && <span className="seq-scope"> · {[provinceName, selectedPlace?.name].filter(Boolean).join(" · ")}</span>}</h3>
                 <SequenceChart mainshock={main} aftershocks={sequenceAftershocks} selectedId={selectedId} replay={replay} onSelect={chooseEvent} />
               </div>
             )}
           </section>
 
           <div className="lower-grid">
-            <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{main ? `${Math.max(0, events.length - (events.some(e => e.id === main.id) ? 1 : 0))} réplicas${events.some(e => e.id === main.id) ? " + 1 sismo principal" : ""}` : `${events.length} ${events.length === 1 ? "evento" : "eventos"}`}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map((event, index) => <button key={event.id} type="button" className="event-row" style={{ "--i": index } as CSSProperties} onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{provinceLabel(event)} · {depthText(event)} de profundidad{main && isAftershock(event, main) && <em className="replica-tag">Réplica</em>}{main && event.id === main.id && <em className="main-tag">Sismo Principal M 7.7</em>}{event.properties.source && event.properties.source !== "usgs" && <em className="source-tag" title="Aún sin reporte del USGS">{SOURCE_NAMES[event.properties.source]}</em>}</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : status === "loading" ? <div className="event-skeletons" role="status" aria-label="Consultando eventos sísmicos">{[0, 1, 2, 3, 4].map(i => <div key={i} className="event-skeleton" style={{ animationDelay: `${i * 90}ms` }}><i /><span /><em /></div>)}</div> : <div className="empty-state">{status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
+            <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{main ? `${Math.max(0, events.length - (events.some(e => e.id === main.id) ? 1 : 0))} réplicas${events.some(e => e.id === main.id) ? " + 1 sismo principal" : ""}` : `${events.length} ${events.length === 1 ? "evento" : "eventos"}`}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map((event, index) => <button key={event.id} type="button" className="event-row" style={{ "--i": index } as CSSProperties} onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{provinceLabel(event)} · {placeLabel(event)} · {depthText(event)} de profundidad{main && isAftershock(event, main) && <em className="replica-tag">Réplica</em>}{main && event.id === main.id && <em className="main-tag">Sismo Principal M 7.7</em>}{event.properties.source && event.properties.source !== "usgs" && <em className="source-tag" title="Aún sin reporte del USGS">{SOURCE_NAMES[event.properties.source]}</em>}</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : status === "loading" ? <div className="event-skeletons" role="status" aria-label="Consultando eventos sísmicos">{[0, 1, 2, 3, 4].map(i => <div key={i} className="event-skeleton" style={{ animationDelay: `${i * 90}ms` }}><i /><span /><em /></div>)}</div> : <div className="empty-state">{status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
             <section id="preparacion" className="prepared-card" aria-labelledby="prepared-title"><div className="prepared-icon">✳</div><span className="section-kicker">EN CASO DE SISMO</span><h2 id="prepared-title">Regla básica de protección</h2><p>Mantén la calma y actúa de inmediato:</p><div className="prepared-steps"><div><span>01</span><strong>Agáchate</strong><small>Bajo una mesa o mueble firme.</small></div><div><span>02</span><strong>Cúbrete</strong><small>Protege cabeza y cuello.</small></div><div><span>03</span><strong>Sujétate</strong><small>Hasta que cese el temblor.</small></div></div><a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC Panamá <span aria-hidden="true">↗</span></a></section>
           </div>
           <section id="recomendaciones" className="guide-section" aria-labelledby="guide-title">

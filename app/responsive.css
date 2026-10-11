@@ -213,7 +213,7 @@ a, button, label, select, summary, input { touch-action: manipulation; }
   .magnitude-filter { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 6px 12px; min-width: 0; overflow: hidden; }
   .magnitude-filter select { font-size: 16px; padding: 2px 0 4px; margin-left: 0; width: 100%; min-width: 0; text-overflow: ellipsis; }
   .aftershock-toggle input { width: 18px; height: 18px; }
-  .replay-button { grid-column: 1 / -1; }
+  .aftershock-toggle, .replay-button { grid-column: 1 / -1; }
 
   /* Mapa: la leyenda pasa de tapar el mapa a ser una franja debajo. */
   .map-card { display: block; padding: 4px; border-radius: 14px; }
