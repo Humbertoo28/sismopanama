@@ -2,12 +2,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Leaflet se carga como script global y no trae tipos. */
 
 import Script from "next/script";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { isAftershock, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
 import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
 import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
+import { intensityColor, slipColor } from "../lib/usgs-colors";
+import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
+
+// La vista 3D solo se descarga cuando alguien la abre.
+const Quake3D = lazy(() => import("./quake-3d"));
 
 type Props = {
   events: Earthquake[];
@@ -19,6 +24,8 @@ type Props = {
   region: string | null;
   // Ciudad o localidad elegida: se marca con su nombre y el mapa se acerca a ella y a sus sismos.
   place: { name: string; lat: number; lng: number } | null;
+  selectedId: string | null;
+  replay: ReplayStep | null;
   onSelect: (id: string) => void;
   onReplay: (step: ReplayStep | null) => void;
 };
@@ -73,7 +80,7 @@ const TILE_CONFIG: Record<
 
 const STEP_MS = 900;
 const RECENT_MS = 3 * 3_600_000;
-export default function QuakeMap({ events, mainshock, focus, alert, replayKey, region, place, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   const [mapMode, setMapMode] = useState<MapLayerMode>(() => {
     if (typeof window !== "undefined") {
@@ -84,6 +91,11 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     }
     return "satellite";
   });
+  // Vista 3D y capas con datos del USGS (ruptura de la falla y «lo que se sintió»), compartidas por el mapa y el 3D.
+  const [view3d, setView3d] = useState(false);
+  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false });
+  const usgs = useMainshockDetail();
+  const usgsLayerRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
@@ -117,6 +129,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
   }, [ready]);
 
   const handleModeChange = (mode: MapLayerMode) => {
+    setView3d(false);
     setMapMode(mode);
     if (typeof window !== "undefined") {
       try {
@@ -136,6 +149,9 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       minZoom: 6, maxBounds: PANAMA_MAP_BOUNDS, maxBoundsViscosity: 0.9,
     }).setView([8.46, -80.4], window.innerWidth < 760 ? 6 : 7);
     L.control.zoom({ position: "topright" }).addTo(map);
+    // Los datos del USGS van por debajo de los marcadores pero sobre el sombreado de fuera de Panamá.
+    map.createPane("felt").style.zIndex = "405";
+    map.createPane("rupture").style.zIndex = "410";
 
     // Panamá resaltado: se atenúa suavemente lo que queda fuera de su contorno y se dibuja el borde.
     const rings = PANAMA_RINGS.map(ring => ring.map(([lng, lat]) => [lat, lng]));
@@ -161,6 +177,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       overlayLayerRef.current = null;
       regionLayerRef.current = null;
       placeLayerRef.current = null;
+      usgsLayerRef.current = null;
       hadRegion.current = false;
       builtKey.current = "";
       markers.clear();
@@ -308,6 +325,55 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     if (events.length) popIn.current = false;
   }, [events, mainshock, ready]);
 
+  // Capas con datos publicados por el USGS para el sismo principal: la ruptura de la falla (cuánto se deslizó cada
+  // tramo) y los reportes de personas («¿Lo sentiste?», cuadros de 10 km). No se calcula nada aquí: se dibuja lo recibido.
+  const usgsDetail = usgs.detail;
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (!ready || !map || !L) return;
+    if (usgsLayerRef.current) {
+      map.removeLayer(usgsLayerRef.current);
+      usgsLayerRef.current = null;
+    }
+    if (!usgsDetail || (!layers.rupture && !layers.felt && !layers.shaking)) return;
+    const group = L.layerGroup();
+    if (layers.felt && usgsDetail.felt) {
+      for (const [south, west, north, east, cdi, count] of usgsDetail.felt.cells) {
+        L.rectangle([[south, west], [north, east]], {
+          pane: "felt", color: "#ffffff", weight: 0.6, opacity: 0.55, fillColor: intensityColor(cdi, 1), fillOpacity: 0.62,
+        }).bindTooltip(`Intensidad ${cdi.toFixed(1)} según ${count} ${count === 1 ? "reporte" : "reportes"} de personas`, { sticky: true }).addTo(group);
+      }
+    }
+    if (layers.rupture && usgsDetail.fault) {
+      const { subfaults, maxSlipM } = usgsDetail.fault;
+      for (const sub of subfaults) {
+        L.polygon(sub.ring.map(([lng, lat]) => [lat, lng]), {
+          pane: "rupture", interactive: false, stroke: false, fillColor: slipColor(sub.slip, maxSlipM, 1), fillOpacity: 0.55,
+        }).addTo(group);
+      }
+    }
+    if (layers.shaking && usgsDetail.shaking) {
+      for (const { value, lines } of usgsDetail.shaking) {
+        L.polyline(lines.map(line => line.map(([lng, lat]) => [lat, lng])), {
+          pane: "felt", color: intensityColor(value, 1), weight: Number.isInteger(value) ? 3 : 2, opacity: 0.95, lineJoin: "round",
+        }).bindTooltip(`Intensidad ${value.toFixed(1)} (estimada por el USGS)`, { sticky: true }).addTo(group);
+      }
+    }
+    group.addTo(map);
+    usgsLayerRef.current = group;
+  }, [layers, usgsDetail, ready]);
+
+  const toggleLayer = (name: "rupture" | "felt" | "shaking") => {
+    loadMainshockDetail();
+    setLayers(current => ({ ...current, [name]: !current[name] }));
+  };
+  const detailReady = usgs.status === "ready" && usgsDetail !== null;
+  const fault = detailReady ? usgsDetail.fault : null;
+  const felt = detailReady ? usgsDetail.felt : null;
+  const shaking = detailReady ? usgsDetail.shaking : null;
+  const anyLayer = layers.rupture || layers.felt || layers.shaking;
+
   // Al elegir una provincia o comarca se dibuja su borde y el mapa se acerca; al elegir además una ciudad se marca con su
   // nombre y el mapa se acerca a ella y a sus sismos. Al volver a "Todas", regresa a la vista general.
   const placeLat = place?.lat ?? null;
@@ -451,6 +517,28 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     };
   }, [replayKey]);
 
+  const layerChips = (
+    <>
+      <button
+        type="button" className={`layer-chip${layers.rupture ? " on" : ""}`} aria-pressed={layers.rupture} onClick={() => toggleLayer("rupture")}
+        title="Tramo de la falla que se rompió en el sismo principal, según el modelo del USGS: más claro, más deslizamiento"
+      ><span className="chip-long">Ruptura de la falla</span><span className="chip-short" aria-hidden="true">Ruptura</span></button>
+      <button
+        type="button" className={`layer-chip${layers.felt ? " on" : ""}`} aria-pressed={layers.felt} onClick={() => toggleLayer("felt")}
+        title="Intensidad que reportó la gente al USGS («¿Lo sentiste?»), en cuadros de 10 km"
+      ><span className="chip-long">Lo que sintió la gente</span><span className="chip-short" aria-hidden="true">Lo que sintió</span></button>
+      <button
+        type="button" className={`layer-chip${layers.shaking ? " on" : ""}`} aria-pressed={layers.shaking} onClick={() => toggleLayer("shaking")}
+        title="Intensidad de la sacudida estimada por el USGS (ShakeMap): curvas de igual intensidad"
+      ><span className="chip-long">Sacudida estimada</span><span className="chip-short" aria-hidden="true">Sacudida</span></button>
+    </>
+  );
+  const layerNote = usgs.status === "loading" && anyLayer
+    ? <span className="map-layers-note" role="status">Cargando datos del USGS…</span>
+    : usgs.status === "error"
+    ? <span className="map-layers-note" role="alert">No se pudieron cargar los datos del USGS. <button type="button" onClick={loadMainshockDetail}>Reintentar</button></span>
+    : null;
+
   return (
     <>
       <Script
@@ -460,10 +548,20 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
         onReady={() => setReady(true)}
       />
       <div id="leaflet-map" role="group" aria-label="Mapa interactivo de sismos en Panamá" />
+      {view3d && (
+        <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
+          <Quake3D
+            events={events} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
+            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} onSelect={onSelect}
+            layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}</div>{layerNote}</>}
+          />
+        </Suspense>
+      )}
       <div className="map-layer-selector" role="group" aria-label="Modo de visualización del mapa">
         <button
           type="button"
-          className={`layer-btn${mapMode === "satellite" ? " active" : ""}`}
+          className={`layer-btn${!view3d && mapMode === "satellite" ? " active" : ""}`}
+          aria-pressed={!view3d && mapMode === "satellite"}
           onClick={() => handleModeChange("satellite")}
           title="Vista satelital híbrida (imágenes + nombres y rutas)"
         >
@@ -473,7 +571,8 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
         </button>
         <button
           type="button"
-          className={`layer-btn${mapMode === "esri" ? " active" : ""}`}
+          className={`layer-btn${!view3d && mapMode === "esri" ? " active" : ""}`}
+          aria-pressed={!view3d && mapMode === "esri"}
           onClick={() => handleModeChange("esri")}
           title="Vista satelital pura Esri ArcGIS"
         >
@@ -483,7 +582,8 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
         </button>
         <button
           type="button"
-          className={`layer-btn${mapMode === "streets" ? " active" : ""}`}
+          className={`layer-btn${!view3d && mapMode === "streets" ? " active" : ""}`}
+          aria-pressed={!view3d && mapMode === "streets"}
           onClick={() => handleModeChange("streets")}
           title="Mapa callejero y relieve"
         >
@@ -491,7 +591,54 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
           <span className="layer-text-full">Callejero</span>
           <span className="layer-text-short">Calles</span>
         </button>
+        <button
+          type="button"
+          className={`layer-btn${view3d ? " active" : ""}`}
+          aria-pressed={view3d}
+          onClick={() => setView3d(true)}
+          title="Vista 3D: cada sismo a su profundidad bajo la superficie"
+        >
+          <span aria-hidden="true">🧊</span>
+          <span className="layer-text-full">3D</span>
+          <span className="layer-text-short">3D</span>
+        </button>
       </div>
+      {!view3d && (
+        <div className="map-layers" role="group" aria-label="Capas con datos del USGS sobre el sismo principal">
+          <span className="map-layers-title" aria-hidden="true">DATOS DEL USGS</span>
+          {layerChips}
+          {layerNote}
+        </div>
+      )}
+      {detailReady && anyLayer && (
+        <div className="map-layers-legend" role="group" aria-label="Leyenda de las capas del USGS">
+          {layers.rupture && (
+            fault ? (
+              <div>
+                <i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />
+                <span>Ruptura: más claro, más deslizamiento (máx. {fault.maxSlipM.toFixed(1)} m)</span>
+              </div>
+            ) : <div><span>El USGS no publica el modelo de ruptura de este sismo.</span></div>
+          )}
+          {layers.felt && (
+            felt ? (
+              <div>
+                <span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>
+                <span>Lo que sintió la gente: el color es la intensidad que reportaron ({felt.responses.toLocaleString("es-PA")} respuestas al USGS)</span>
+              </div>
+            ) : <div><span>El USGS no publica reportes de personas para este sismo.</span></div>
+          )}
+          {layers.shaking && (
+            shaking ? (
+              <div>
+                <span className="felt-scale" aria-hidden="true">{shaking.map(c => <i key={c.value} style={{ background: intensityColor(c.value) }} />)}</span>
+                <span>Sacudida estimada por el USGS (ShakeMap): cada curva une lugares con la misma intensidad, de {shaking[0].value.toFixed(1)} a {shaking[shaking.length - 1].value.toFixed(1)}</span>
+              </div>
+            ) : <div><span>El USGS no publica el mapa de sacudida de este sismo.</span></div>
+          )}
+          <div className="map-layers-source"><span>Fuente: USGS (earthquake.usgs.gov)</span></div>
+        </div>
+      )}
       {!ready && <div className="map-fallback">Cargando mapa satelital…</div>}
     </>
   );

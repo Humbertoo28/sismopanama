@@ -7,6 +7,7 @@ import "./leaflet.css";
 import "./fonts.css";
 import "./globals.css";
 import "./responsive.css";
+import "./usgs-layers.css";
 import "./accessibility.css";
 
 export const metadata: Metadata = {
