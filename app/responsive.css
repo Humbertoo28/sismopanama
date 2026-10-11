@@ -256,7 +256,8 @@ a, button, label, select, summary, input { touch-action: manipulation; }
   .magnitude-badge { width: 48px; height: 42px; font-size: 17px; }
   .event-text strong { font-size: 13px; line-height: 1.3; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .source-tag { font-size: 10px; padding: 2px 8px; margin-left: 6px; }
-  .event-text small { font-size: 11.5px; margin-top: 4px; }
+  /* La provincia y las etiquetas (Réplica, fuente) ya no caben en una línea: se acomodan en dos. */
+  .event-text small { font-size: 11.5px; margin-top: 4px; white-space: normal; line-height: 1.5; }
   .event-time strong { font-size: 12px; }
   .event-time small { font-size: 11px; margin-top: 4px; }
   .empty-state { font-size: 13px; }
