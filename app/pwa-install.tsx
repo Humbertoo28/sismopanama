@@ -79,7 +79,7 @@ export default function PwaInstall() {
           <div className="alert-modal-card" style={{ maxWidth: 440 }}>
             <header className="alert-modal-header">
               <div className="alert-modal-title-box">
-                <span className="alert-bell-icon">📲</span>
+                <span className="alert-bell-icon" aria-hidden="true">📲</span>
                 <div>
                   <h2>Instalar en tu iPhone o iPad</h2>
                   <p>Agrégala a tu pantalla de inicio en 3 pasos:</p>

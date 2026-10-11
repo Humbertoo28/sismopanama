@@ -1,0 +1,72 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { toBraille, toBrf } from "../../lib/braille";
+import type { EarthquakeResponse } from "../../lib/earthquakes";
+import { buildSummary, summaryToText, type QuakeSummary } from "../../lib/quake-summary";
+import { SITE_URL, pageSocial } from "../../lib/site";
+import { BreadcrumbStructuredData } from "../structured-data";
+import Downloads from "./downloads";
+import "./resumen.css";
+
+const TITLE = "Resumen de sismos en texto sencillo y braille";
+const DESCRIPTION = "Los sismos y réplicas de Panamá en frases cortas y sin símbolos, pensadas para lector de pantalla y línea braille, con descarga en texto, braille Unicode y BRF para impresora braille.";
+
+export const metadata: Metadata = {
+  title: TITLE, // el sitio añade "| Sismo Panamá"
+  description: DESCRIPTION,
+  ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/resumen"),
+};
+
+// Se regenera como mucho cada dos minutos: no consulta los catálogos con cada visita.
+export const revalidate = 120;
+
+// Se lee la propia API del sitio (que ya viene en caché de la red) y no los catálogos directamente: sus consultas van sin
+// caché y volverían dinámica esta página, que debe regenerarse como mucho cada dos minutos.
+async function loadSummary(): Promise<QuakeSummary | null> {
+  try {
+    const response = await fetch(`${SITE_URL}/api/earthquakes`, { next: { revalidate: 120 } });
+    if (!response.ok) throw new Error(`La API de sismos respondió ${response.status}`);
+    const data = (await response.json()) as EarthquakeResponse;
+    return Array.isArray(data.features) && data.features.length ? buildSummary(data.features, Date.now()) : null;
+  } catch (error) {
+    console.error("Resumen de sismos no disponible:", error);
+    return null;
+  }
+}
+
+export default async function ResumenPage() {
+  const summary = await loadSummary();
+  const text = summary ? summaryToText(summary) : "";
+  const braille = text ? toBraille(text) : "";
+  return (
+    <>
+      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Resumen en texto y braille", path: "/resumen" }]} />
+      <header className="rs-header">
+        <Link href="/">← Volver al panel principal</Link>
+      </header>
+      <main className="rs-main">
+        <h1>{summary?.title ?? "Resumen de sismos en Panamá"}</h1>
+        {summary ? (
+          <>
+            <p className="rs-updated">{summary.updated}. La página se actualiza sola cada pocos minutos.</p>
+            {summary.sections.map((section, index) => (
+              <section key={section.heading} className="rs-card" aria-labelledby={`rs-s${index}`}>
+                <h2 id={`rs-s${index}`}>{section.heading}</h2>
+                {section.ordered ? (
+                  <ol>{section.lines.map(line => <li key={line}>{line}</li>)}</ol>
+                ) : section.lines.length === 1 ? (
+                  <p>{section.lines[0]}</p>
+                ) : (
+                  <ul>{section.lines.map(line => <li key={line}>{line}</li>)}</ul>
+                )}
+              </section>
+            ))}
+            <Downloads text={text} braille={braille} brf={toBrf(braille)} />
+          </>
+        ) : (
+          <p className="rs-card">No se pudo consultar los catálogos de sismos en este momento. Vuelve a intentarlo en unos minutos o consulta los avisos oficiales de SINAPROC.</p>
+        )}
+      </main>
+    </>
+  );
+}

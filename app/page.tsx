@@ -520,7 +520,7 @@ export default function Home() {
               {alert.quiet && ` · hace ${agoText(Math.round((alert.key - alert.event.properties.time) / 60_000))}`}
               {alert.event.properties.tsunami === 1 && " · Riesgo potencial de tsunami (tsunami.gov)"}
             </div>
-            <div className="live-toast-where">📍 {whereText(alert.event)}</div>
+            <div className="live-toast-where"><span aria-hidden="true">📍</span> {whereText(alert.event)}</div>
           </div>
           <div className="live-toast-actions">
             <button
@@ -531,7 +531,7 @@ export default function Home() {
                 setDismissedKey(alert.key);
               }}
             >
-              🗺️ Ver en el mapa
+              <span aria-hidden="true">🗺️</span> Ver en el mapa
             </button>
             <a
               href={getWhatsAppShareUrl(alert.event, typeof window !== "undefined" ? window.location.href : "")}
@@ -539,7 +539,7 @@ export default function Home() {
               rel="noopener noreferrer"
               className="btn-toast-wa"
             >
-              📲 Mandar a todos por WhatsApp
+              <span aria-hidden="true">📲</span> Mandar a todos por WhatsApp
             </a>
             {!alert.quiet && (
               <button
@@ -548,7 +548,7 @@ export default function Home() {
                 onClick={() => stopAlarmSound()}
                 title="Silenciar sonido de alarma"
               >
-                🔇 Silenciar
+                <span aria-hidden="true">🔇</span> Silenciar
               </button>
             )}
           </div>
@@ -606,7 +606,7 @@ export default function Home() {
                 className="alert-topbar-btn active intro-alert-btn"
                 onClick={() => setAlertModalOpen(true)}
               >
-                <span>🔔 Configurar / Difundir Alerta</span>
+                <span><span aria-hidden="true">🔔</span> Configurar / Difundir Alerta</span>
               </button>
               <button
                 className={`refresh-button${status === "loading" ? " loading" : ""}`}
@@ -655,7 +655,7 @@ export default function Home() {
                 </div>
                 <div className="mainshock-actions">
                   <button type="button" className="primary" onClick={() => chooseEvent(hero)}>
-                    📍 Ver en el mapa
+                    <span aria-hidden="true">📍</span> Ver en el mapa
                   </button>
                   <a href="#recomendaciones">Qué hacer ahora</a>
                   <button type="button" onClick={() => share(hero)} aria-live="polite">
@@ -668,7 +668,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                     style={{ background: "#25d366", color: "#033a17", border: "0", fontWeight: "800", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                   >
-                    📲 Mandar alerta a todos por WhatsApp
+                    <span aria-hidden="true">📲</span> Mandar alerta a todos por WhatsApp
                   </a>
                   <a className="wide" href={heroUrl} target="_blank" rel="noopener noreferrer">
                     Reporte de {heroSource} <span aria-hidden="true">↗</span>
@@ -691,7 +691,7 @@ export default function Home() {
                     </div>
                     <div className="principal-info">
                       <span className="principal-kicker">
-                        ⭐ SISMO PRINCIPAL · M 7.7 · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}
+                        <span aria-hidden="true">⭐</span> SISMO PRINCIPAL · M 7.7 · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}
                       </span>
                       <h3 className="principal-place">{placeText(main)}</h3>
                       <small>
@@ -701,7 +701,7 @@ export default function Home() {
                     </div>
                     <div className="principal-actions">
                       <button type="button" onClick={() => chooseEvent(main)}>
-                        📍 Ver sismo principal en mapa
+                        <span aria-hidden="true">📍</span> Ver sismo principal en mapa
                       </button>
                       <a href={mainUrl} target="_blank" rel="noopener noreferrer">
                         Reporte del USGS <span aria-hidden="true">↗</span>
@@ -749,7 +749,7 @@ export default function Home() {
 
           <section className="metric-grid" aria-label="Resumen de actividad sísmica">
             <article className="metric-card"><div className="metric-top"><span>{main ? "RÉPLICAS REGISTRADAS" : "EVENTOS REGISTRADOS"}</span><span className="metric-icon">◎</span></div><div className="metric-main"><strong>{status === "error" && !lastUpdate ? "—" : <CountUp value={main ? Math.max(0, events.length - (events.some(e => e.id === main.id) ? 1 : 0)) : events.length} />}</strong><span>{main ? "+ 1 sismo principal M 7.7" : `desde el ${sinceLabel}`}</span></div><p>{main ? "Secuencia sísmica en Panamá" : "Solo Panamá"}</p></article>
-            <article className="metric-card"><div className="metric-top"><span>{main ? "MAYOR RÉPLICA" : "MAYOR MAGNITUD"}</span><span className="metric-icon coral">⌁</span></div><div className="metric-main"><strong>{strongest && strongest.properties.mag !== null ? <CountUp value={strongest.properties.mag} decimals={1} /> : "—"}</strong><span>{main && strongest && strongest.id === main.id ? "sismo principal" : "magnitud"}</span></div><p>{strongest ? placeText(strongest) : "Sin eventos disponibles"}</p></article>
+            <article className="metric-card"><div className="metric-top"><span>{main ? "MAYOR RÉPLICA" : "MAYOR MAGNITUD"}</span><span className="metric-icon coral" aria-hidden="true">⌁</span></div><div className="metric-main"><strong>{strongest && strongest.properties.mag !== null ? <CountUp value={strongest.properties.mag} decimals={1} /> : "—"}</strong><span>{main && strongest && strongest.id === main.id ? "sismo principal" : "magnitud"}</span></div><p>{strongest ? placeText(strongest) : "Sin eventos disponibles"}</p></article>
             <article className="metric-card"><div className="metric-top"><span>{main && latest && isAftershock(latest, main) ? "ÚLTIMA RÉPLICA" : "EVENTO MÁS RECIENTE"}</span><span className="metric-icon blue">◷</span></div><div className="metric-main"><strong>{recentValue}</strong><span>{recentUnit}</span></div><p>{latest ? dateTime.format(new Date(latest.properties.time)) : "Hora local de Panamá (UTC−5)"}</p></article>
           </section>
 
@@ -759,7 +759,7 @@ export default function Home() {
               : <div className="replay-pair"><button type="button" className="replay-button stop" onClick={stopReplay}>■ Parar</button><button type="button" className="replay-button" onClick={startReplay}>↻ Reiniciar</button></div>)}</div></div>
             <div className="map-card">
               <div className="map-frame"><QuakeMap events={mapEvents} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} region={province === "all" || province === FAR_OFFSHORE ? null : province} place={selectedPlace} onSelect={setSelectedId} onReplay={setReplay} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo{replayScope ? ` · ${replayScope}` : ""}</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<span className="replay-actions"><button type="button" className="stop" onClick={stopReplay}>■ Parar</button><button type="button" onClick={startReplay}>↻ Reiniciar</button></span><i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>MAGNITUD</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>{main && <div><i className="legend-circle main" /> Sismo principal</div>}</div></div>
-              <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div><div><span>PROVINCIA</span><strong>{featured ? provinceLabel(featured) : "—"}</strong></div><div><span>CIUDAD MÁS CERCANA</span><strong>{featured ? placeLabel(featured, true) : "—"}</strong></div></div><a className="featured-link" href={reportUrl(featured)} target="_blank" rel="noopener noreferrer">{`Ver en ${SOURCE_NAMES[featured?.properties.source ?? "usgs"]}`} <span aria-hidden="true">↗</span></a></div>
+              <div className="map-aside"><div className="aside-top"><span>EN FOCO</span><span className="aside-icon" aria-hidden="true">↗</span></div><div className="featured-magnitude">{featured ? magText(featured) : "—"}</div><div className="featured-place">{featured ? placeText(featured) : status === "loading" ? "Buscando el último sismo registrado…" : "No hay eventos para los filtros seleccionados."}</div><div className="featured-details"><div><span>FECHA Y HORA</span><strong>{featured ? dateTime.format(new Date(featured.properties.time)) : "—"}</strong></div><div><span>PROFUNDIDAD</span><strong>{featured ? depthText(featured) : "—"}</strong></div><div><span>PROVINCIA</span><strong>{featured ? provinceLabel(featured) : "—"}</strong></div><div><span>CIUDAD MÁS CERCANA</span><strong>{featured ? placeLabel(featured, true) : "—"}</strong></div></div><a className="featured-link" href={reportUrl(featured)} target="_blank" rel="noopener noreferrer">{`Ver en ${SOURCE_NAMES[featured?.properties.source ?? "usgs"]}`} <span aria-hidden="true">↗</span></a></div>
             </div>
             <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información. Límites provinciales: © colaboradores de OpenStreetMap (ODbL), vía geoBoundaries. Localidades: GeoNames (CC BY 4.0).</p>
             {main && sequenceAftershocks.length > 0 && (
@@ -773,7 +773,7 @@ export default function Home() {
 
           <div className="lower-grid">
             <section id="eventos" className="events-card" aria-labelledby="events-title"><div className="card-heading"><div><span className="section-kicker">REGISTRO RECIENTE</span><h2 id="events-title">Últimos eventos</h2></div><div className="events-tools"><div className="segmented" role="group" aria-label="Ordenar eventos">{([["recent", "Recientes"], ["magnitude", "Mayor magnitud"]] as const).map(([value, label]) => <button key={value} type="button" className={sort === value ? "selected" : ""} aria-pressed={sort === value} onClick={() => setSort(value)}>{label}</button>)}</div><span className="results-count">{main ? `${Math.max(0, events.length - (events.some(e => e.id === main.id) ? 1 : 0))} réplicas${events.some(e => e.id === main.id) ? " + 1 sismo principal" : ""}` : `${events.length} ${events.length === 1 ? "evento" : "eventos"}`}</span></div></div><div className="events-list" aria-live="polite">{events.length ? listEvents.map((event, index) => <button key={event.id} type="button" className="event-row" style={{ "--i": index } as CSSProperties} onClick={() => chooseEvent(event)}><span className={`magnitude-badge${(event.properties.mag ?? 0) >= 5 ? " high" : (event.properties.mag ?? 0) < 3 ? " low" : ""}`}>{magText(event)}</span><span className="event-text"><strong>{placeText(event)}</strong><small>{provinceLabel(event)} · {placeLabel(event)} · {depthText(event)} de profundidad{main && isAftershock(event, main) && <em className="replica-tag">Réplica</em>}{main && event.id === main.id && <em className="main-tag">Sismo Principal M 7.7</em>}{event.properties.source && event.properties.source !== "usgs" && <em className="source-tag" title="Aún sin reporte del USGS">{SOURCE_NAMES[event.properties.source]}</em>}</small></span><span className="event-time"><strong>{clockFormat.format(new Date(event.properties.time))}</strong><small>{date.format(new Date(event.properties.time))}</small></span></button>) : status === "loading" ? <div className="event-skeletons" role="status" aria-label="Consultando eventos sísmicos">{[0, 1, 2, 3, 4].map(i => <div key={i} className="event-skeleton" style={{ animationDelay: `${i * 90}ms` }}><i /><span /><em /></div>)}</div> : <div className="empty-state">{status === "error" ? "Los datos no están disponibles en este momento. Inténtalo de nuevo más tarde." : "No hay sismos reportados para este período y magnitud. Prueba otro filtro."}</div>}</div></section>
-            <section id="preparacion" className="prepared-card" aria-labelledby="prepared-title"><div className="prepared-icon">✳</div><span className="section-kicker">EN CASO DE SISMO</span><h2 id="prepared-title">Regla básica de protección</h2><p>Mantén la calma y actúa de inmediato:</p><div className="prepared-steps"><div><span>01</span><strong>Agáchate</strong><small>Bajo una mesa o mueble firme.</small></div><div><span>02</span><strong>Cúbrete</strong><small>Protege cabeza y cuello.</small></div><div><span>03</span><strong>Sujétate</strong><small>Hasta que cese el temblor.</small></div></div><a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC Panamá <span aria-hidden="true">↗</span></a></section>
+            <section id="preparacion" className="prepared-card" aria-labelledby="prepared-title"><div className="prepared-icon" aria-hidden="true">✳</div><span className="section-kicker">EN CASO DE SISMO</span><h2 id="prepared-title">Regla básica de protección</h2><p>Mantén la calma y actúa de inmediato:</p><div className="prepared-steps"><div><span>01</span><strong>Agáchate</strong><small>Bajo una mesa o mueble firme.</small></div><div><span>02</span><strong>Cúbrete</strong><small>Protege cabeza y cuello.</small></div><div><span>03</span><strong>Sujétate</strong><small>Hasta que cese el temblor.</small></div></div><a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC Panamá <span aria-hidden="true">↗</span></a></section>
           </div>
           <section id="recomendaciones" className="guide-section" aria-labelledby="guide-title">
             <div className="section-heading"><div><span className="section-kicker">QUÉ HACER AHORA</span><h2 id="guide-title">Guía de seguridad rápida</h2></div></div>
@@ -812,6 +812,7 @@ export default function Home() {
               </a>
             </span>
             <span>Datos: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS Earthquake Catalog</a>, contrastado con <a href="https://www.emsc-csem.org/" target="_blank" rel="noopener noreferrer">EMSC</a> y <a href="https://geofon.gfz.de/" target="_blank" rel="noopener noreferrer">GFZ GEOFON</a> · No sustituye alertas oficiales ni predice sismos.</span>
+            <span><a href="/resumen">Resumen en texto y braille</a></span>
           </footer>
         </div>
       </main>

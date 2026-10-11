@@ -219,7 +219,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           <div className="alert-setting-row" style={{ background: "rgba(14, 165, 233, 0.08)", border: "1px solid rgba(14, 165, 233, 0.25)", borderRadius: "10px", padding: "14px 12px" }}>
             <div className="alert-setting-info">
               <strong style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>📲</span> Alertas con la app cerrada
+                <span aria-hidden="true">📲</span> Alertas con la app cerrada
                 <span style={{ fontSize: "10px", background: "#0369a1", color: "#fff", padding: "2px 6px", borderRadius: "4px", fontWeight: "700" }}>24/7</span>
               </strong>
               <span>
@@ -360,7 +360,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 onClick={handleTestAlert}
                 disabled={isTesting}
               >
-                {isTesting ? "🔊 Sonando…" : "🔊 Probar alerta"}
+                <span aria-hidden="true">🔊</span> {isTesting ? "Sonando…" : "Probar alerta"}
               </button>
               {isTesting && (
                 <button
@@ -377,7 +377,7 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
           {/* Difundir alerta a todos por WhatsApp / Telegram */}
           <div className="broadcast-box">
             <div className="broadcast-header">
-              <span className="broadcast-icon">📢</span>
+              <span className="broadcast-icon" aria-hidden="true">📢</span>
               <div>
                 <strong>Avisar a familiares</strong>
                 <p>Comparte los datos de este sismo por WhatsApp o Telegram.</p>

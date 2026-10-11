@@ -69,3 +69,6 @@ html[data-a11y-contrast="high"] :is(.a11y-panel,.a11y-switch,.a11y-scales button
 
 /* Texto solo para lectores de pantalla */
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.a11y-link{display:flex;align-items:center;justify-content:center;min-height:46px;margin:0 0 8px;border:2px solid #0a3a8c;border-radius:12px;color:#0a3a8c;font:700 calc(13.5px*var(--ts,1)) "DM Sans",sans-serif;text-decoration:none}
+.a11y-link:hover{background:#e8eefa}
+html[data-a11y-contrast="high"] .a11y-link{color:#10151c;border-color:#10151c}

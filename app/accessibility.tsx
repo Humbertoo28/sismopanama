@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Earthquake } from "../lib/earthquakes";
 import { playVoiceAlert, spokenPlace } from "../lib/alert-system";
@@ -190,9 +191,10 @@ export default function Accessibility() {
             </button>
           ))}
           <button type="button" className="a11y-action" onClick={toggleSpeech} disabled={!latest}>
-            {speaking ? "⏹ Detener la lectura" : "🔊 Escuchar el último sismo"}
+            <span aria-hidden="true">{speaking ? "⏹" : "🔊"}</span> {speaking ? "Detener la lectura" : "Escuchar el último sismo"}
           </button>
           {!latest && <p className="a11y-note">La lectura en voz alta está disponible en la página principal.</p>}
+          <Link href="/resumen" className="a11y-link" onClick={() => setOpen(false)}>Resumen en texto y braille</Link>
           <button type="button" className="a11y-reset" onClick={() => change({ ...DEFAULTS })}>Restablecer</button>
         </div>
       )}
