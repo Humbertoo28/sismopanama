@@ -1277,11 +1277,22 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     cancelAnimationFrame(frame.current);
     zoomAt(factor, size.w / 2, size.h / 2);
   };
-  const view = (name: "perspective" | "top" | "side") => goTo({ ...(name === "perspective" ? home() : PRESETS[name]), zoom: cameraRef.current.zoom });
+  // En el celular los botones quedan debajo del escenario: si no se ve completo, se sube hasta él para que se vea el movimiento.
+  const revealStage = () => {
+    const stage = box.current;
+    if (!stage || isExpanded) return;
+    const r = stage.getBoundingClientRect();
+    if (r.top < 64 || r.bottom > window.innerHeight - 72) stage.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+  };
+  const view = (name: "perspective" | "top" | "side") => {
+    revealStage();
+    goTo({ ...(name === "perspective" ? home() : PRESETS[name]), zoom: cameraRef.current.zoom });
+  };
   // Mira la falla de frente (perpendicular al plano) a escala real y centrada: así se ve el
   // reparto del deslizamiento como en las figuras de los sismólogos. Usa el rumbo y el buzamiento que publica el USGS.
   const showRupture = () => {
     if (!fault) return;
+    revealStage();
     const strike = fault.strike ?? 288;
     const dip = fault.dip ?? 50;
     // La cara de una falla que buza hacia el lado de la dirección «rumbo + 90°» se ve de frente desde ese mismo lado: se mira
@@ -1303,12 +1314,26 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const focusActivity = () => {
     const event = selectedEvent ?? mainshock ?? latest;
     if (!event) return;
+    revealStage();
     const base = home();
     const projection = makeProjection(scene, base, size.w, size.h, exaggeration);
     const [lng, lat, depth] = event.geometry.coordinates;
     const p = projection.project(projection.at(lng, lat, depth ?? 0));
-    const zoom = 1.8;
-    goTo({ ...base, zoom, px: -(p.sx - projection.originX) * zoom, py: -(p.sy - size.h / 2) * zoom });
+    // Con el sismo principal se encuadra toda la ruptura (el rectángulo de la falla y el hipocentro), para que llene la vista;
+    // con cualquier otro sismo, un acercamiento fijo centrado en él.
+    const points = fault && event.id === mainshock?.id
+      ? [p, ...faultOutline(fault, fault.strike ?? 288).map(([x, y, d]) => projection.project(projection.at(x, y, d)))]
+      : null;
+    if (!points) {
+      const zoom = 3;
+      goTo({ ...base, zoom, px: -(p.sx - projection.originX) * zoom, py: -(p.sy - size.h / 2) * zoom }, 900);
+      return;
+    }
+    const [minX, maxX] = [Math.min(...points.map(q => q.sx)), Math.max(...points.map(q => q.sx))];
+    const [minY, maxY] = [Math.min(...points.map(q => q.sy)), Math.max(...points.map(q => q.sy))];
+    const [marginL, marginR, marginV] = marginsFor(size.w);
+    const zoom = clamp(0.8 * Math.min((size.w - marginL - marginR) / Math.max(maxX - minX, 1), (size.h - 2 * marginV) / Math.max(maxY - minY, 1)), 2, 5);
+    goTo({ ...base, zoom, px: -((minX + maxX) / 2 - projection.originX) * zoom, py: -((minY + maxY) / 2 - size.h / 2) * zoom }, 900);
   };
 
   return (
