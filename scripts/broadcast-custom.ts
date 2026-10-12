@@ -9,19 +9,17 @@ async function main() {
   console.log("Mensaje:", body);
   console.log("URL destino: https://www.ojopanama.com/");
 
+  // Sin campo `magnitude` en el payload para que la pestaña abierta no lo interprete como un sismo.
   const payload = {
     title,
     body,
     id: `anuncio-${Date.now()}`,
-    magnitude: 10, // Para incluir a todos los suscriptores (umbral 3, 4 y 5)
-    place: "Panamá",
-    time: Date.now(),
     url: "/",
   };
 
   const startedAt = Date.now();
-  // Presupuesto de 6 minutos para despachar a los más de 30,000 suscriptores
-  const result = await broadcastPush(payload, 5.0, 360_000);
+  // Umbral 99.0 en el segundo parámetro incluye a todos los suscriptores sin inyectar magnitud en el mensaje.
+  const result = await broadcastPush(payload, 99.0, 360_000);
   const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
 
   console.log("\n=== RESULTADOS DEL ENVÍO MASIVO ===");

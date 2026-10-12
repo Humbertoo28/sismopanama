@@ -126,12 +126,21 @@ self.addEventListener("push", (event) => {
       // Un service worker no puede reproducir audio. Si la app está abierta (aunque sea en segundo plano) se le
       // avisa en el acto para que haga sonar la sirena y la voz, en vez de esperar a su próxima consulta.
       try {
-        const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-        for (const client of open) {
-          client.postMessage({
-            type: "quake-push",
-            quake: { id: data.id, magnitude: data.magnitude, place: data.place, time: data.time, lat: data.lat, lng: data.lng, depth: data.depth },
-          });
+        const isRealQuake =
+          data.id &&
+          !String(data.id).startsWith("anuncio-") &&
+          !String(data.id).startsWith("test-") &&
+          typeof data.magnitude === "number" &&
+          data.magnitude > 0 &&
+          data.magnitude < 9.5;
+        if (isRealQuake) {
+          const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+          for (const client of open) {
+            client.postMessage({
+              type: "quake-push",
+              quake: { id: data.id, magnitude: data.magnitude, place: data.place, time: data.time, lat: data.lat, lng: data.lng, depth: data.depth },
+            });
+          }
         }
       } catch {
         // Sin ventanas abiertas no hay a quién avisar.
