@@ -11,6 +11,20 @@ import { intensityColor, slipColor } from "../lib/usgs-colors";
 import { depthColor, isRoundDepth } from "../lib/depth";
 import { loadMosaic, paintMosaic, planTiles, type Mosaic } from "./satellite-tiles";
 import { reducedMotion, shakeElement } from "./shake";
+// Inline SVG keeps these small controls independent of the icon library runtime.
+const ICON_PATHS = {
+  Box: "m12 3 9 5v8l-9 5-9-5V8l9-5Zm0 9 9-4M12 12 3 8m9 4v9",
+  Compass: "m16 8-3 5-5 3 3-5 5-3ZM12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20",
+  Focus: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8",
+  Maximize2: "M15 3h6v6m0-6-7 7M9 21H3v-6m0 6 7-7",
+  Minimize2: "M21 3l-7 7m0-6v6h6M3 21l7-7m-6 0h6v6",
+  Minus: "M5 12h14",
+  Plus: "M5 12h14m-7-7v14",
+  RotateCcw: "M3 10a9 9 0 1 1 1 7M3 4v6h6",
+} as const;
+function SceneIcon({ name, size = 17 }: { name: keyof typeof ICON_PATHS; size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON_PATHS[name]} /></svg>;
+}
 
 type Props = {
   events: Earthquake[];
@@ -33,7 +47,7 @@ type Point = { x: number; y: number; z: number };
 const KM_PER_DEG = 111.32;
 const KM_PER_LAT = 110.57;
 const PRESETS = {
-  perspective: { yaw: 16, pitch: 36, zoom: 1, px: 0, py: 0 },
+  perspective: { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 },
   top: { yaw: 0, pitch: 90, zoom: 1, px: 0, py: 0 },
   side: { yaw: 0, pitch: 4, zoom: 1, px: 0, py: 0 },
 } as const;
@@ -43,11 +57,11 @@ const PRESETS = {
 const homeFor = (w: number, h: number): Camera => {
   const aspect = w / h;
   // Se mira desde el sur-suroeste, hacia donde buza la falla: así la ruptura se ve de frente y no de canto.
-  return aspect < 1 ? { yaw: 70, pitch: 38, zoom: 1, px: 0, py: 0 } : aspect < 1.35 ? { yaw: 40, pitch: 36, zoom: 1, px: 0, py: 0 } : { yaw: 16, pitch: 36, zoom: 1, px: 0, py: 0 };
+  return aspect < 0.8 ? { yaw: 65, pitch: 48, zoom: 1, px: 0, py: 0 } : { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 };
 };
 const EXAGGERATIONS = [1, 4, 8] as const;
 // Opacidad de la imagen satelital (algo translúcida para que se integre con el fondo).
-const SAT_ALPHA = 0.82;
+const SAT_ALPHA = 0.9;
 const SAT_KEY = "sismo_3d_satellite";
 const COLORS = { low: "#f5c542", mid: "#f08a24", high: "#da121a", latest: "#1d6bff", main: "#a21caf" };
 const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
@@ -56,7 +70,7 @@ const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day
 const depthOf = (event: Earthquake) => event.geometry.coordinates[2];
 // Profundidad con un decimal como máximo (12.647 → 12.6).
 // Márgenes del encuadre (izquierda, derecha, vertical): a la izquierda van los kilómetros de profundidad.
-const marginsFor = (w: number) => [w < 480 ? 44 : 56, 18, 26] as const;
+const marginsFor = (w: number) => (w < 480 ? ([44, 18, 52] as const) : ([56, 60, 42] as const));
 const km = (value: number) => `${Math.round(value * 10) / 10} km`;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -136,12 +150,19 @@ function faultOutline(fault: Fault, strike: number): [number, number, number][] 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
 export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, layerControls, onSelect }: Props) {
+  const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 640, h: 420 });
-  const [exaggeration, setExaggeration] = useState<number>(8);
+  const [exaggeration, setExaggeration] = useState<number>(4);
   // Por defecto los puntos se colorean por profundidad: es lo que esta vista enseña mejor.
   const [colorBy, setColorBy] = useState<"depth" | "mag">("depth");
+  // `expanded`: pantalla completa del navegador. `overlay`: respaldo para navegadores que no la permiten (iPhone): la
+  // escena se abre sobre toda la página.
+  const [expanded, setExpanded] = useState(false);
+  const [overlay, setOverlay] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [surfaceOpacity, setSurfaceOpacity] = useState(90);
   // Al abrir, la cámara baja desde una vista casi cenital hasta el punto de vista inicial (salvo que se pidan menos animaciones).
   const [camera, setCamera] = useState<Camera>(() => {
     if (typeof window === "undefined") return PRESETS.perspective;
@@ -163,6 +184,48 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const bufferRef = useRef<HTMLCanvasElement | null>(null);
   const hits = useRef<{ id: string; x: number; y: number; r: number; depth: number }[]>([]);
   const frame = useRef(0);
+
+  // El navegador gestiona Escape y devuelve el mapa a su sitio al salir.
+  useEffect(() => {
+    const update = () => {
+      const active = document.fullscreenElement === root.current?.parentElement;
+      setExpanded(active);
+      if (active) setOverlay(false);
+    };
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  const toggleExpanded = async () => {
+    const container = root.current?.parentElement;
+    if (document.fullscreenElement === container) {
+      await document.exitFullscreen();
+    } else if (overlay) {
+      setOverlay(false);
+    } else {
+      try {
+        if (!container?.requestFullscreen) throw new Error("Fullscreen unavailable");
+        // Algunos navegadores integrados dejan la promesa sin resolver: se espera un instante y, si no se logró, se usa el respaldo.
+        await Promise.race([container.requestFullscreen(), new Promise((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 900))]);
+        if (document.fullscreenElement !== container) throw new Error("Fullscreen not granted");
+      } catch {
+        // Safari móvil y navegadores integrados: se amplía sobre la página.
+        setOverlay(true);
+      }
+    }
+  };
+  // Con el respaldo abierto, Escape lo cierra y la página de abajo no se desplaza.
+  useEffect(() => {
+    if (!overlay) return;
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setOverlay(false);
+    const previous = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.documentElement.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [overlay]);
+  const isExpanded = expanded || overlay;
 
   useEffect(() => {
     cameraRef.current = camera;
@@ -202,7 +265,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
 
   // Imagen satelital de la superficie: se piden los mosaicos de la zona que se está viendo (el navegador los guarda un día).
   const [south, north, west, east] = [scene.south, scene.north, scene.west, scene.east].map(value => Math.round(value * 100) / 100);
-  const maxTiles = size.w < 520 ? 16 : 24;
+  const maxTiles = size.w < 520 ? 24 : 48;
   useEffect(() => {
     if (!satellite) {
       mosaicRef.current = null;
@@ -279,19 +342,63 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     // El fondo lo pone el contenedor (CSS), para que no se note el borde del lienzo.
     ctx.clearRect(0, 0, w, h);
 
+    const atmosphere = ctx.createRadialGradient(w * 0.5, h * 0.3, 0, w * 0.5, h * 0.45, Math.max(w, h) * 0.7);
+    atmosphere.addColorStop(0, "rgba(31,104,135,.22)");
+    atmosphere.addColorStop(0.65, "rgba(8,29,48,.08)");
+    atmosphere.addColorStop(1, "rgba(1,8,18,.45)");
+    ctx.fillStyle = atmosphere;
+    ctx.fillRect(0, 0, w, h);
+
     // Caja de profundidad: suelo y cuatro aristas hasta la profundidad máxima.
     const [sw, se, ne, nw] = [at(scene.west, scene.south, 0), at(scene.east, scene.south, 0), at(scene.east, scene.north, 0), at(scene.west, scene.north, 0)];
     const floor = [sw, se, ne, nw].map(p => ({ ...p, z: -scene.floorKm * exaggeration }));
+    // Un volumen de referencia iluminado, sin inventar estratos ni elevaciones del terreno.
+    const polygon = (points: Point[]) => {
+      ctx.beginPath();
+      points.forEach((p, i) => { const q = project(p); pathTo(i, q.sx, q.sy); });
+      ctx.closePath();
+    };
+    const floorCenter = project({ x: 0, y: 0, z: -scene.floorKm * exaggeration });
+    ctx.save();
+    ctx.translate(floorCenter.sx, floorCenter.sy + 12);
+    ctx.scale(1, 0.24);
+    const shadow = ctx.createRadialGradient(0, 0, 5, 0, 0, w * 0.42);
+    shadow.addColorStop(0, "rgba(0,0,0,.55)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow;
+    ctx.fillRect(-w, -h * 4, w * 2, h * 8);
+    ctx.restore();
+    const volume = [sw, se, ne, nw];
+    volume.map((p, i) => ({ i, depth: (project(p).depth + project(volume[(i + 1) % 4]).depth) / 2 }))
+      .sort((a, b) => a.depth - b.depth).forEach(({ i }) => {
+        const j = (i + 1) % 4;
+        const top = project(volume[i]);
+        const bottom = project(floor[i]);
+        const glass = ctx.createLinearGradient(top.sx, top.sy, bottom.sx, bottom.sy + 1);
+        glass.addColorStop(0, "rgba(66,151,179,.16)");
+        glass.addColorStop(0.45, "rgba(29,76,105,.10)");
+        glass.addColorStop(1, "rgba(12,27,49,.42)");
+        polygon([volume[i], volume[j], floor[j], floor[i]]);
+        ctx.fillStyle = glass;
+        ctx.fill();
+      });
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(160,190,230,.22)";
     ctx.setLineDash([]);
     ctx.beginPath();
     floor.forEach((p, i) => { const q = project(p); pathTo(i, q.sx, q.sy); });
     ctx.closePath();
-    ctx.fillStyle = "rgba(20,50,95,.35)";
+    ctx.fillStyle = "rgba(15,46,66,.48)";
     ctx.fill();
     ctx.stroke();
     [sw, se, ne, nw].forEach((p, i) => line(p, floor[i]));
+    ctx.strokeStyle = "rgba(98,170,189,.12)";
+    for (let i = 1; i < 9; i++) {
+      const x = scene.west + (scene.east - scene.west) * i / 9;
+      const y = scene.south + (scene.north - scene.south) * i / 9;
+      line(at(x, scene.south, scene.floorKm), at(x, scene.north, scene.floorKm));
+      line(at(scene.west, y, scene.floorKm), at(scene.east, y, scene.floorKm));
+    }
 
     // Cada 10 km de profundidad, una marca en la arista más cercana a quien mira y un plano tenue.
     const corners = [sw, se, ne, nw];
@@ -320,26 +427,26 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     // uniones entre triángulos, y luego se mezcla.
     const mosaic = satellite ? mosaicRef.current : null;
     if (mosaic && tiles.loaded > 0) {
-      // La imagen es una foto suave: se pinta a resolución de pantalla (sin la escala del dispositivo) y se amplía,
-      // lo que cuesta una fracción y mantiene fluido el giro en celulares.
+      // Conserva la nitidez en pantallas Retina sin superar 2× la resolución CSS.
       const buffer = (bufferRef.current ??= document.createElement("canvas"));
-      if (buffer.width !== w || buffer.height !== h) {
-        buffer.width = w;
-        buffer.height = h;
+      if (buffer.width !== Math.round(w * dpr) || buffer.height !== Math.round(h * dpr)) {
+        buffer.width = Math.round(w * dpr);
+        buffer.height = Math.round(h * dpr);
       }
       const bctx = buffer.getContext("2d");
       if (bctx) {
-        bctx.setTransform(1, 0, 0, 1, 0, 0);
+        bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         bctx.clearRect(0, 0, w, h);
-        const cols = clamp(Math.round(w / 46), 8, 18);
-        const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 6, 14);
+        bctx.imageSmoothingQuality = "high";
+        const cols = clamp(Math.round(w / 40), 12, 28);
+        const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 24);
         paintMosaic(bctx, mosaic, scene, (lng, lat) => {
           const q = project(at(lng, lat, 0));
           return { sx: q.sx, sy: q.sy };
         }, cols, rows);
         ctx.save();
-        ctx.globalAlpha = SAT_ALPHA;
-        ctx.imageSmoothingQuality = "medium";
+        ctx.globalAlpha = SAT_ALPHA * surfaceOpacity / 100;
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(buffer, 0, 0, w, h);
         ctx.restore();
       }
@@ -348,8 +455,9 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     // Planos de referencia cada 10 km bajo la superficie: así se lee a qué nivel está cada sismo, también de lado.
     ctx.setLineDash([]);
     ctx.lineWidth = 0.9;
-    ctx.strokeStyle = "rgba(200,222,255,.2)";
-    for (let level = 10; level < scene.floorKm; level += 10) {
+    ctx.strokeStyle = "rgba(148,197,213,.14)";
+    const levelStep = Math.max(10, Math.ceil(scene.floorKm / 60) * 10);
+    for (let level = levelStep; level < scene.floorKm; level += levelStep) {
       ctx.beginPath();
       [sw, se, ne, nw].forEach((c, i) => { const q = project({ ...c, z: -level * exaggeration }); pathTo(i, q.sx, q.sy); });
       ctx.closePath();
@@ -403,7 +511,8 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       const isLatest = item.event.id === latest?.id;
       const selected = item.event.id === selectedId;
       const color = isMain ? COLORS.main : isLatest ? COLORS.latest : colorBy === "depth" ? depthColor(item.depth) : COLORS[item.tier];
-      const r = (isMain ? 10 : item.radius) * Math.min(1.35, Math.max(0.75, q.k));
+      const markerScale = clamp(Math.sqrt(w / 720) * Math.sqrt(camera.zoom), 0.9, 1.6);
+      const r = (isMain ? 11 : item.radius) * Math.min(1.35, Math.max(0.75, q.k)) * markerScale;
       drawables.push({
         depth: q.depth,
         draw: () => {
@@ -438,7 +547,12 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             ctx.strokeStyle = color;
             ctx.stroke();
           } else {
-            ctx.fillStyle = color;
+            const sphere = ctx.createRadialGradient(q.sx - r * 0.32, q.sy - r * 0.38, r * 0.05, q.sx, q.sy, r);
+            sphere.addColorStop(0, "#ffffff");
+            sphere.addColorStop(0.28, color);
+            sphere.addColorStop(0.72, color);
+            sphere.addColorStop(1, "#12233d");
+            ctx.fillStyle = sphere;
             ctx.globalAlpha = item.tier === "low" ? 0.9 : 0.96;
             ctx.fill();
             ctx.globalAlpha = 1;
@@ -507,14 +621,14 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     ctx.beginPath();
     [sw, se, ne, nw].forEach((p, i) => { const q = project(p); pathTo(i, q.sx, q.sy); });
     ctx.closePath();
-    ctx.fillStyle = "rgba(120,170,235,.13)";
+    ctx.fillStyle = `rgba(74,159,186,${0.1 * surfaceOpacity / 100})`;
     ctx.fill();
-    ctx.strokeStyle = "rgba(190,215,250,.55)";
+    ctx.strokeStyle = "rgba(139,221,231,.7)";
     ctx.lineWidth = 1.2;
     ctx.stroke();
 
     ctx.lineWidth = 0.7;
-    ctx.strokeStyle = "rgba(190,215,250,.16)";
+    ctx.strokeStyle = "rgba(190,215,250,.10)";
     ctx.font = font(9.5, 700);
     ctx.fillStyle = "rgba(205,220,242,.7)";
     ctx.textAlign = "center";
@@ -575,7 +689,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     // Límites de todas las provincias y comarcas, tenues, para que los nombres tengan referencia.
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.8;
-    ctx.strokeStyle = "rgba(255,255,255,.32)";
+    ctx.strokeStyle = "rgba(210,239,237,.22)";
     for (const division of PROVINCES) {
       for (const ring of division.rings) {
         ctx.beginPath();
@@ -587,8 +701,8 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
 
     ctx.lineJoin = "round";
     ctx.lineWidth = mosaic && tiles.loaded > 0 ? 1.1 : 1.5;
-    ctx.strokeStyle = mosaic && tiles.loaded > 0 ? "rgba(255,255,255,.7)" : "rgba(255,255,255,.88)";
-    ctx.fillStyle = mosaic && tiles.loaded > 0 ? "rgba(255,255,255,0)" : "rgba(255,255,255,.05)";
+    ctx.strokeStyle = mosaic && tiles.loaded > 0 ? "rgba(168,230,222,.62)" : "rgba(190,245,233,.88)";
+    ctx.fillStyle = mosaic && tiles.loaded > 0 ? "rgba(255,255,255,0)" : "rgba(70,159,151,.20)";
     for (const ring of PANAMA_RINGS) {
       ctx.beginPath();
       ring.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
@@ -695,18 +809,23 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     // Sin que se pisen: primero el seleccionado y los más fuertes; el que choca con uno ya puesto se omite.
     const placedLabels: { sx: number; sy: number }[] = [];
     for (const label of labeled.sort((a, b) => b.rank - a.rank)) {
-      if (placedLabels.some(other => Math.abs(other.sx - label.sx) < 52 && Math.abs(other.sy - label.sy) < 15)) continue;
+      if (placedLabels.some(other => Math.abs(other.sx - label.sx) < 72 && Math.abs(other.sy - label.sy) < 25)) continue;
       placedLabels.push(label);
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = "rgba(7,21,43,.9)";
-      ctx.strokeText(label.text, label.sx, label.sy);
+      const labelWidth = ctx.measureText(label.text).width + 16;
+      ctx.beginPath();
+      ctx.roundRect(label.sx - labelWidth / 2, label.sy - 15, labelWidth, 22, 5);
+      ctx.fillStyle = "rgba(5,18,29,.9)";
+      ctx.fill();
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = "rgba(163,221,230,.4)";
+      ctx.stroke();
       ctx.fillStyle = "#ffffff";
       ctx.fillText(label.text, label.sx, label.sy);
     }
 
     // Brújula: hacia dónde queda el norte en pantalla (la vista de frente de la falla deja el mapa «al revés»).
     {
-      const [cx, cy, r] = [38, 38, 14];
+      const [cx, cy, r] = [38, h - 42, 14];
       const yawRad = (camera.yaw * Math.PI) / 180;
       const [dx, dy] = [-Math.sin(yawRad), -Math.cos(yawRad) * Math.max(0.35, sp)];
       const len = Math.hypot(dx, dy) || 1;
@@ -741,19 +860,23 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.restore();
     }
 
-    // Atribución de la imagen satelital, siempre a la vista.
+    // Atribución de la imagen satelital, siempre a la vista. En pantallas anchas va abajo a la izquierda, junto a la brújula;
+    // en el celular, justo encima de la barra de navegación.
     if (mosaic && tiles.loaded > 0) {
+      const narrow = w < 480;
+      const credit = "Imagen © Esri, Maxar, Earthstar Geographics";
       ctx.font = font(9.5, 600);
-      ctx.textAlign = "right";
+      ctx.textAlign = narrow ? "right" : "left";
       ctx.textBaseline = "alphabetic";
       ctx.lineWidth = 3;
       ctx.lineJoin = "round";
       ctx.strokeStyle = "rgba(7,21,43,.85)";
       ctx.fillStyle = "rgba(235,242,252,.9)";
-      ctx.strokeText("Imagen © Esri, Maxar, Earthstar Geographics", w - 8, h - 7);
-      ctx.fillText("Imagen © Esri, Maxar, Earthstar Geographics", w - 8, h - 7);
+      const [cx, cy] = narrow ? [w - 8, h - 60] : [72, h - 14];
+      ctx.strokeText(credit, cx, cy);
+      ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, satellite, tiles, colorBy]);
+  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, satellite, tiles, colorBy, surfaceOpacity]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -867,6 +990,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
+      cancelAnimationFrame(frame.current);
       const rect = el.getBoundingClientRect();
       zoomRef.current(Math.exp(-event.deltaY * 0.0025), event.clientX - rect.left, event.clientY - rect.top);
     };
@@ -875,6 +999,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   }, []);
 
   const onKey = (event: ReactKeyboardEvent) => {
+    cancelAnimationFrame(frame.current);
     const step = event.shiftKey ? 15 : 6;
     const [cx, cy] = [size.w / 2, size.h / 2];
     // Con Alt las flechas mueven la escena en vez de girarla.
@@ -895,7 +1020,10 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     handled();
   };
 
-  const zoomBy = (factor: number) => zoomAt(factor, size.w / 2, size.h / 2);
+  const zoomBy = (factor: number) => {
+    cancelAnimationFrame(frame.current);
+    zoomAt(factor, size.w / 2, size.h / 2);
+  };
   const view = (name: "perspective" | "top" | "side") => goTo({ ...(name === "perspective" ? home() : PRESETS[name]), zoom: cameraRef.current.zoom });
   // Mira la falla de frente (perpendicular al plano) a escala real y centrada: así se ve el
   // reparto del deslizamiento como en las figuras de los sismólogos. Usa el rumbo y el buzamiento que publica el USGS.
@@ -919,9 +1047,34 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   };
   const which = camera.pitch >= 85 ? "top" : camera.pitch <= 8 ? "side" : "perspective";
 
+  const focusActivity = () => {
+    const event = selectedEvent ?? mainshock ?? latest;
+    if (!event) return;
+    const base = home();
+    const projection = makeProjection(scene, base, size.w, size.h, exaggeration);
+    const [lng, lat, depth] = event.geometry.coordinates;
+    const p = projection.project(projection.at(lng, lat, depth ?? 0));
+    const zoom = 1.8;
+    goTo({ ...base, zoom, px: -(p.sx - projection.originX) * zoom, py: -(p.sy - size.h / 2) * zoom });
+  };
+
   return (
-    <div className="q3">
+    <div ref={root} className={`q3${isExpanded ? " q3-expanded" : ""}${overlay ? " q3-overlay" : ""}`}>
+      <div className="q3-heading">
+        <div className="q3-heading-title"><SceneIcon name="Box" size={24} /><div><span>EXPLORADOR SÍSMICO / PANAMÁ</span><h3>La actividad sísmica, en profundidad.</h3></div></div>
+        <button className="q3-expand" type="button" aria-label={isExpanded ? "Salir de vista ampliada" : "Pantalla completa del mapa 3D"} aria-pressed={isExpanded} onClick={toggleExpanded}>
+          {isExpanded ? <SceneIcon name="Minimize2" size={16} /> : <SceneIcon name="Maximize2" size={16} />}<span>{isExpanded ? "Salir" : "Pantalla completa"}</span>
+        </button>
+      </div>
       <div className="q3-stage" ref={box}>
+        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span></div>
+        <div className="q3-navigation" role="group" aria-label="Navegación de la escena">
+          <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar" title="Acercar"><SceneIcon name="Plus" size={17} /></button>
+          <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
+          <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label="Alejar" title="Alejar"><SceneIcon name="Minus" size={17} /></button>
+          <button type="button" onClick={() => goTo(home())} aria-label="Restablecer vista 3D" title="Restablecer vista"><SceneIcon name="Focus" size={17} /></button>
+          <button type="button" onClick={() => goTo({ ...cameraRef.current, yaw: cameraRef.current.yaw + 45 })} aria-label="Girar 45 grados" title="Girar 45°"><SceneIcon name="RotateCcw" size={17} /></button>
+        </div>
         <canvas
           ref={canvas}
           className="q3-canvas"
@@ -944,6 +1097,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
         </p>
       </div>
       <div className="q3-panel">
+        <div className="q3-panel-heading"><span><SceneIcon name="Compass" size={14} aria-hidden="true" /> EXPLORAR LA ESCENA</span><span>Arrastra para girar · Pellizca para acercar</span></div>
         {selectedEvent && (
           <p className="q3-selected" role="status">
             <strong>M {selectedEvent.properties.mag === null ? "—" : selectedEvent.properties.mag.toFixed(1)}</strong>{" "}
@@ -958,10 +1112,10 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             ))}
             {fault && <button type="button" aria-label="Vista de frente de la ruptura de la falla" title="Mira la falla de frente, a escala real: así se ve cuánto se deslizó cada tramo" onClick={showRupture}>Ruptura</button>}
           </div>
-          <div className="q3-seg" role="group" aria-label="Acercar o alejar">
-            <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label="Alejar">−</button>
-            <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar">+</button>
-          </div>
+          <button type="button" className="q3-action" onClick={focusActivity} disabled={!events.length}><SceneIcon name="Focus" size={15} />{selectedEvent ? "Centrar selección" : mainshock ? "Acercar al sismo principal" : "Acercar al último sismo"}</button>
+          <button type="button" className={`q3-action q3-settings-toggle${settingsOpen ? " on" : ""}`} aria-expanded={settingsOpen} aria-controls="q3-settings" onClick={() => setSettingsOpen(value => !value)}>Ajustes y capas <span aria-hidden="true">{settingsOpen ? "−" : "+"}</span></button>
+        </div>
+        <div className="q3-advanced" id="q3-settings" hidden={!settingsOpen}>
           <div className="q3-seg" role="group" aria-label="Escala de la profundidad">
             <span className="q3-cap" aria-hidden="true">Prof.</span>
             {EXAGGERATIONS.map(value => (
@@ -979,6 +1133,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             <button type="button" aria-pressed={colorBy === "depth"} className={colorBy === "depth" ? "on" : ""} onClick={() => setColorBy("depth")}>Profundidad</button>
             <button type="button" aria-pressed={colorBy === "mag"} className={colorBy === "mag" ? "on" : ""} onClick={() => setColorBy("mag")}>Magnitud</button>
           </div>
+          <label className="q3-opacity">Superficie <input type="range" min="15" max="100" step="5" value={surfaceOpacity} onChange={event => setSurfaceOpacity(Number(event.target.value))} aria-label="Opacidad de la superficie" /><span>{surfaceOpacity}%</span></label>
           {layerControls}
         </div>
         <div className="q3-legend">
