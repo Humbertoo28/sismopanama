@@ -7,6 +7,8 @@ import { PANAMA_RINGS } from "../lib/panama";
 import { PROVINCE_BY_ID } from "../lib/province-of";
 import { PROVINCE_LABELS, TOWN_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
+import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
+import PlatesLegend from "./plates-legend";
 import { intensityColor, slipColor } from "../lib/usgs-colors";
 import { depthColor, isRoundDepth } from "../lib/depth";
 import { loadMosaic, paintMosaic, planTiles, type Mosaic } from "./satellite-tiles";
@@ -35,6 +37,8 @@ type Props = {
   fault: Fault | null;
   felt: Felt | null;
   shaking: Contour[] | null;
+  // Límites de las placas tectónicas (datos estáticos).
+  plates: boolean;
   // Interruptores de las capas del USGS, que maneja el mapa.
   layerControls: ReactNode;
   onSelect: (id: string) => void;
@@ -156,7 +160,7 @@ function faultOutline(fault: Fault, strike: number): [number, number, number][] 
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, plates, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -731,6 +735,26 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.setLineDash([]);
     }
 
+    // Límites entre placas tectónicas: un color por tipo (subducción con trazo discontinuo), con un contorno oscuro.
+    if (plates) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const boundary of PLATE_BOUNDARIES) {
+        ctx.beginPath();
+        boundary.points.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "rgba(6,18,38,.8)";
+        ctx.lineWidth = 5.2;
+        ctx.stroke();
+        ctx.setLineDash(boundary.kind === "subduction" ? [10, 5] : []);
+        ctx.strokeStyle = KIND_INFO[boundary.kind].color;
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.lineCap = "butt";
+    }
+
     ctx.restore();
 
     // Rótulo de la ruptura (bajo su borde inferior; arriba suele estar el enjambre de réplicas). Se calcula antes que los
@@ -754,9 +778,10 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       const placed: { x0: number; y0: number; x1: number; y1: number }[] = labeled.map(l => ({ x0: l.sx - 32, x1: l.sx + 32, y0: l.sy - 14, y1: l.sy + 5 }));
       if (ruptureLabel) placed.push({ x0: ruptureLabel.x - ruptureLabel.width / 2 - 4, x1: ruptureLabel.x + ruptureLabel.width / 2 + 4, y0: ruptureLabel.y - 14, y1: ruptureLabel.y + 4 });
       const inside = (lng: number, lat: number) => lng >= scene.west && lng <= scene.east && lat >= scene.south && lat <= scene.north;
-      const put = (text: string, lng: number, lat: number, px: number, weight: number, alpha: number, town: boolean) => {
+      const put = (text: string, lng: number, lat: number, px: number, weight: number, alpha: number, town: boolean, fill = "#ffffff", dy = 0) => {
         if (!inside(lng, lat)) return;
-        const q = project(at(lng, lat, 0));
+        const projected = project(at(lng, lat, 0));
+        const q = { ...projected, sy: projected.sy + dy };
         ctx.font = font(px, weight);
         const width = ctx.measureText(text).width;
         const x = town ? q.sx + 5 : q.sx - width / 2;
@@ -772,7 +797,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
         ctx.strokeStyle = "rgba(6,18,38,.9)";
         ctx.globalAlpha = alpha;
         ctx.strokeText(text, x, q.sy);
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = fill;
         ctx.fillText(text, x, q.sy);
         if (town) {
           ctx.beginPath();
@@ -785,6 +810,20 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       const boost = Math.min(1.5, Math.max(0.95, Math.sqrt(camera.zoom)));
       for (const label of PROVINCE_LABELS) {
         put(label.name.toUpperCase(), label.lng, label.lat, 10.5 * boost, 800, region === null || region === label.id ? 0.95 : 0.6, false);
+      }
+      if (plates) {
+        for (const label of PLATE_LABELS) put(PLATE_NAMES[label.code].toUpperCase(), label.lng, label.lat, 10 * boost, 800, 0.95, false, "#8de8ff");
+        // Cada límite se rotula con las dos placas que separa («Nazca | Panamá»), junto a su tramo visible, así el
+        // nombre no depende de que el centro de la placa caiga dentro de la escena.
+        const seen = new Set<string>();
+        for (const boundary of PLATE_BOUNDARIES) {
+          const key = `${boundary.a}-${boundary.b}-${boundary.kind}`;
+          const visible = boundary.points.filter(([lng, lat]) => inside(lng, lat));
+          if (seen.has(key) || visible.length < 2) continue;
+          seen.add(key);
+          const [lng, lat] = visible[Math.floor(visible.length / 2)];
+          put(`${PLATE_SHORT[boundary.a]} | ${PLATE_SHORT[boundary.b]}`.toUpperCase(), lng, lat, 9 * boost, 800, 0.97, false, KIND_INFO[boundary.kind].color, -9);
+        }
       }
       if (camera.zoom >= 1.5) {
         const count = clamp(Math.round((camera.zoom - 1.2) * 16), 8, TOWN_LABELS.length);
@@ -891,7 +930,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, satellite, tiles, colorBy, surfaceOpacity]);
+  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, satellite, tiles, colorBy, surfaceOpacity]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -1185,6 +1224,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           {felt && (
             <span><span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>Intensidad que reportó la gente</span>
           )}
+          {plates && <PlatesLegend />}
         </div>
         <p className="q3-note">
           {exaggeration === 1 ? "Profundidad a escala real." : `Profundidad exagerada ×${exaggeration} (las marcas de km son reales).`}
@@ -1202,6 +1242,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             {fault && " La ruptura es el modelo de falla que publica el USGS para el sismo principal."}
             {felt && " Los cuadros de color sobre la superficie son la intensidad que reportó la gente."}
             {shaking && " Las curvas de colores sobre la superficie son la intensidad de la sacudida que estima el USGS."}
+            {plates && " Las líneas gruesas de colores son los límites entre placas tectónicas: rojo discontinuo, subducción (una placa se hunde bajo otra); amarillo, falla transformante (se deslizan de lado); celeste, extensión (se separan); morado, convergencia (chocan). Salen del modelo PB2002 de P. Bird (2003), que no es de una agencia de gobierno; son límites aproximados y en Panamá el contacto entre placas es una zona ancha."}
             {(fault || felt || shaking) && " Fuente de estas capas: USGS."}
           </p>
         </details>

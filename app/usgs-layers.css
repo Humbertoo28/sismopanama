@@ -188,3 +188,16 @@ html[data-a11y-motion="reduce"] .q3-canvas.quake-shake { animation: none; }
 .province-label-wrap { background: none !important; border: 0 !important; }
 .province-label { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; color: #fff; font: 800 calc(11px*var(--ts,1))/1 "Space Grotesk", system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 0 3px #04101f, 0 0 7px #04101f, 0 1px 2px #04101f; opacity: .92; }
 @media (max-width: 700px) { .province-label { font-size: calc(9.5px*var(--ts,1)); letter-spacing: .1em; } }
+
+/* Placas tectónicas: leyenda y rótulos. */
+.plate-keys { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.plate-keys.detailed { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.plate-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.plate-keys.detailed .plate-key { white-space: normal; }
+.plate-key i { display: inline-block; flex: none; width: 18px; height: 4px; border-radius: 2px; box-shadow: 0 0 0 1px #0a1a3340; }
+.plate-note { display: block; margin-top: 3px; font-weight: 500; font-size: calc(10px*var(--ts,1)); opacity: .85; }
+.q3-legend .plate-note { display: inline; margin: 0; }
+.plate-label-wrap { background: none !important; border: 0 !important; }
+.plate-label { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; color: #8de8ff; font: 800 calc(11px*var(--ts,1))/1 "Space Grotesk", system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 0 3px #04101f, 0 0 7px #04101f, 0 1px 2px #04101f; }
+.leaflet-container.map-detail .plate-label { display: none; }
+@media (max-width: 700px) { .plate-label { font-size: calc(9.5px*var(--ts,1)); } }
