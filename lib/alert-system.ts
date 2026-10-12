@@ -558,9 +558,26 @@ const announcePush = () => typeof window !== "undefined" && window.dispatchEvent
 // ¿Este equipo recibirá alertas con la app cerrada? Hace falta el permiso Y una suscripción push. Antes el encabezado decía
 // «Alertas activadas» con solo el permiso: la página abierta avisaba por su cuenta y la persona creía que todo funcionaba,
 // pero con la app cerrada no llegaba nada si la suscripción no existía.
+// Dirección push que el servidor confirmó por última vez. Si el servidor rechaza la suscripción (como pasó con las direcciones
+// jmt17.google.com de Chrome), el teléfono igual la tiene creada: sin esta comprobación la app diría «activadas» sin estarlo.
+const SERVER_OK_KEY = "sismo_panama_push_server_v1";
+const confirmedEndpoint = () => {
+  try {
+    return localStorage.getItem(SERVER_OK_KEY);
+  } catch {
+    return null;
+  }
+};
+const confirmEndpoint = (endpoint: string) => {
+  try {
+    localStorage.setItem(SERVER_OK_KEY, endpoint);
+  } catch {}
+};
+
 export async function hasActivePush(): Promise<boolean> {
   if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return false;
-  return Boolean(await getExistingPushSubscription());
+  const sub = await getExistingPushSubscription();
+  return Boolean(sub && confirmedEndpoint() === sub.endpoint);
 }
 
 // Mantiene al día el "buzón" push de este equipo: solo sincroniza con el servidor si han pasado 24 h
@@ -580,6 +597,8 @@ export async function syncPushSubscription(minMagnitude: number, force = false):
       rememberPushEnabled(true);
     }
     if (!sub) return false;
+    // Si el servidor no confirmó esta dirección, se vuelve a registrar ya (sin esperar las 24 h).
+    if (confirmedEndpoint() !== sub.endpoint) force = true;
     if (!force) {
       try {
         const last = localStorage.getItem(LAST_SYNC_KEY);
@@ -601,6 +620,7 @@ export async function syncPushSubscription(minMagnitude: number, force = false):
       try {
         localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
       } catch {}
+      confirmEndpoint(sub.endpoint);
     }
     announcePush();
     return res.ok;
@@ -654,6 +674,7 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
     try {
       localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
     } catch {}
+    if (subJson.endpoint) confirmEndpoint(subJson.endpoint);
     announcePush();
     return { ok: true };
   } catch (err: unknown) {

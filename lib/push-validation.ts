@@ -6,6 +6,10 @@
 // Los únicos servicios de push que existen para los navegadores: Chrome/Edge/Brave/Samsung/Opera (FCM), Firefox
 // (Mozilla autopush), Safari/iPhone (Apple) y Windows (WNS). Son los mismos que reconoce el registro de envíos.
 const PUSH_HOSTS = new Set(["fcm.googleapis.com"]);
+// Chrome reciente (sobre todo en Android) entrega direcciones push en jmtNN.google.com («https://jmt17.google.com/fcm/send/…»),
+// también de Google. Antes se rechazaban: esas personas daban permiso, pero el servidor descartaba su suscripción y nunca les
+// llegaba un aviso con la app cerrada. Se admite solo ese patrón exacto, no cualquier subdominio de google.com.
+const GOOGLE_JMT = /^jmt\d{1,3}\.google\.com$/;
 const PUSH_HOST_SUFFIXES = [".push.services.mozilla.com", ".push.apple.com", ".notify.windows.com"];
 
 // El host se extrae con esta expresión y no con `new URL`: web-push interpreta la dirección con `url.parse`, que
@@ -17,7 +21,7 @@ const MAX_ENDPOINT_LENGTH = 2048;
 export function isPushEndpoint(value: unknown): value is string {
   if (typeof value !== "string" || value.length > MAX_ENDPOINT_LENGTH) return false;
   const host = ENDPOINT.exec(value)?.[1]?.toLowerCase();
-  return Boolean(host && (PUSH_HOSTS.has(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))));
+  return Boolean(host && (PUSH_HOSTS.has(host) || GOOGLE_JMT.test(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))));
 }
 
 const BASE64URL = /^[A-Za-z0-9_-]+={0,2}$/;
