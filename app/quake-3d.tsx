@@ -546,9 +546,10 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     if (!playing || ruptureDuration === null) return;
     let raf = 0;
     let previous = -1;
-    // En pantallas táctiles y chicas se redibuja a ~30 cuadros por segundo: se ve igual de fluido y gasta la mitad de batería y
-    // de procesador. El tiempo del modelo sigue corriendo a la velocidad de siempre.
-    const gap = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 700 ? 30 : 0;
+    // En celulares (el lado corto de la pantalla mide menos de 600 px, de pie o acostados) se redibuja a ~30 cuadros por segundo:
+    // se ve igual de fluido y gasta la mitad de batería y de procesador. Las tabletas, que sí tienen con qué, van a 60. El
+    // tiempo del modelo corre a la misma velocidad en ambos casos.
+    const gap = Math.min(window.innerWidth, window.innerHeight) < 600 ? 30 : 0;
     let shown = -Infinity;
     const tick = (now: number) => {
       if (previous < 0) previous = now;
@@ -596,7 +597,8 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     const ctx = el.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const ts = parseFloat(getComputedStyle(el).getPropertyValue("--ts")) || 1;
+    // En tabletas táctiles (iPad) los rótulos del lienzo se ven desde más lejos: un poco más grandes.
+    const ts = (parseFloat(getComputedStyle(el).getPropertyValue("--ts")) || 1) * (size.w >= 700 && window.matchMedia("(pointer: coarse)").matches ? 1.12 : 1);
     const font = (px: number, weight = 600) => `${weight} ${Math.round(px * ts * 10) / 10}px "Space Grotesk", system-ui, sans-serif`;
 
     const { w, h } = size;

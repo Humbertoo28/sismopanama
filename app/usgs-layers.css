@@ -253,3 +253,16 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
   .q3-more summary { min-height: 36px; display: flex; align-items: center; }
   .q3-scrub, .q3-opacity input[type="range"] { height: 32px; }
 }
+
+/* Tabletas táctiles (iPad): textos y botones más grandes, pensados para verse desde más lejos y tocarse con el dedo. */
+@media (pointer: coarse) and (min-width: 701px) {
+  .q3-scene-meta { font-size: calc(11.5px*var(--ts,1)); gap: 8px; }
+  .q3-scene-meta span { padding: 8px 12px; }
+  .q3-legend, .q3-note, .q3-more { font-size: calc(12px*var(--ts,1)); }
+  .q3-anim-readout { font-size: calc(14px*var(--ts,1)); }
+  .q3-anim-note { font-size: calc(12px*var(--ts,1)); }
+  .q3-navigation button { width: 44px; height: 44px; }
+  .q3-navigation span { font-size: 11px; }
+  .q3-expand, .q3-play, .q3-action, .q3-settings-toggle { min-height: 44px; }
+  .q3-seg button { min-height: 42px; }
+}
