@@ -952,6 +952,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           <span className="layer-text-full">{fullscreen !== "off" ? "Salir" : "Pantalla completa"}</span>
         </button>
       </div>
+      {/* Los botones de capas y su leyenda van en una misma columna: la leyenda crece hacia abajo y nunca tapa los botones. */}
+      <div className="map-layers-dock">
       {!view3d && (
         <div className="map-layers" role="group" aria-label="Capas del mapa: datos del USGS y placas tectónicas">
           <span className="map-layers-title" aria-hidden="true">CAPAS DEL MAPA</span>
@@ -989,6 +991,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           {detailReady && anyLayer && <div className="map-layers-source"><span>Fuente de los datos sísmicos: USGS (earthquake.usgs.gov)</span></div>}
         </div>
       )}
+      </div>
       {!ready && <div className="map-fallback">Cargando mapa satelital…</div>}
     </>
   );

@@ -353,3 +353,13 @@ html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdro
   #leaflet-map .leaflet-top.leaflet-right { margin-top: 84px; }
 }
 
+
+/* Columna de capas + leyenda (pantallas medianas y grandes). Antes la leyenda iba anclada abajo y, con el mapa bajo,
+   subía hasta tapar los botones de las capas. Ahora va debajo de ellos y, si no cabe, se desplaza dentro de la columna. */
+.map-layers-dock { position: absolute; z-index: 500; top: 84px; right: 10px; bottom: 30px; width: 250px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.map-layers-dock > * { pointer-events: auto; }
+.map-layers-dock .map-layers { position: static; flex: none; }
+.map-layers-dock .map-layers-legend { position: static; max-width: none; width: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 700px) {
+  .map-layers-dock { display: contents; }
+}
