@@ -764,3 +764,4 @@ html[data-theme="dark"] .page-header .page-nav a:not(.active) { color: var(--ink
 html[data-theme="dark"] .nw-note { background: #33290f; border-color: #7a5c12; color: #f3e6bf; }
 html[data-theme="dark"] .nw-note strong { color: #fff4d6; }
 html[data-theme="dark"] .rs-ago { color: var(--ink-2); }
+html[data-theme="dark"] .hs-fig-inset figcaption { color: var(--ink-2); }
