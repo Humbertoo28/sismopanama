@@ -222,3 +222,34 @@ html[data-a11y-motion="reduce"] .q3-canvas.quake-shake { animation: none; }
 @media (prefers-reduced-motion: reduce) { .q3-live i { animation: none; } }
 html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
 @media (max-width: 700px) { .q3-anim { grid-template-columns: 1fr; } .q3-play { justify-content: center; } }
+
+/* Nota de la animación: una frase a la vista y el detalle plegado, para que no sea un muro de texto en el celular. */
+.q3-anim-note p { margin: 0; }
+.q3-anim-note details { margin-top: 2px; }
+.q3-anim-note summary { cursor: pointer; font-weight: 700; color: #dbe6f5; width: fit-content; min-height: 32px; display: flex; align-items: center; }
+.q3-anim-note summary::-webkit-details-marker { display: none; }
+.q3-anim-note summary::before { content: "▸"; margin-right: 6px; font-size: .9em; }
+.q3-anim-note details[open] summary::before { content: "▾"; }
+.q3-anim-note summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 3px; }
+.q3-anim-note details p { margin-top: 4px; }
+
+/* Celulares: la leyenda se ajusta al ancho en vez de salirse, y el dato de profundidad máxima (ya está en la escala) cede su sitio. */
+@media (max-width: 700px) {
+  .q3-legend { gap: 8px 12px; }
+  .q3-legend > span { white-space: normal; min-width: 0; max-width: 100%; }
+}
+@media (max-width: 480px) {
+  .q3-scene-meta .q3-meta-depth { display: none; }
+}
+
+/* Celular horizontal: la escena cabe en la pantalla (si no, mide más que el alto de la ventana y no se ve completa). */
+@media (orientation: landscape) and (max-height: 520px) {
+  .q3-stage { height: clamp(260px, 80svh, 440px); }
+}
+
+/* Objetivos táctiles: botones, controles deslizantes y resúmenes con un tamaño cómodo para el dedo. */
+@media (pointer: coarse), (max-width: 700px) {
+  .q3-seg button { min-width: 44px; }
+  .q3-more summary { min-height: 36px; display: flex; align-items: center; }
+  .q3-scrub, .q3-opacity input[type="range"] { height: 32px; }
+}

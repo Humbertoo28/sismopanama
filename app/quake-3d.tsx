@@ -64,12 +64,12 @@ const PRESETS = {
   side: { yaw: 0, pitch: 4, zoom: 1, px: 0, py: 0 },
 } as const;
 
-// Punto de vista inicial según la forma del lienzo: en uno alto y angosto (celular) se mira a lo largo de la caja, así
-// llena el ancho en vez de quedar chica.
+// Punto de vista inicial según la forma del lienzo: en uno alto o casi cuadrado (celular, tablet vertical) se mira a lo largo
+// de la caja, que es larga y angosta, así llena el alto en vez de quedar chica en el centro.
 const homeFor = (w: number, h: number): Camera => {
   const aspect = w / h;
   // Se mira desde el sur-suroeste, hacia donde buza la falla: así la ruptura se ve de frente y no de canto.
-  return aspect < 0.8 ? { yaw: 78, pitch: 48, zoom: 1, px: 0, py: 0 } : { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 };
+  return aspect < 1 ? { yaw: 78, pitch: 48, zoom: 1, px: 0, py: 0 } : { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 };
 };
 const EXAGGERATIONS = [1, 4, 8] as const;
 // Opacidad de la imagen satelital (algo translúcida para que se integre con el fondo).
@@ -250,6 +250,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
   const [tiles, setTiles] = useState({ loaded: 0, failed: 0, total: 0 });
   const mosaicRef = useRef<Mosaic | null>(null);
   const bufferRef = useRef<HTMLCanvasElement | null>(null);
+  const bufferKeyRef = useRef("");
   const waveTexRef = useRef<HTMLCanvasElement | null>(null);
   const waveBufRef = useRef<HTMLCanvasElement | null>(null);
   const hits = useRef<{ id: string; x: number; y: number; r: number; depth: number }[]>([]);
@@ -491,9 +492,10 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     if (!grid) return -1;
     let best = -1;
     let bestD = Infinity;
-    for (let iy = 0; iy < waveField.ny; iy++) {
+    // Basta con una de cada dos celdas: es solo para saber qué zona se mira, y así cuesta la cuarta parte al mover la cámara.
+    for (let iy = 0; iy < waveField.ny; iy += 2) {
       const lat = grid.south + ((grid.north - grid.south) * iy) / (waveField.ny - 1);
-      for (let ix = 0; ix < waveField.nx; ix++) {
+      for (let ix = 0; ix < waveField.nx; ix += 2) {
         const lng = grid.west + ((grid.east - grid.west) * ix) / (waveField.nx - 1);
         const p = projection.project(projection.at(lng, lat, 0));
         const d = (p.sx - projection.originX) ** 2 + (p.sy - size.h / 2) ** 2;
@@ -544,6 +546,10 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     if (!playing || ruptureDuration === null) return;
     let raf = 0;
     let previous = -1;
+    // En pantallas táctiles y chicas se redibuja a ~30 cuadros por segundo: se ve igual de fluido y gasta la mitad de batería y
+    // de procesador. El tiempo del modelo sigue corriendo a la velocidad de siempre.
+    const gap = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 700 ? 30 : 0;
+    let shown = -Infinity;
     const tick = (now: number) => {
       if (previous < 0) previous = now;
       clockRef.current += ((now - previous) / 1000) * playSpeed;
@@ -553,7 +559,10 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
         setPlaying(false);
         return;
       }
-      setRuptureTime(clockRef.current);
+      if (now - shown >= gap) {
+        shown = now;
+        setRuptureTime(clockRef.current);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -700,15 +709,21 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
       }
       const bctx = buffer.getContext("2d");
       if (bctx) {
-        bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        bctx.clearRect(0, 0, w, h);
-        bctx.imageSmoothingQuality = "high";
-        const cols = clamp(Math.round(w / 40), 12, 28);
-        const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 24);
-        paintMosaic(bctx, mosaic, scene, (lng, lat) => {
-          const q = project(at(lng, lat, 0));
-          return { sx: q.sx, sy: q.sy };
-        }, cols, rows);
+        // La imagen solo se vuelve a pintar si cambió algo que la afecta (cámara, tamaño, escena, mosaicos): mientras corre la
+        // animación se reutiliza, que es lo que más alivia a los teléfonos.
+        const key = [w, h, dpr, camera.yaw, camera.pitch, camera.zoom, camera.px, camera.py, exaggeration, scene.west, scene.east, scene.south, scene.north, scene.floorKm, tiles.loaded, tiles.total].join("|");
+        if (bufferKeyRef.current !== key) {
+          bufferKeyRef.current = key;
+          bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          bctx.clearRect(0, 0, w, h);
+          bctx.imageSmoothingQuality = "high";
+          const cols = clamp(Math.round(w / 40), 12, 28);
+          const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 24);
+          paintMosaic(bctx, mosaic, scene, (lng, lat) => {
+            const q = project(at(lng, lat, 0));
+            return { sx: q.sx, sy: q.sy };
+          }, cols, rows);
+        }
         ctx.save();
         ctx.globalAlpha = SAT_ALPHA * surfaceOpacity / 100;
         ctx.imageSmoothingQuality = "high";
@@ -1114,7 +1129,14 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
       }
       ctx.restore();
       const midX = (faultEdge[2].p.sx + faultEdge[3].p.sx) / 2;
-      ruptureLabel = { text, sub, width, x: clamp(midX, width / 2 + 6, w - width / 2 - 6), y: Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 13 };
+      const x = clamp(midX, width / 2 + 6, w - width / 2 - 6);
+      let y = Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 13;
+      // El crédito de la imagen satelital (abajo; en el celular, a la derecha un poco más arriba) no debe quedar tapado: si el
+      // rótulo cae encima, se sube sobre él.
+      const credit = w < 480 ? { x0: w - 8 - 215, x1: w - 8, y0: h - 72, y1: h - 54 } : { x0: 72, x1: 72 + 215, y0: h - 26, y1: h - 8 };
+      const [top, bottom] = [y - 14, y + (sub ? 18 : 4)];
+      if (x + width / 2 > credit.x0 && x - width / 2 < credit.x1 && bottom > credit.y0 && top < credit.y1) y = credit.y0 - (sub ? 22 : 8);
+      ruptureLabel = { text, sub, width, x, y };
     }
 
     // Nombres de las provincias y, al acercar, de las cabeceras de distrito. Cada uno se omite si choca con otro ya
@@ -1579,7 +1601,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
         </button>
       </div>
       <div className="q3-stage" ref={box}>
-        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ground && <span title={`Movimiento horizontal del terreno en el centro de la vista${ground.town ? `, cerca de ${ground.town}` : ""}, calculado con el modelo de deslizamiento del USGS (Okada, 1985). No es una medición y no está exagerado.`}>Terreno <strong>{moveText(ground.meters)}</strong>{ground.meters >= 0.01 && ` al ${ground.short}`}</span>}{ruptureTime !== null && <span className="q3-live"><i />Segundo <strong>{ruptureTime.toFixed(0)}</strong></span>}</div>
+        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span className="q3-meta-depth">Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ground && <span title={`Movimiento horizontal del terreno en el centro de la vista${ground.town ? `, cerca de ${ground.town}` : ""}, calculado con el modelo de deslizamiento del USGS (Okada, 1985). No es una medición y no está exagerado.`}>Terreno <strong>{moveText(ground.meters)}</strong>{ground.meters >= 0.01 && ` al ${ground.short}`}</span>}{ruptureTime !== null && <span className="q3-live"><i />Segundo <strong>{ruptureTime.toFixed(0)}</strong></span>}</div>
         <div className="q3-navigation" role="group" aria-label="Navegación de la escena">
           <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar" title="Acercar"><SceneIcon name="Plus" size={17} /></button>
           <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
@@ -1639,12 +1661,18 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
                 ? `Ruptura completa: ${fault.durationS?.toFixed(0)} s, deslizamiento máx. ${fault.maxSlipM.toFixed(1)} m${waveField ? `. La sacudida cubre el país unos ${waveField.end} s después de empezar` : ""}`
                 : `Segundo ${ruptureTime.toFixed(0)} de ${ruptureDuration.toFixed(0)} · deslizamiento máx. hasta ahora ${fault.subfaults.reduce((m, sub) => Math.max(m, sub.t === null ? 0 : sub.slip * clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1)), 0).toFixed(1)} m${waveField ? ` · la sacudida ya llegó a unos ${reachedKm(ruptureTime)} km del epicentro` : ""}`}
             </span>
-            <span className="q3-anim-note">
-              Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {playSpeed} veces más rápida que la realidad.
-              {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
-              {ground && ` «Terreno» es cuánto se mueve el suelo en horizontal en el centro de la vista${ground.town ? ` (cerca de ${ground.town})` : ""}: ${moveText(ground.meters)}${ground.meters >= 0.01 ? ` hacia el ${ground.long}` : ""}. Se calcula con las ecuaciones de Okada (1985) y el deslizamiento que modela el USGS en cada celda (con el ángulo de deslizamiento de su mecanismo); no es una medición y está en metros reales, sin exagerar: a esta escala no se vería moverse.`}
-              {slipSense && ` Flechas: hacia dónde se movió cada lado de la falla según el mecanismo focal del USGS (rumbo ${slipSense.strike}°, buzamiento ${slipSense.dip}°, ángulo de deslizamiento ${slipSense.rake}°: ${slipSense.kind}); su largo no es cuánto se movió.`}
-            </span>
+            <div className="q3-anim-note">
+              <p>La animación va {playSpeed} veces más rápida que la realidad.{waveField && " La onda y el terreno son cálculos con datos del USGS, no registros de sismógrafos."}</p>
+              <details>
+                <summary>Qué es real y qué es calculado</summary>
+                <p>
+                  Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS.
+                  {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
+                  {ground && ` «Terreno» es cuánto se mueve el suelo en horizontal en el centro de la vista${ground.town ? ` (cerca de ${ground.town})` : ""}: ${moveText(ground.meters)}${ground.meters >= 0.01 ? ` hacia el ${ground.long}` : ""}. Se calcula con las ecuaciones de Okada (1985) y el deslizamiento que modela el USGS en cada celda (con el ángulo de deslizamiento de su mecanismo); no es una medición y está en metros reales, sin exagerar: a esta escala no se vería moverse.`}
+                  {slipSense && ` Flechas: hacia dónde se movió cada lado de la falla según el mecanismo focal del USGS (rumbo ${slipSense.strike}°, buzamiento ${slipSense.dip}°, ángulo de deslizamiento ${slipSense.rake}°: ${slipSense.kind}); su largo no es cuánto se movió.`}
+                </p>
+              </details>
+            </div>
           </div>
         )}
         <div className="q3-bar" role="group" aria-label="Controles de la vista 3D">
