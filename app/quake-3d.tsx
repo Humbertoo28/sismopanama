@@ -184,6 +184,8 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const [overlay, setOverlay] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [surfaceOpacity, setSurfaceOpacity] = useState(90);
+  // La pantalla tiembla cuando la onda de sacudida llega al centro de la vista (efecto visual; se puede apagar).
+  const [screenShake, setScreenShake] = useState(true);
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
   const [ruptureTime, setRuptureTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -388,6 +390,58 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     for (let k = 0; k < waveField.arrivalS.length; k++) if (waveField.arrivalS[k] <= t && waveField.nearKm[k] > far) far = waveField.nearKm[k];
     return Math.round(far / 5) * 5;
   };
+  // Celda del ShakeMap que cae en el centro de la vista: de ahí sale la fuerza del temblor de pantalla (solo mientras corre).
+  const focusCell = useMemo(() => {
+    if (!waveField || !screenShake || !playing) return -1;
+    const projection = makeProjection(scene, camera, size.w, size.h, exaggeration);
+    const grid = shakeGrid;
+    if (!grid) return -1;
+    let best = -1;
+    let bestD = Infinity;
+    for (let iy = 0; iy < waveField.ny; iy++) {
+      const lat = grid.south + ((grid.north - grid.south) * iy) / (waveField.ny - 1);
+      for (let ix = 0; ix < waveField.nx; ix++) {
+        const lng = grid.west + ((grid.east - grid.west) * ix) / (waveField.nx - 1);
+        const p = projection.project(projection.at(lng, lat, 0));
+        const d = (p.sx - projection.originX) ** 2 + (p.sy - size.h / 2) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = iy * waveField.nx + ix;
+        }
+      }
+    }
+    return best;
+  }, [waveField, shakeGrid, screenShake, playing, scene, camera, size, exaggeration]);
+  // El lienzo tiembla cuando la onda llega al centro de la vista: leve con la P, fuerte con la S y luego se apaga. La fuerza
+  // sigue la intensidad que estima el USGS en ese lugar. Es un efecto visual, no un registro.
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el) return;
+    if (!waveField || focusCell < 0 || ruptureTime === null || reducedMotion()) {
+      el.style.transform = "";
+      return;
+    }
+    const t = ruptureTime;
+    const [tp, ts] = [waveField.arrivalP[focusCell], waveField.arrivalS[focusCell]];
+    const tau = Math.max(10, (fault?.durationS ?? 40) * 0.9);
+    const envelope = t >= ts ? Math.min(1, 0.3 + (t - ts) / 2) * Math.exp(-(t - ts) / tau) : t >= tp ? 0.18 * Math.min(1, (t - tp) / 1.5) : 0;
+    const strength = clamp((waveField.mmi[focusCell] / 10 - 3) / 6, 0, 1) ** 1.3;
+    const a = (size.w < 480 ? 7 : 12) * strength * envelope;
+    if (a < 0.05) {
+      el.style.transform = "";
+      return;
+    }
+    const dx = a * (Math.sin(t * 9) + 0.6 * Math.sin(t * 15 + 1.1));
+    const dy = a * 0.8 * (Math.sin(t * 12 + 2.3) + 0.5 * Math.sin(t * 7));
+    // Se agranda un poco para que los bordes no queden al descubierto al moverse.
+    el.style.transform = `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(${(1 + (a * 3.2 + 1) / Math.min(size.w, size.h)).toFixed(4)})`;
+  }, [waveField, focusCell, ruptureTime, fault, size]);
+  useEffect(() => {
+    const el = canvas.current;
+    return () => {
+      if (el) el.style.transform = "";
+    };
+  }, []);
   const startRupture = () => {
     clockRef.current = 0;
     setRuptureTime(0);
@@ -1407,7 +1461,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             </span>
             <span className="q3-anim-note">
               Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {playSpeed} veces más rápida que la realidad.
-              {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos."}
+              {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
             </span>
           </div>
         )}
@@ -1439,6 +1493,13 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             <button type="button" aria-pressed={colorBy === "depth"} className={colorBy === "depth" ? "on" : ""} onClick={() => setColorBy("depth")}>Profundidad</button>
             <button type="button" aria-pressed={colorBy === "mag"} className={colorBy === "mag" ? "on" : ""} onClick={() => setColorBy("mag")}>Magnitud</button>
           </div>
+          {waveField && (
+            <div className="q3-seg" role="group" aria-label="Temblor de la pantalla con la onda de sacudida">
+              <span className="q3-cap" aria-hidden="true">Temblor</span>
+              <button type="button" aria-pressed={screenShake} className={screenShake ? "on" : ""} onClick={() => setScreenShake(true)}>Sí</button>
+              <button type="button" aria-pressed={!screenShake} className={!screenShake ? "on" : ""} onClick={() => setScreenShake(false)}>No</button>
+            </div>
+          )}
           <label className="q3-opacity">Superficie <input type="range" min="15" max="100" step="5" value={surfaceOpacity} onChange={event => setSurfaceOpacity(Number(event.target.value))} aria-label="Opacidad de la superficie" /><span>{surfaceOpacity}%</span></label>
           {layerControls}
         </div>
