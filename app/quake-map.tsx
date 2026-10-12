@@ -21,6 +21,8 @@ const Quake3D = lazy(() => import("./quake-3d"));
 type Props = {
   // Identifica los filtros de la lista que están puestos ("" = ninguno): con alguno, el 3D muestra las réplicas que deja pasar.
   filtersKey: string;
+  // Sube cada vez que la persona pide volver a encuadrar los sismos del filtro.
+  fitKey: number;
   events: Earthquake[];
   mainshock: Earthquake | null;
   focus: FocusRequest | null;
@@ -107,7 +109,7 @@ const readMapMode = (): MapLayerMode => {
     return "satellite";
   }
 };
-export default function QuakeMap({ events, filtersKey, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, filtersKey, fitKey, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
   // navegador, pasa al guardado sin el aviso de que el HTML no coincide.
@@ -457,8 +459,7 @@ export default function QuakeMap({ events, filtersKey, mainshock, focus, alert, 
   const shaking = detailReady ? usgsDetail.shaking : null;
   const anyLayer = layers.rupture || layers.felt || layers.shaking;
 
-  // Al elegir una provincia o comarca se dibuja su borde y el mapa se acerca; al elegir además una ciudad se marca con su
-  // nombre y el mapa se acerca a ella y a sus sismos. Al volver a "Todas", regresa a la vista general.
+  // Al elegir una provincia o comarca se dibuja su borde; al elegir además una ciudad se marca con su nombre.
   const placeLat = place?.lat ?? null;
   const placeLng = place?.lng ?? null;
   const placeName = place?.name ?? null;
@@ -473,17 +474,6 @@ export default function QuakeMap({ events, filtersKey, mainshock, focus, alert, 
       }
     }
     const province = region ? PROVINCE_BY_ID.get(region) : undefined;
-    const still = reducedMotion();
-    if (!province && placeLat === null) {
-      if (hadRegion.current) {
-        hadRegion.current = false;
-        const zoom = window.innerWidth < 760 ? 6 : 7;
-        if (still) map.setView([8.46, -80.4], zoom, { animate: false });
-        else map.flyTo([8.46, -80.4], zoom, { duration: 1 });
-      }
-      return;
-    }
-    hadRegion.current = true;
     if (province) {
       const rings = province.rings.map(ring => ring.map(([lng, lat]) => [lat, lng]));
       regionLayerRef.current = L.polygon(rings, {
@@ -491,19 +481,66 @@ export default function QuakeMap({ events, filtersKey, mainshock, focus, alert, 
         fillColor: "#ffffff", fillOpacity: 0.09, interactive: false,
       }).addTo(map);
     }
-    let bounds = province ? L.latLngBounds(province.bounds) : null;
     if (placeLat !== null && placeLng !== null) {
       placeLayerRef.current = L.circleMarker([placeLat, placeLng], {
         radius: 6, color: "#ffffff", weight: 2.5, fillColor: "#072357", fillOpacity: 1, interactive: false,
       }).bindTooltip(placeName, { permanent: true, direction: "right", offset: [9, 0], className: "place-label" }).addTo(map);
-      // Se enmarca la ciudad junto con los sismos que se están viendo (ya filtrados por esa ciudad).
-      bounds = L.latLngBounds([[placeLat, placeLng], ...latest.current.events.map(event => [event.geometry.coordinates[1], event.geometry.coordinates[0]])]);
     }
-    map.closePopup();
-    const maxZoom = placeLat !== null ? 11 : 10;
-    if (still) map.fitBounds(bounds, { padding: [40, 40], maxZoom, animate: false });
-    else map.flyToBounds(bounds, { padding: [40, 40], maxZoom, duration: 1.1 });
   }, [region, placeLat, placeLng, placeName, ready]);
+
+  // Encuadra en el mapa lo que dice el filtro: los sismos que deja pasar (más la provincia o la ciudad elegida), para que lo que
+  // cuenta la lista se vea siempre, también si antes se movió o acercó el mapa. Sin filtros, regresa a la vista general.
+  const fitRef = useRef<(animated: boolean) => void>(() => {});
+  useEffect(() => {
+    fitRef.current = (animated: boolean) => {
+      const map = mapRef.current;
+      const L = (window as any).L;
+      if (!map || !L) return;
+      const still = reducedMotion() || !animated;
+      const province = region ? PROVINCE_BY_ID.get(region) : undefined;
+      if (!province && placeLat === null && filtersKey === "") {
+        if (hadRegion.current) {
+          hadRegion.current = false;
+          const zoom = window.innerWidth < 760 ? 6 : 7;
+          map.invalidateSize({ animate: false });
+          if (still) map.setView([8.46, -80.4], zoom, { animate: false });
+          else map.flyTo([8.46, -80.4], zoom, { duration: 1 });
+        }
+        return;
+      }
+      const points = latest.current.events.map(event => [event.geometry.coordinates[1], event.geometry.coordinates[0]] as [number, number]);
+      let bounds = null;
+      if (placeLat !== null && placeLng !== null) bounds = L.latLngBounds([[placeLat, placeLng], ...points]);
+      else if (province) {
+        bounds = L.latLngBounds(province.bounds);
+        for (const point of points) bounds.extend(point);
+      } else if (points.length) bounds = L.latLngBounds(points);
+      // Sin sismos ni provincia que mostrar no hay nada que encuadrar: la vista se queda como está.
+      if (!bounds) return;
+      hadRegion.current = true;
+      map.closePopup();
+      // El mapa pudo cambiar de tamaño mientras estaba oculto (vista 3D): se mide de nuevo antes de encuadrar.
+      map.invalidateSize({ animate: false });
+      const maxZoom = placeLat !== null ? 11 : 10;
+      if (still) map.fitBounds(bounds, { padding: [40, 40], maxZoom, animate: false });
+      else map.flyToBounds(bounds, { padding: [40, 40], maxZoom, duration: 1.1 });
+    };
+  });
+  useEffect(() => {
+    if (ready) fitRef.current(true);
+  }, [filtersKey, region, placeLat, placeLng, ready]);
+  useEffect(() => {
+    if (ready && fitKey > 0) fitRef.current(true);
+  }, [fitKey, ready]);
+  // Al volver del 3D al mapa plano el contenedor recupera su tamaño: se mide de nuevo y se encuadra el filtro.
+  useEffect(() => {
+    if (view3d || !ready) return;
+    const timer = window.setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: false });
+      fitRef.current(false);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [view3d, ready]);
 
   useEffect(() => {
     if (!focus || focusedRef.current === focus || !mapRef.current) return;
@@ -641,11 +678,11 @@ export default function QuakeMap({ events, filtersKey, mainshock, focus, alert, 
         onLoad={() => setReady(true)}
         onReady={() => setReady(true)}
       />
-      <div id="leaflet-map" role="group" aria-label="Mapa interactivo de sismos en Panamá" />
+      <div id="leaflet-map" role="group" aria-label="Mapa interactivo de sismos en Panamá" data-filtered={filtersKey !== "" ? "true" : undefined} />
       {view3d && (
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
-            events={events} filtersKey={filtersKey} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
+            events={events} filtersKey={filtersKey} fitKey={fitKey} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
             fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
             layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />

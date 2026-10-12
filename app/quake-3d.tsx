@@ -33,6 +33,8 @@ type Props = {
   events: Earthquake[];
   // Filtros puestos en la página ("" = ninguno): con alguno se muestran las réplicas que deja pasar (si no, no se notaría).
   filtersKey: string;
+  // Sube cada vez que la persona pide volver a encuadrar los sismos del filtro.
+  fitKey: number;
   mainshock: Earthquake | null;
   selectedId: string | null;
   replay: ReplayStep | null;
@@ -203,7 +205,7 @@ const moveText = (meters: number) => (meters >= 1 ? `${meters.toFixed(1)} m` : m
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, filtersKey, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, filtersKey, fitKey, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -1582,6 +1584,14 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
   useEffect(() => {
     frameRef.current = frameFiltered;
   });
+  // «Ver los N sismos»: vuelve a encuadrar los sismos del filtro aunque la cámara se haya movido.
+  const fitSeen = useRef(fitKey);
+  useEffect(() => {
+    if (fitSeen.current === fitKey) return;
+    fitSeen.current = fitKey;
+    const timer = window.setTimeout(() => frameRef.current(), 100);
+    return () => window.clearTimeout(timer);
+  }, [fitKey]);
   useEffect(() => {
     const first = framedKey.current === null;
     if (framedKey.current === filtersKey || (first && filtersKey === "")) {

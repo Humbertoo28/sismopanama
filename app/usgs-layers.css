@@ -266,3 +266,8 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
   .q3-expand, .q3-play, .q3-action, .q3-settings-toggle { min-height: 44px; }
   .q3-seg button { min-height: 42px; }
 }
+
+/* Con algún filtro puesto la persona busca esos sismos: los antiguos no se difuminan (el desvanecido por antigüedad los dejaba casi invisibles sobre el satélite). */
+#leaflet-map[data-filtered] .quake-marker.aged,
+#leaflet-map[data-filtered] .quake-marker.recent-12h,
+#leaflet-map[data-filtered] .quake-marker.high.aged { opacity: 1; background: rgba(var(--c), .85); border: 1.2px solid #fff; }
