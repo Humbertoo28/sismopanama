@@ -79,9 +79,6 @@ const RUPTURE_SPEED = 3;
 // Velocidades típicas de las ondas sísmicas en la corteza (km/s). Con ellas se calcula cuándo llega cada onda a cada punto.
 const VP = 6.0;
 const VS = 3.5;
-// Cuánto se exagera el deslizamiento de la falla al dibujar cómo se separan sus dos lados (1 m real = 1 km en pantalla):
-// con el tamaño real (hasta 7.8 m en una falla de 150 km) no se vería nada.
-const SLIDE_EXAGGERATION = 1000;
 // Con la onda de sacudida el recorrido dura más (llega a todo el país), así que la animación va más rápida.
 const WAVE_SPEED = 6;
 const COLORS = { low: "#f5c542", mid: "#f08a24", high: "#da121a", latest: "#1d6bff", main: "#a21caf" };
@@ -196,8 +193,6 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
   // Las réplicas están ocultas por defecto: la escena enseña el sismo principal, su ruptura y la onda. Con algún filtro
   // puesto, o con la secuencia en reproducción, se muestran (es justo lo que se está pidiendo ver), y el sismo seleccionado
   // nunca se oculta. Lo que la persona elige con el interruptor vale mientras no cambie ningún filtro.
-  // Durante la animación, los dos lados de la falla se separan y se deslizan con el deslizamiento de cada celda.
-  const [slideBlocks, setSlideBlocks] = useState(true);
   const [aftershockChoice, setAftershockChoice] = useState<{ key: string; show: boolean } | null>(null);
   const showAftershocks = aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : filtersKey !== "";
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
@@ -419,9 +414,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     // Si el movimiento es casi vertical (falla inversa o normal pura) las flechas en planta no dicen nada.
     if (length < 0.35) return null;
     const lateral = Math.abs(plane.rake) <= 45 ? "lateral izquierdo" : Math.abs(plane.rake) >= 135 ? "lateral derecho" : "oblicuo";
-    // `vec`: el deslizamiento completo en el plano de la falla (este, norte, arriba), de largo 1.
-    const vec = [east, north, Math.sin(rake) * Math.sin(dip)] as const;
-    return { east: east / length, north: north / length, vec, strike: plane.strike, dip: plane.dip, rake: plane.rake, kind: lateral };
+    return { east: east / length, north: north / length, strike: plane.strike, dip: plane.dip, rake: plane.rake, kind: lateral };
   }, [fault, mechanism]);
 
   // La línea de tiempo llega hasta que la onda cubre la escena (si se muestra) o hasta que termina la ruptura.
@@ -698,49 +691,33 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     // limpio y los sismos que quedan detrás se ven a través.
     const faultCells: Drawable[] = [];
     if (fault) {
-      // Los dos lados de la falla se deslizan en sentidos contrarios (el que buza hacia un lado y el otro) según el sentido del
-      // mecanismo del USGS; al terminar la animación se vuelven a juntar poco a poco. Es un efecto exagerado, no a escala.
-      const sliding = slipSense !== null && slideBlocks && ruptureTime !== null;
-      const relax = ruptureDuration === null || ruptureTime === null ? 1 : clamp((ruptureDuration - ruptureTime) / 6, 0, 1);
       for (const sub of fault.subfaults) {
+        const projected = sub.ring.map(([lng, lat, d]) => project(at(lng, lat, d)));
         // Con la animación en marcha, cada celda se desliza desde su segundo de inicio hasta su deslizamiento final.
         const progress = ruptureTime === null || sub.t === null ? 1 : clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1);
-        const half = sliding ? (sub.slip * progress * relax * SLIDE_EXAGGERATION) / 2000 : 0;
-        const place = (side: number) =>
-          sub.ring.map(([lng, lat, d]) => {
-            const base = at(lng, lat, d);
-            if (!slipSense || half === 0) return project(base);
-            const [ve, vn, vu] = slipSense.vec;
-            return project({ x: base.x + side * half * ve, y: base.y + side * half * vn, z: base.z + side * half * vu * exaggeration });
-          });
-        const split = half > 0.05;
-        // `side` -1 = el lado opuesto al que buza (más tenue), +1 = el lado que buza (el color completo).
-        for (const side of split ? [-1, 1] : [0]) {
-          const projected = place(side);
-          faultCells.push({
-            depth: projected.reduce((sum, q) => sum + q.depth, 0) / 4,
-            draw: () => {
-              ctx.beginPath();
-              projected.forEach((q, i) => pathTo(i, q.sx, q.sy));
-              ctx.closePath();
-              if (progress === 0) {
-                ctx.fillStyle = "rgba(120,140,190,.10)";
-                ctx.fill();
-                ctx.strokeStyle = "rgba(190,205,240,.22)";
-                ctx.lineWidth = 0.5;
-                ctx.stroke();
-                return;
-              }
-              ctx.fillStyle = slipColor(sub.slip * progress, fault.maxSlipM, side === -1 ? 0.55 : 0.8);
+        faultCells.push({
+          depth: projected.reduce((sum, q) => sum + q.depth, 0) / 4,
+          draw: () => {
+            ctx.beginPath();
+            projected.forEach((q, i) => pathTo(i, q.sx, q.sy));
+            ctx.closePath();
+            if (progress === 0) {
+              ctx.fillStyle = "rgba(120,140,190,.10)";
               ctx.fill();
-              // El frente de la ruptura (celdas que se están moviendo ahora) se marca con un borde claro.
-              const moving = ruptureTime !== null && progress < 1;
-              ctx.strokeStyle = moving ? "rgba(255,255,255,.95)" : side === -1 ? "rgba(150,205,255,.85)" : "rgba(20,8,40,.3)";
-              ctx.lineWidth = moving ? 1.4 : side === -1 ? 0.8 : 0.5;
+              ctx.strokeStyle = "rgba(190,205,240,.22)";
+              ctx.lineWidth = 0.5;
               ctx.stroke();
-            },
-          });
-        }
+              return;
+            }
+            ctx.fillStyle = slipColor(sub.slip * progress, fault.maxSlipM, 0.8);
+            ctx.fill();
+            // El frente de la ruptura (celdas que se están moviendo ahora) se marca con un borde claro.
+            const moving = ruptureTime !== null && progress < 1;
+            ctx.strokeStyle = moving ? "rgba(255,255,255,.95)" : "rgba(20,8,40,.3)";
+            ctx.lineWidth = moving ? 1.4 : 0.5;
+            ctx.stroke();
+          },
+        });
       }
     }
 
@@ -1293,7 +1270,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, slideBlocks, ruptureDuration, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
+  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -1610,7 +1587,6 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
             <span className="q3-anim-note">
               Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {playSpeed} veces más rápida que la realidad.
               {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
-              {slipSense && slideBlocks && ` Los dos lados de la falla se deslizan con el deslizamiento que modela el USGS para cada celda, exagerado ×${SLIDE_EXAGGERATION} para que se vea (${fault?.maxSlipM.toFixed(1)} m reales ≈ ${((fault?.maxSlipM ?? 0) * SLIDE_EXAGGERATION / 1000).toFixed(1)} km en pantalla).`}
               {slipSense && ` Flechas: hacia dónde se movió cada lado de la falla según el mecanismo focal del USGS (rumbo ${slipSense.strike}°, buzamiento ${slipSense.dip}°, ángulo de deslizamiento ${slipSense.rake}°: ${slipSense.kind}); su largo no es cuánto se movió.`}
             </span>
           </div>
@@ -1643,13 +1619,6 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
             <button type="button" aria-pressed={colorBy === "depth"} className={colorBy === "depth" ? "on" : ""} onClick={() => setColorBy("depth")}>Profundidad</button>
             <button type="button" aria-pressed={colorBy === "mag"} className={colorBy === "mag" ? "on" : ""} onClick={() => setColorBy("mag")}>Magnitud</button>
           </div>
-          {fault && slipSense && (
-            <div className="q3-seg" role="group" aria-label="Lados de la falla durante la animación">
-              <span className="q3-cap" aria-hidden="true">Falla</span>
-              <button type="button" aria-pressed={slideBlocks} className={slideBlocks ? "on" : ""} onClick={() => setSlideBlocks(true)} title="Los dos lados de la falla se separan y se deslizan, exagerado">Se desliza</button>
-              <button type="button" aria-pressed={!slideBlocks} className={!slideBlocks ? "on" : ""} onClick={() => setSlideBlocks(false)}>Fija</button>
-            </div>
-          )}
           {mainshock && (
             <div className="q3-seg" role="group" aria-label="Réplicas del sismo principal">
               <span className="q3-cap" aria-hidden="true">Réplicas</span>
@@ -1720,7 +1689,6 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
             {felt && " Los cuadros de color sobre la superficie son la intensidad que reportó la gente."}
             {shaking && " Las curvas de colores sobre la superficie son la intensidad de la sacudida que estima el USGS."}
             {waveField && " La onda de sacudida colorea el país a medida que la onda S llega a cada lugar: el color es la intensidad que estima el USGS y el frente reciente se ve más claro; un tinte azul tenue anticipa la llegada de la onda P. Los tiempos se calculan con velocidades típicas, no con registros."}
-            {slipSense && slideBlocks && " Al reproducir la ruptura, los dos lados de la falla se deslizan en sentidos contrarios con el deslizamiento que modela el USGS para cada celda, muy exagerado para que se vea."}
             {plates && " Las líneas gruesas de colores son los límites entre placas tectónicas: rojo discontinuo, subducción (una placa se hunde bajo otra); amarillo, falla transformante (se deslizan de lado); celeste, extensión (se separan); morado, convergencia (chocan). Salen del modelo PB2002 de P. Bird (2003), que no es de una agencia de gobierno; son límites aproximados y en Panamá el contacto entre placas es una zona ancha."}
             {(fault || felt || shaking) && " Fuente de estas capas: USGS."}
           </p>
