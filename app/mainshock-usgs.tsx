@@ -24,7 +24,7 @@ export default function MainshockUsgs() {
   return (
     <details className="usgs-card" onToggle={event => event.currentTarget.open && loadMainshockDetail()}>
       <summary>
-        <span className="section-kicker">FUENTE: USGS</span>
+        <span className="section-kicker">Fuente: USGS</span>
         <strong>Datos del sismo principal: cómo se movió la falla</strong>
       </summary>
       <div className="usgs-body">

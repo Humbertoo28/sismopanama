@@ -52,6 +52,8 @@ export function placeTitle(event: Earthquake) {
   const usgs = /(\d+(?:[.,]\d+)?)\s*km\s+([NSEW]{1,3})\s+of\s+([^,(]+)/i.exec(label);
   const direction = usgs ? COMPASS[usgs[2].toUpperCase()] : undefined;
   if (usgs && direction) return `A ${usgs[1]} km al ${direction} de ${usgs[3].trim()}`;
+  // Los de los alrededores conservan el nombre de su región («Frontera Panamá-Costa Rica»), sin las coordenadas.
+  if (event.properties.nearby) return (label.replace(/\s*\([^)]*\)\s*$/, "") || "Fuera de Panamá");
   const near = placeLabel(event);
   return near === "—" ? "Panamá" : `Cerca de ${near}`;
 }

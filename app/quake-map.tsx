@@ -483,18 +483,18 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         const badge = document.createElement("div");
         badge.className = "popup-badge-latest";
         badge.textContent = after
-          ? "📍 ÚLTIMA RÉPLICA · SISMO M 7.7"
-          : "📍 ÚLTIMO SISMO REGISTRADO";
+          ? "Última réplica"
+          : "Último sismo registrado";
         popup.appendChild(badge);
       } else if (isMain) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-main";
-        badge.textContent = "⭐ SISMO PRINCIPAL · M 7.7";
+        badge.textContent = "Sismo principal";
         popup.appendChild(badge);
       } else if (after) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-after";
-        badge.textContent = "🔄 RÉPLICA DEL SISMO M 7.7";
+        badge.textContent = "Réplica";
         popup.appendChild(badge);
       }
       const title = document.createElement("div");
@@ -1099,7 +1099,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       <div className="map-layers-dock">
       {!view3d && (
         <div className="map-layers" role="group" aria-label="Capas del mapa: datos del USGS y placas tectónicas">
-          <span className="map-layers-title" aria-hidden="true">CAPAS DEL MAPA</span>
+          <span className="map-layers-title" aria-hidden="true">Capas del mapa</span>
           {layerChips}
           {layerNote}
         </div>

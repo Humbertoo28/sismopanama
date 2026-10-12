@@ -28,7 +28,7 @@ export default function SafetyGuide({ aftershockCount, strongestAftershock }: Pr
   return (
     <div className="guide-card">
       <div className="guide-step">
-        <span className="guide-label" id="guide-where">1 · ¿DÓNDE ESTÁS?</span>
+        <span className="guide-label" id="guide-where">1. ¿Dónde estás?</span>
         <div className="guide-chips" role="radiogroup" aria-labelledby="guide-where">
           {SITUATIONS.map(item => (
             <button key={item.id} type="button" role="radio" aria-checked={situation === item.id} className={situation === item.id ? "selected" : ""} onClick={() => setSituation(item.id)}>{item.label}</button>
@@ -37,7 +37,7 @@ export default function SafetyGuide({ aftershockCount, strongestAftershock }: Pr
       </div>
 
       <div className="guide-step">
-        <span className="guide-label">2 · ¿EN QUÉ MOMENTO?</span>
+        <span className="guide-label">2. ¿En qué momento?</span>
         <div className="guide-tabs" role="tablist" aria-label="Momento del sismo">
           {PHASES.map((item, index) => (
             <button key={item.id} ref={node => { tabRefs.current[index] = node; }} type="button" role="tab" id={`guide-tab-${item.id}`} aria-selected={phase === item.id} aria-controls="guide-panel" tabIndex={phase === item.id ? 0 : -1} className={phase === item.id ? "selected" : ""} onClick={() => setPhase(item.id)} onKeyDown={event => onTabKey(event, index)}>{item.label}</button>

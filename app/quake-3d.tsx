@@ -1685,7 +1685,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         </p>
       </div>
       <div className="q3-panel">
-        <div className="q3-panel-heading"><span><SceneIcon name="Compass" size={14} aria-hidden="true" /> EXPLORAR LA ESCENA</span><span>Arrastra para girar · Pellizca para acercar</span></div>
+        <div className="q3-panel-heading"><span><SceneIcon name="Compass" size={14} aria-hidden="true" /> Explorar la escena</span><span>Arrastra para girar · Pellizca para acercar</span></div>
         {selectedEvent && (
           <p className="q3-selected" role="status">
             <strong>M {selectedEvent.properties.mag === null ? "—" : selectedEvent.properties.mag.toFixed(1)}</strong>{" "}

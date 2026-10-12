@@ -84,7 +84,7 @@ export default function QuakeSheet({
       <section ref={panel} className="qs" role="dialog" aria-modal="true" aria-labelledby="qs-title" tabIndex={-1} onClick={click => click.stopPropagation()}>
         <button type="button" className="qs-close" onClick={onClose} aria-label="Cerrar la ficha del sismo">✕</button>
         <header className="qs-head">
-          {isMain && <span className="qs-badge main">SISMO PRINCIPAL</span>}
+          {isMain && <span className="qs-badge main">Sismo principal</span>}
           {!isMain && after && <span className="qs-badge">RÉPLICA DEL SISMO M {mainshock?.properties.mag?.toFixed(1)}</span>}
           <div className="qs-mag-row">
             <strong className="qs-mag" aria-label={`Magnitud ${magnitude}`}>{magnitude}</strong>

@@ -388,3 +388,161 @@ body:before { display: none; }
 .page-nav a.active:after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--primary); }
 .report-locate { width: 100%; min-height: 52px; margin-bottom: 4px; font-size: calc(17px*var(--ts,1)); }
 .report-search .report-locate + .report-note, .report-search .report-locate + label { margin-top: 10px; }
+
+/* =====================================================================
+   FASE 2: mapa, lista de sismos, guía de seguridad, fuentes y pie de página.
+   Misma identidad que la primera pantalla: letra de 15-17 px, etiquetas en texto normal, botones de 44-48 px.
+   ===================================================================== */
+
+/* ---------- Mapa: título arriba y filtros debajo, en una cuadrícula ---------- */
+.map-section > .section-heading { flex-direction: column; align-items: stretch; gap: 14px; }
+.map-section .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; justify-content: stretch; align-items: stretch; }
+.magnitude-filter { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 58px; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: calc(14px*var(--ts,1)); font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.magnitude-filter select { margin: 0; width: 100%; min-width: 0; font-size: calc(16px*var(--ts,1)); font-weight: 600; color: var(--ink); text-overflow: ellipsis; }
+.magnitude-filter:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px #1f5fd133; }
+.aftershock-toggle, .replay-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: calc(15px*var(--ts,1)); font-weight: 600; white-space: normal; text-align: center; line-height: 1.2; }
+.aftershock-toggle input { width: 20px; height: 20px; accent-color: var(--primary); }
+.replay-button:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+.replay-pair { display: flex; gap: 8px; }
+.replay-pair .replay-button { flex: 1; }
+
+.map-card { border-radius: var(--radius); border-color: var(--line); box-shadow: none; }
+.map-label { display: none; }
+.map-legend { font-size: calc(13px*var(--ts,1)); }
+.map-legend > span { letter-spacing: 0; font-weight: 600; }
+@media (min-width: 961px) {
+  /* El mapa llena el alto de la ficha de al lado: antes quedaba un hueco blanco debajo. */
+  .map-card { grid-template-columns: minmax(0, 1fr) 300px; align-items: stretch; }
+  .map-frame { height: auto; min-height: 560px; }
+}
+.map-aside { padding: 20px 20px 16px; }
+.aside-top { color: var(--muted); font-size: calc(14px*var(--ts,1)); font-weight: 600; letter-spacing: 0; }
+.featured-magnitude { margin: 10px 0 6px; font: 700 calc(48px*var(--ts,1))/1 "DM Sans", sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.featured-place { min-height: 0; font: 700 calc(20px*var(--ts,1))/1.25 "DM Sans", sans-serif; letter-spacing: 0; color: var(--ink); }
+.featured-details { gap: 14px; margin-top: 16px; padding-top: 16px; border-top-color: var(--line); }
+.featured-details span { font-size: calc(14px*var(--ts,1)); font-weight: 500; letter-spacing: 0; color: var(--muted); }
+.featured-details strong { font-size: calc(16px*var(--ts,1)); font-weight: 600; color: var(--ink); }
+.featured-link { justify-content: flex-start; gap: 6px; padding-top: 16px; color: var(--primary); font-size: calc(15px*var(--ts,1)); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.map-caption { font-size: calc(14px*var(--ts,1)); color: var(--muted); }
+
+/* Selector de mapa base y panel de capas: claros, como el resto de la página. */
+.map-layer-selector { background: #ffffffee; border: 1px solid var(--line); box-shadow: 0 4px 14px #121a2a26; backdrop-filter: none; }
+.layer-btn { color: var(--ink-2); font-size: calc(14px*var(--ts,1)); font-weight: 600; }
+.layer-btn:hover { background: var(--primary-soft); color: var(--primary); }
+.layer-btn.active { background: var(--primary); color: #fff; }
+.map-layers { background: #ffffffee; border: 1px solid var(--line); box-shadow: 0 4px 14px #121a2a26; backdrop-filter: none; }
+.map-layers-title { color: var(--muted); font-size: calc(13px*var(--ts,1)); font-weight: 600; letter-spacing: 0; }
+.layer-chip { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: calc(14px*var(--ts,1)); font-weight: 600; min-height: 40px; }
+.layer-chip:hover { background: var(--primary-soft); color: var(--primary); }
+.layer-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.map-layers-note { color: var(--ink-2); font-size: calc(13px*var(--ts,1)); }
+.map-layers-note button { color: var(--primary); }
+.layer-chip:focus-visible, .map-layers-note button:focus-visible { outline-color: var(--focus); }
+.map-layers-legend { color: var(--ink-2); font-size: calc(13px*var(--ts,1)); font-weight: 500; }
+
+/* Globo de un sismo en el mapa. */
+.leaflet-popup-content { font: 400 calc(14px*var(--ts,1))/1.45 "DM Sans", sans-serif; }
+.popup-badge-latest, .popup-badge-main, .popup-badge-after { display: inline-block; margin-bottom: 6px; padding: 2px 8px; border-radius: 6px; font-size: calc(12px*var(--ts,1)); font-weight: 700; letter-spacing: 0; text-transform: none; }
+.popup-title { font-size: calc(15px*var(--ts,1)); font-weight: 700; color: var(--ink); }
+.popup-meta { font-size: calc(13px*var(--ts,1)); color: var(--ink-2); }
+
+/* Fichas plegables del sismo principal y de las placas, y la secuencia. */
+.section-kicker { letter-spacing: 0; text-transform: none; font-size: calc(13px*var(--ts,1)); font-weight: 600; color: var(--muted); }
+.sequence-card { border-radius: var(--radius); border-color: var(--line); box-shadow: none; }
+.sequence-card h3 { font-size: calc(22px*var(--ts,1)); font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.sequence-note { font-size: calc(15px*var(--ts,1)); color: var(--ink-2); }
+
+/* ---------- Lista de sismos (a todo lo ancho) ---------- */
+.lower-grid { grid-template-columns: minmax(0, 1fr); }
+.events-card { border-radius: var(--radius); border-color: var(--line); padding: 22px; box-shadow: none; }
+.events-list { max-height: 640px; }
+.segmented { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
+.segmented button { min-height: 44px; padding: 0 14px; border-radius: 8px; font-size: calc(15px*var(--ts,1)); font-weight: 600; color: var(--ink-2); }
+.segmented button.selected { background: var(--primary); color: #fff; box-shadow: none; }
+.results-count { padding: 8px 12px; border-radius: 8px; background: var(--surface-2); color: var(--ink-2); font-size: calc(14px*var(--ts,1)); font-weight: 600; letter-spacing: 0; }
+.event-row { gap: 14px; padding: 14px 6px; border-top-color: var(--line); border-radius: 8px; }
+.event-row:hover { background: var(--surface-2); transform: none; }
+.magnitude-badge { width: 56px; height: 48px; border-radius: 10px; background: var(--orange-soft); color: var(--orange); font: 700 calc(20px*var(--ts,1)) "DM Sans", sans-serif; }
+.magnitude-badge.low { background: var(--primary-soft); color: var(--primary); }
+.magnitude-badge.high { background: var(--red); color: #fff; }
+.event-text strong { font-size: calc(16px*var(--ts,1)); font-weight: 600; color: var(--ink); }
+.event-text small { font-size: calc(14px*var(--ts,1)); color: var(--muted); }
+.event-time strong { font-size: calc(15px*var(--ts,1)); color: var(--ink); }
+.event-time small { font-size: calc(13px*var(--ts,1)); color: var(--muted); }
+.replica-tag, .main-tag, .source-tag { padding: 1px 8px; border-radius: 6px; font-size: calc(12px*var(--ts,1)); font-weight: 600; font-style: normal; letter-spacing: 0; text-transform: none; }
+.empty-state { font-size: calc(16px*var(--ts,1)); color: var(--ink-2); }
+
+/* ---------- Guía de seguridad, emergencias y «Qué revisar» ---------- */
+.guide-card, .check-card, .emergency-card, .sources-card { border-radius: var(--radius); border-color: var(--line); box-shadow: none; }
+.guide-label { margin-bottom: 10px; font-size: calc(17px*var(--ts,1)); font-weight: 700; letter-spacing: 0; color: var(--ink); }
+.guide-chips button { min-height: 48px; padding: 0 18px; border-color: var(--line-strong); font-size: calc(16px*var(--ts,1)); color: var(--ink); }
+.guide-chips button.selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+.guide-tabs button { min-height: 48px; font-size: calc(16px*var(--ts,1)); color: var(--ink-2); }
+.guide-tabs button.selected { color: var(--primary); border-bottom-color: var(--primary); }
+.guide-list li { padding: 16px; background: var(--surface-2); }
+.guide-num { font-size: calc(16px*var(--ts,1)); color: var(--primary); }
+.guide-list strong { font-size: calc(17px*var(--ts,1)); }
+.guide-list p { font-size: calc(16px*var(--ts,1)); color: var(--ink-2); }
+.guide-always h3 { font-size: calc(17px*var(--ts,1)); letter-spacing: 0; color: var(--ink); }
+.guide-always ul { font-size: calc(16px*var(--ts,1)); color: var(--ink-2); }
+.guide-live, .guide-disclaimer { font-size: calc(14px*var(--ts,1)); }
+
+.emergency-card { border-left: 0; }
+.emergency-card h3 { margin: 0 0 12px; font-size: calc(22px*var(--ts,1)); }
+.emergency-call { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; border-radius: 12px; background: var(--red); color: #fff; font-size: calc(19px*var(--ts,1)); font-weight: 700; }
+.emergency-call:hover { background: #9c0d24; }
+.emergency-card p { margin: 12px 0; font-size: calc(16px*var(--ts,1)); color: var(--ink-2); }
+.emergency-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.emergency-links a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--primary); font-size: calc(15px*var(--ts,1)); font-weight: 600; background: var(--surface); }
+.emergency-links a:hover { border-color: var(--primary); background: var(--primary-soft); }
+
+.check-card .card-heading h2 { font-size: calc(22px*var(--ts,1)); }
+.check-progress { font-size: calc(15px*var(--ts,1)); color: var(--ink-2); }
+.check-bar i { background: var(--primary); }
+.check-text strong { font-size: calc(16px*var(--ts,1)); }
+.check-text small { font-size: calc(14px*var(--ts,1)); color: var(--ink-2); }
+.check-box { width: 24px; height: 24px; border-color: var(--line-strong); }
+.check-foot { font-size: calc(14px*var(--ts,1)); }
+
+/* ---------- Fuentes ---------- */
+.sources-card h3 { margin-top: 0; font-size: calc(22px*var(--ts,1)); font-weight: 700; letter-spacing: -.01em; }
+.sources-table { font-size: calc(16px*var(--ts,1)); }
+.sources-table thead th { font-size: calc(14px*var(--ts,1)); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.source-link a { font-size: calc(15px*var(--ts,1)); color: var(--primary); }
+.sources-summary { font-size: calc(16px*var(--ts,1)); color: var(--ink-2); }
+.official-list a { border-left-color: var(--primary); background: var(--surface-2); }
+.official-list a:hover { border-left-color: var(--primary); background: var(--primary-soft); transform: none; }
+.official-tag { font-size: calc(13px*var(--ts,1)); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.official-list strong { font-size: calc(17px*var(--ts,1)); }
+.official-list span:not(.official-tag) { font-size: calc(15px*var(--ts,1)); }
+
+/* ---------- Pie de página ---------- */
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 24px; margin-top: 28px; padding: 24px 0 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: calc(14px*var(--ts,1)); line-height: 1.5; }
+footer a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 960px) {
+  .map-section .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .events-card { padding: 16px 12px; }
+  .event-row { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; padding: 12px 2px; }
+  .magnitude-badge { width: 52px; height: 46px; font-size: calc(19px*var(--ts,1)); }
+  .event-text strong { font-size: calc(16px*var(--ts,1)); }
+  .event-text small { font-size: calc(14px*var(--ts,1)); }
+  .event-time strong { font-size: calc(14px*var(--ts,1)); }
+  .events-tools { flex-wrap: wrap; }
+  .results-count { white-space: normal; }
+  .emergency-links { display: grid; grid-template-columns: minmax(0, 1fr); }
+  footer { flex-direction: column; text-align: left; font-size: calc(14px*var(--ts,1)); }
+}
+
+/* Ajustes finales de la fase 2. */
+.seq-hours-head { font-size: calc(13px*var(--ts,1)); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.seq-hour-range { font-size: calc(14px*var(--ts,1)); color: var(--ink-2); }
+.seq-hour-max { font-size: calc(13px*var(--ts,1)); }
+.seq-hour-main { background: var(--primary); font-size: calc(15px*var(--ts,1)); }
+.seq-tick { font-size: calc(13px*var(--ts,1)); }
+.seq-label { font-family: "DM Sans", sans-serif; font-size: calc(14px*var(--ts,1)); }
+.official-list a > span:last-child { display: block; font-size: calc(15px*var(--ts,1)); color: var(--ink-2); }
+/* Panel de capas un poco más ancho: los nombres caben en una línea. */
+@media (min-width: 701px) { .map-layers-dock .map-layers { width: 212px; } }

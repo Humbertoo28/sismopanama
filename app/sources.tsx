@@ -57,7 +57,6 @@ export default function Sources({ refreshKey }: { refreshKey?: number } = {}) {
   return (
     <div className="sources-grid">
       <div className="sources-card">
-        <span className="section-kicker">CONTRASTE EN VIVO</span>
         <h3>Varias agencias, un mismo sismo</h3>
         {rows.length > 0 ? (
           <table className="sources-table">
@@ -84,7 +83,6 @@ export default function Sources({ refreshKey }: { refreshKey?: number } = {}) {
       </div>
 
       <div className="sources-card">
-        <span className="section-kicker">DÓNDE INFORMARSE</span>
         <h3>Fuentes oficiales y de ayuda</h3>
         <ul className="official-list">
           {OFFICIAL.map(item => (
