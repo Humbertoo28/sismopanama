@@ -158,7 +158,7 @@ export async function broadcastPush(
 
   let sent = 0;
   let failed = 0;
-  const expiredEndpoints: string[] = [];
+  const expiredIds: string[] = [];
   // Qué respondió cada servicio (Apple, Google...) para poder ver por qué un celular no recibe: "apple:201",
   // "apple:403", "fcm:410"... Sin esto un envío rechazado era invisible.
   const outcomes: Record<string, number> = {};
@@ -170,7 +170,7 @@ export async function broadcastPush(
     } catch {
       // Una dirección guardada que ya no se puede leer se cuenta como "otro" y no detiene el resto.
     }
-    return host.includes("apple") ? "apple" : host.includes("googleapis") ? "fcm" : host.includes("mozilla") ? "mozilla" : host.includes("windows") ? "windows" : "otro";
+    return host.includes("apple") ? "apple" : host.includes("googleapis") || host.endsWith(".google.com") ? "fcm" : host.includes("mozilla") ? "mozilla" : host.includes("windows") ? "windows" : "otro";
   };
 
   // Con un máximo de envíos simultáneos: miles de conexiones a la vez agotarían los recursos de la función y
@@ -191,21 +191,27 @@ export async function broadcastPush(
         failed++;
         if (errorSamples.length < 3) errorSamples.push(`${outcome} ${String(res.error ?? "").slice(0, 120)}`);
         if (res.expired) {
-          expiredEndpoints.push(row.endpoint);
+          expiredIds.push(row.id);
         }
       }
     }
   };
   await Promise.allSettled(Array.from({ length: Math.min(MAX_CONCURRENT_SENDS, subs.length) }, worker));
 
-  // Limpiar suscripciones caducadas para mantener la base de datos limpia
+  // Dar de baja las suscripciones caducadas (404/410). Antes se borraban todas en una sola consulta con las direcciones
+  // completas: con miles de ellas la petición era demasiado grande, fallaba sin dejar rastro («0 dados de baja») y cada aviso
+  // seguía gastando una cuarta parte de los envíos en direcciones muertas. Ahora va por id, en tandas.
   let cleaned = 0;
-  if (expiredEndpoints.length > 0) {
-    const { error: delError } = await supabase
-      .from("push_subscriptions")
-      .delete()
-      .in("endpoint", expiredEndpoints);
-    if (!delError) cleaned = expiredEndpoints.length;
+  const CLEAN_BATCH = 150;
+  for (let from = 0; from < expiredIds.length; from += CLEAN_BATCH * 4) {
+    const batches = [0, 1, 2, 3]
+      .map(k => expiredIds.slice(from + k * CLEAN_BATCH, from + (k + 1) * CLEAN_BATCH))
+      .filter(batch => batch.length > 0);
+    const results = await Promise.all(batches.map(batch => supabase.from("push_subscriptions").delete().in("id", batch)));
+    results.forEach((result, k) => {
+      if (result.error) console.error("[push] no se pudieron dar de baja suscripciones caducadas:", result.error.message);
+      else cleaned += batches[k].length;
+    });
   }
 
   const unsent = subs.length - next;
