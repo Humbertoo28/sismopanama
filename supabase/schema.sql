@@ -79,3 +79,46 @@ create policy "Allow service_role full access to notified_quakes"
 --   );
 --   $$
 -- );
+
+-- =========================================================================
+-- 5. REPORTES «¿LO SENTISTE?» DE LAS PERSONAS (página /reportes)
+--
+-- Privacidad: solo se guarda la localidad que eligió la persona de una lista (id de GeoNames de lib/places.ts), nunca su
+-- ubicación exacta. `reporter` e `ip_key` son HMAC con una clave del servidor (REPORTS_SECRET): sirven para no contar dos
+-- veces el mismo dispositivo y para limitar envíos masivos, sin guardar la IP ni poder recuperarla.
+-- Los datos del sismo (hora, magnitud, lugar, epicentro) los copia el servidor del catálogo, no los manda el navegador.
+-- =========================================================================
+create table if not exists public.felt_reports (
+  id bigint generated always as identity primary key,
+  event_id text not null check (char_length(event_id) <= 60),
+  event_time bigint not null,
+  event_mag numeric,
+  event_place text check (char_length(event_place) <= 200),
+  event_lat numeric not null,
+  event_lng numeric not null,
+  felt boolean not null,
+  intensity smallint check ((felt and intensity between 1 and 4) or (not felt and intensity is null)),
+  place_id text not null check (char_length(place_id) <= 20),
+  reporter text not null check (char_length(reporter) <= 64),
+  ip_key text not null check (char_length(ip_key) <= 64),
+  -- Apartado por los controles contra datos falsos (no se publica): conexión desde fuera de Panamá o reporte poco creíble
+  -- para la distancia y la magnitud del sismo. Null = se cuenta.
+  flagged text check (flagged in ('fuera-del-pais', 'poco-creible')),
+  created_at timestamp with time zone not null default now(),
+  -- Un reporte por dispositivo y sismo.
+  unique (event_id, reporter)
+);
+
+create index if not exists idx_felt_reports_event_time on public.felt_reports(event_time) where flagged is null;
+create index if not exists idx_felt_reports_ip_recent on public.felt_reports(ip_key, created_at);
+
+alter table public.felt_reports enable row level security;
+revoke all on table public.felt_reports from anon, authenticated;
+
+drop policy if exists "Allow service_role full access to felt_reports" on public.felt_reports;
+create policy "Allow service_role full access to felt_reports"
+  on public.felt_reports
+  for all
+  to service_role
+  using (true)
+  with check (true);

@@ -34,6 +34,7 @@ import { DISTRICTS } from "../lib/places";
 import { setLatestQuake } from "../lib/latest-quake";
 import { SOURCE_NAMES, reportUrl } from "../lib/quake-facts";
 import QuakeSheet from "./quake-sheet";
+import FeltReport from "./felt-report";
 import { createPortal } from "react-dom";
 import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
@@ -428,6 +429,8 @@ export default function Home() {
   // Ficha completa del sismo que se tocó (en el mapa o en la lista) y petición de «ver cómo se propagó».
   const [sheet, setSheet] = useState<{ id: string; from: "list" | "map" } | null>(null);
   const [propagation, setPropagation] = useState<{ event: Earthquake; key: number } | null>(null);
+  // Formulario «¿Lo sentiste?» abierto para este sismo.
+  const [reportFor, setReportFor] = useState<Earthquake | null>(null);
   // En la pantalla completa del navegador solo se ve el marco del mapa y lo que esté dentro: la ficha se monta ahí.
   const [fullscreenHost, setFullscreenHost] = useState<Element | null>(null);
   useEffect(() => {
@@ -567,6 +570,7 @@ export default function Home() {
             </a>
           ))}
           <span className="site-nav-pages">
+            <a href="/reportes">Reportes</a>
             <a href="/analisis">Gráficos</a>
             <a href="/noticias">Noticias</a>
             <a href="/historia">Historia</a>
@@ -588,6 +592,7 @@ export default function Home() {
             onShowOnMap={chooseEvent}
             onShare={share}
             onRefresh={() => { setRefreshKey(key => key + 1); setSlowKey(key => key + 1); }}
+            onReport={setReportFor}
           />
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
@@ -687,10 +692,14 @@ export default function Home() {
             document.getElementById("mapa")?.scrollIntoView({ behavior: "smooth", block: "start" });
           }}
           onShowOnMap={sheet?.from === "list" ? () => { setSheet(null); chooseEvent(sheetEvent); } : undefined}
+          onReport={() => { setSheet(null); setReportFor(sheetEvent); }}
         />
         );
         return fullscreenHost ? createPortal(sheetNode, fullscreenHost) : sheetNode;
       })()}
+      {reportFor && (fullscreenHost
+        ? createPortal(<FeltReport event={reportFor} onClose={() => setReportFor(null)} />, fullscreenHost)
+        : <FeltReport event={reportFor} onClose={() => setReportFor(null)} />)}
     </div>
   );
 }

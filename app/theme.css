@@ -323,3 +323,68 @@ body:before { display: none; }
   body:has(.site-header) .site-header-tools { margin-right: 52px; }
   body:has(.site-header) .a11y-panel { top: calc(env(safe-area-inset-top) + var(--header-h) + 8px); bottom: auto; max-height: calc(100dvh - var(--header-h) - 100px - env(safe-area-inset-bottom)); }
 }
+
+/* =====================================================================
+   FORMULARIO «¿LO SENTISTE?»
+   ===================================================================== */
+.report-backdrop { position: fixed; inset: 0; z-index: 4000; display: grid; place-items: center; padding: 20px; background: #0b1a33a6; animation: now-rise .2s ease-out; }
+.report-card { width: min(620px, 100%); max-height: min(92dvh, 900px); overflow-y: auto; overscroll-behavior: contain; background: var(--surface); color: var(--ink); border-radius: 16px; box-shadow: 0 24px 60px #0b1a3366; outline: none; }
+.report-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 20px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.report-head h2 { margin: 0; font-size: calc(24px*var(--ts,1)); line-height: 1.2; }
+.report-head p { margin: 6px 0 0; color: var(--ink-2); font-size: calc(15px*var(--ts,1)); }
+.report-close { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--ink); }
+.report-close:hover { background: var(--primary-soft); }
+.report-body { padding: 18px 20px 20px; display: grid; gap: 20px; }
+.report-step { margin: 0; padding: 0; border: 0; min-width: 0; animation: now-rise .3s ease-out; }
+.report-step legend { padding: 0; margin-bottom: 10px; font-size: calc(18px*var(--ts,1)); font-weight: 700; }
+.report-choices { display: grid; gap: 10px; }
+.report-choices.two { grid-template-columns: 1fr 1fr; }
+.report-choices button { min-height: 56px; padding: 12px 16px; border: 2px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); font-size: calc(17px*var(--ts,1)); font-weight: 600; text-align: left; transition: border-color .15s, background .15s, transform .15s; }
+.report-choices.two button { text-align: center; }
+.report-choices button:hover { border-color: var(--primary); }
+.report-choices button:active { transform: scale(.98); }
+.report-choices button.on { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+.report-level { display: grid; gap: 4px; border-left-width: 8px !important; }
+.report-level strong { font-size: calc(17px*var(--ts,1)); }
+.report-level span { font-size: calc(15px*var(--ts,1)); font-weight: 400; color: var(--ink-2); line-height: 1.4; }
+.report-level.level-1 { border-left-color: #8fb7ef !important; }
+.report-level.level-2 { border-left-color: #f2bd38 !important; }
+.report-level.level-3 { border-left-color: #ef7b2d !important; }
+.report-level.level-4 { border-left-color: #b8102b !important; }
+.report-place { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--primary-soft); color: var(--primary); }
+.report-place strong { flex: 1; color: var(--ink); font-size: calc(17px*var(--ts,1)); }
+.report-search label { display: block; margin-bottom: 6px; font-size: calc(15px*var(--ts,1)); color: var(--ink-2); }
+.report-search input { width: 100%; min-height: 52px; padding: 0 14px; border: 2px solid var(--line-strong); border-radius: 12px; font: inherit; font-size: calc(17px*var(--ts,1)); color: var(--ink); background: var(--surface); }
+.report-search input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px #1f5fd133; }
+.report-matches { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.report-matches li + li { border-top: 1px solid var(--line); }
+.report-matches button { width: 100%; display: grid; gap: 2px; padding: 12px 14px; border: 0; background: var(--surface); text-align: left; color: var(--ink); }
+.report-matches button:hover, .report-matches button:focus-visible { background: var(--primary-soft); }
+.report-matches strong { font-size: calc(17px*var(--ts,1)); }
+.report-matches span { font-size: calc(14px*var(--ts,1)); color: var(--muted); }
+.report-note { margin: 8px 0 0; font-size: calc(14px*var(--ts,1)); color: var(--muted); }
+.report-error { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.report-actions .btn-primary { flex: 1 1 220px; min-height: 54px; font-size: calc(18px*var(--ts,1)); }
+.report-actions .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+.report-done { padding: 28px 20px 24px; text-align: center; display: grid; justify-items: center; gap: 8px; }
+.report-done-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: #e3f4ea; color: #1e8a4c; animation: now-pop .5s cubic-bezier(.2, 1.3, .4, 1); }
+.report-done h3 { margin: 6px 0 0; font-size: calc(22px*var(--ts,1)); }
+.report-done p { margin: 0 0 10px; max-width: 440px; color: var(--ink-2); }
+@media (max-width: 700px) {
+  .report-backdrop { place-items: end center; padding: 0; }
+  .report-card { width: 100%; max-height: 94dvh; border-radius: 18px 18px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .report-head h2 { font-size: calc(22px*var(--ts,1)); }
+  .report-actions .btn { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .report-backdrop, .report-step, .report-done-icon { animation: none; } }
+
+/* Encabezado de las páginas secundarias: la navegación entre páginas va en una fila que se desplaza de lado en el celular. */
+.page-nav { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); }
+.page-nav::-webkit-scrollbar { display: none; }
+.page-nav a { position: relative; flex: none; display: flex; align-items: center; min-height: 48px; padding: 0 12px; color: var(--ink-2); font-size: calc(15px*var(--ts,1)); font-weight: 600; white-space: nowrap; }
+.page-nav a:hover { color: var(--primary); }
+.page-nav a.active { color: var(--primary); }
+.page-nav a.active:after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--primary); }
+.report-locate { width: 100%; min-height: 52px; margin-bottom: 4px; font-size: calc(17px*var(--ts,1)); }
+.report-search .report-locate + .report-note, .report-search .report-locate + label { margin-top: 10px; }

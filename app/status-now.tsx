@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ExternalLink, MapPin, MessageCircle, Phone, RefreshCw, Share2 } from "lucide-react";
+import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2 } from "lucide-react";
 import CountUp from "./count-up";
 import { getWhatsAppShareUrl } from "../lib/alert-system";
 import type { Earthquake, EarthquakeResponse, MainshockResponse } from "../lib/earthquakes";
@@ -57,9 +57,10 @@ type Props = {
   onShowOnMap: (event: Earthquake) => void;
   onShare: (event: Earthquake) => void;
   onRefresh: () => void;
+  onReport: (event: Earthquake) => void;
 };
 
-export default function StatusNow({ latest, main, mainshock, status, lastUpdate, catalogs, shared, onShowOnMap, onShare, onRefresh }: Props) {
+export default function StatusNow({ latest, main, mainshock, status, lastUpdate, catalogs, shared, onShowOnMap, onShare, onRefresh, onReport }: Props) {
   const isMain = Boolean(latest && main && latest.id === main.id);
   const source = SOURCE_NAMES[latest?.properties.source ?? "usgs"];
   const preliminary = latest?.properties.status !== "reviewed";
@@ -123,6 +124,9 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
                 <a className="btn btn-secondary" href={getWhatsAppShareUrl(latest, typeof window !== "undefined" ? window.location.href : "")} target="_blank" rel="noopener noreferrer">
                   <MessageCircle aria-hidden="true" size={20} /> Enviar por WhatsApp
                 </a>
+                <button type="button" className="btn btn-secondary" onClick={() => onReport(latest)}>
+                  <MessageSquareText aria-hidden="true" size={20} /> ¿Lo sentiste? Repórtalo
+                </button>
                 <button type="button" className="btn btn-quiet" onClick={() => onShare(latest)} aria-live="polite">
                   <Share2 aria-hidden="true" size={18} /> {shared ? "Enlace copiado" : "Compartir"}
                 </button>
@@ -210,6 +214,7 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
       <nav className="now-more" aria-label="Más información">
         <a href="/analisis">Gráficos de la secuencia <ChevronRight aria-hidden="true" size={18} /></a>
         <a href="/noticias">Noticias oficiales <ChevronRight aria-hidden="true" size={18} /></a>
+        <a href="/reportes">Reportes de quienes lo sintieron <ChevronRight aria-hidden="true" size={18} /></a>
         <a href="/historia">Sismos históricos en Panamá <ChevronRight aria-hidden="true" size={18} /></a>
         <a href="/resumen">Resumen en texto sencillo <ChevronRight aria-hidden="true" size={18} /></a>
       </nav>

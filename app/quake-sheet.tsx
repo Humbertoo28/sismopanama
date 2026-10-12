@@ -17,8 +17,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
 // Ficha completa de un sismo: se abre al tocarlo en el mapa. Lo medido o publicado por los catálogos se presenta tal cual; lo
 // que se calcula aquí (energía, tiempo de llegada) lleva su aviso.
 export default function QuakeSheet({
-  event, mainshock, onClose, onPropagate, onShowOnMap,
-}: { event: Earthquake; mainshock: Earthquake | null; onClose: () => void; onPropagate: () => void; onShowOnMap?: () => void }) {
+  event, mainshock, onClose, onPropagate, onShowOnMap, onReport,
+}: { event: Earthquake; mainshock: Earthquake | null; onClose: () => void; onPropagate: () => void; onShowOnMap?: () => void; onReport: () => void }) {
   const panel = useRef<HTMLElement>(null);
   const { properties } = event;
   const [, , depthRaw] = event.geometry.coordinates;
@@ -164,6 +164,7 @@ export default function QuakeSheet({
         <div className="qs-actions">
           <button type="button" className="qs-primary" onClick={onPropagate}>Ver cómo se propagó</button>
           {onShowOnMap && <button type="button" className="qs-secondary" onClick={onShowOnMap}>Ver en el mapa</button>}
+          <button type="button" className="qs-secondary" onClick={onReport}>¿Lo sentiste? Repórtalo</button>
           <a className="qs-link" href={reportUrl(event)} target="_blank" rel="noopener noreferrer">Ver el reporte en {primary} <span aria-hidden="true">↗</span></a>
         </div>
       </section>

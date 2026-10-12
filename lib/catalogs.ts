@@ -195,3 +195,18 @@ export async function fetchPanamaEvents(since: number): Promise<{ events: Earthq
     catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
   };
 }
+
+// Sismos de la secuencia ya combinados, guardados unos segundos por instancia del servidor: los reportes «¿Lo sentiste?»
+// los consultan para comprobar que el sismo existe y para agrupar los registros de un mismo sismo, sin pedir los tres
+// catálogos en cada envío.
+let recent: { at: number; since: number; events: Promise<Earthquake[]> } | null = null;
+export function recentPanamaEvents(since: number, maxAgeMs = 20_000): Promise<Earthquake[]> {
+  const now = Date.now();
+  if (!recent || recent.since !== since || now - recent.at > maxAgeMs) {
+    const events = fetchPanamaEvents(since).then(result => result.events);
+    recent = { at: now, since, events };
+    // Si falla, la próxima consulta lo vuelve a intentar.
+    events.catch(() => { if (recent?.events === events) recent = null; });
+  }
+  return recent.events;
+}
