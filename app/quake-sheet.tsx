@@ -65,6 +65,18 @@ export default function QuakeSheet({
     };
   }, []);
 
+  // La página de atrás no se desplaza mientras la ficha está abierta (en el celular el dedo sobre el fondo movía la página).
+  // En escritorio no hace falta, y quitar la barra de desplazamiento movería el contenido.
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 700px), (pointer: coarse)").matches) return;
+    const root = document.documentElement;
+    const previous = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = previous;
+    };
+  }, []);
+
   const magnitude = properties.mag === null ? "—" : properties.mag.toFixed(1);
 
   return (

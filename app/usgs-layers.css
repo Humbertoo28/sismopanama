@@ -79,7 +79,9 @@
 /* Respaldo de pantalla completa (iPhone): la escena cubre la ventana, con su propio desplazamiento. */
 /* La tarjeta se desvanece según el desplazamiento de la página: con la escena ampliada debe verse siempre. */
 .map-card:has(.q3-overlay), .map-card:has(.map-overlay-flag) { animation: none !important; opacity: 1 !important; overflow: visible; }
-.map-frame:has(.q3-overlay), .map-frame:has(.map-overlay-flag) { position: fixed; inset: 0; z-index: 3000; width: 100vw; height: 100dvh; border-radius: 0; overflow-y: auto; background: #071523; }
+.map-frame:has(.q3-overlay), .map-frame:has(.map-overlay-flag) { position: fixed; inset: 0; z-index: 3000; width: 100vw; height: 100dvh; border-radius: 0; overflow-y: auto; overscroll-behavior: contain; background: #071523;
+  /* Con notch o barra de inicio (iPhone, iPad) los controles no quedan debajo. */
+  box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 .map-frame:has(.q3-overlay) .q3 { min-height: 100%; border-radius: 0; }
 .map-frame:has(.q3-overlay) .q3-stage { height: max(440px, 68dvh); }
 .map-frame:has(.q3-overlay) .map-layer-selector, .map-frame:has(.q3-overlay) .map-label { display: none; }
@@ -309,7 +311,7 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
 @keyframes qs-in { from { transform: translateX(28px); opacity: .6; } }
 @media (max-width: 700px) {
   .qs-backdrop { align-items: flex-end; }
-  .qs { width: 100%; height: auto; max-height: 88dvh; border-radius: 18px 18px 0 0; padding: 20px 18px 26px; box-shadow: 0 -10px 40px #0000004d; animation-name: qs-up; }
+  .qs { width: 100%; height: auto; max-height: 88dvh; border-radius: 18px 18px 0 0; padding: 20px 18px calc(26px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 40px #0000004d; animation-name: qs-up; }
   @keyframes qs-up { from { transform: translateY(40px); opacity: .6; } }
 }
 @media (prefers-reduced-motion: reduce) { .qs, .qs-backdrop { animation: none; } }
