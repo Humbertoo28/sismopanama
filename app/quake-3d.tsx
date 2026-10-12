@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { Earthquake, ReplayStep } from "../lib/earthquakes";
-import type { Contour, Fault, Felt, ShakeGrid } from "../lib/usgs-detail";
+import type { Contour, Fault, Felt, Mechanism, ShakeGrid } from "../lib/usgs-detail";
 import { PANAMA_RINGS } from "../lib/panama";
 import { PROVINCE_BY_ID } from "../lib/province-of";
 import { PROVINCE_LABELS, TOWN_LABELS } from "../lib/province-labels";
@@ -42,6 +42,8 @@ type Props = {
   // Onda de sacudida: cómo se propagó por el país (intensidad del ShakeMap + llegada calculada con velocidades típicas).
   wave: boolean;
   shakeGrid: ShakeGrid | null;
+  // Mecanismo focal del USGS: de su plano de falla sale el sentido del deslizamiento que muestran las flechas.
+  mechanism: Mechanism | null;
   // Interruptores de las capas del USGS, que maneja el mapa.
   layerControls: ReactNode;
   onSelect: (id: string) => void;
@@ -170,7 +172,7 @@ function faultOutline(fault: Fault, strike: number): [number, number, number][] 
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -378,6 +380,24 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     }
     return { nx, ny, mmi, arrivalS, arrivalP, nearKm, end: Math.ceil(end) };
   }, [wave, shakeGrid, fault, mainshock, scene]);
+  // Sentido del deslizamiento: del plano del mecanismo focal que coincide con la falla del modelo (mismo rumbo) se saca hacia
+  // dónde se mueve el bloque que buza (el «techo») respecto al otro; el otro lado se mueve al contrario. Solo la dirección
+  // horizontal (este, norte): el largo de las flechas no representa cuánto se movió.
+  const slipSense = useMemo(() => {
+    if (!fault || !mechanism || fault.strike === null) return null;
+    const gap = (a: number, b: number) => Math.abs((((a - b) % 360) + 540) % 360 - 180);
+    const plane = mechanism.planes.reduce((best, candidate) => (gap(candidate.strike, fault.strike!) < gap(best.strike, fault.strike!) ? candidate : best));
+    if (gap(plane.strike, fault.strike) > 20) return null;
+    const [strike, dip, rake] = [plane.strike, plane.dip, plane.rake].map(v => (v * Math.PI) / 180);
+    const updip = strike - Math.PI / 2;
+    const east = Math.cos(rake) * Math.sin(strike) + Math.sin(rake) * Math.cos(dip) * Math.sin(updip);
+    const north = Math.cos(rake) * Math.cos(strike) + Math.sin(rake) * Math.cos(dip) * Math.cos(updip);
+    const length = Math.hypot(east, north);
+    // Si el movimiento es casi vertical (falla inversa o normal pura) las flechas en planta no dicen nada.
+    if (length < 0.35) return null;
+    const lateral = Math.abs(plane.rake) <= 45 ? "lateral izquierdo" : Math.abs(plane.rake) >= 135 ? "lateral derecho" : "oblicuo";
+    return { east: east / length, north: north / length, strike: plane.strike, dip: plane.dip, rake: plane.rake, kind: lateral };
+  }, [fault, mechanism]);
 
   // La línea de tiempo llega hasta que la onda cubre la escena (si se muestra) o hasta que termina la ruptura.
   const ruptureDuration = fault?.durationS == null ? null : Math.max(fault.durationS, waveField?.end ?? 0);
@@ -1007,16 +1027,21 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
 
     // Rótulo de la ruptura (bajo su borde inferior; arriba suele estar el enjambre de réplicas). Se calcula antes que los
     // nombres para reservarle el sitio.
-    let ruptureLabel: { text: string; x: number; y: number; width: number } | null = null;
+    let ruptureLabel: { text: string; sub: string | null; x: number; y: number; width: number } | null = null;
     if (fault && faultEdge && !edgeOn) {
       const size1 = fault.lengthKm !== null && fault.widthKm !== null ? ` · ${Math.round(fault.lengthKm)} × ${Math.round(fault.widthKm)} km` : "";
       const text = `Ruptura${size1} · máx. ${fault.maxSlipM.toFixed(1)} m`;
+      const sub = slipSense ? "Flechas: sentido del deslizamiento (USGS) · no a escala" : null;
       ctx.save();
       ctx.font = font(10.5, 800);
-      const width = ctx.measureText(text).width;
+      let width = ctx.measureText(text).width;
+      if (sub) {
+        ctx.font = font(9.5, 700);
+        width = Math.max(width, ctx.measureText(sub).width);
+      }
       ctx.restore();
       const midX = (faultEdge[2].p.sx + faultEdge[3].p.sx) / 2;
-      ruptureLabel = { text, width, x: clamp(midX, width / 2 + 6, w - width / 2 - 6), y: Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 13 };
+      ruptureLabel = { text, sub, width, x: clamp(midX, width / 2 + 6, w - width / 2 - 6), y: Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 13 };
     }
 
     // Nombres de las provincias y, al acercar, de las cabeceras de distrito. Cada uno se omite si choca con otro ya
@@ -1024,7 +1049,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     if (!edgeOn) {
       // Primero se reserva el sitio de las etiquetas de magnitud ("M 7.7"), que mandan sobre los nombres.
       const placed: { x0: number; y0: number; x1: number; y1: number }[] = labeled.map(l => ({ x0: l.sx - 32, x1: l.sx + 32, y0: l.sy - 14, y1: l.sy + 5 }));
-      if (ruptureLabel) placed.push({ x0: ruptureLabel.x - ruptureLabel.width / 2 - 4, x1: ruptureLabel.x + ruptureLabel.width / 2 + 4, y0: ruptureLabel.y - 14, y1: ruptureLabel.y + 4 });
+      if (ruptureLabel) placed.push({ x0: ruptureLabel.x - ruptureLabel.width / 2 - 4, x1: ruptureLabel.x + ruptureLabel.width / 2 + 4, y0: ruptureLabel.y - 14, y1: ruptureLabel.y + (ruptureLabel.sub ? 18 : 4) });
       const inside = (lng: number, lat: number) => lng >= scene.west && lng <= scene.east && lat >= scene.south && lat <= scene.north;
       const put = (text: string, lng: number, lat: number, px: number, weight: number, alpha: number, town: boolean, fill = "#ffffff", dy = 0) => {
         if (!inside(lng, lat)) return;
@@ -1090,6 +1115,55 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.strokeText(ruptureLabel.text, ruptureLabel.x, ruptureLabel.y);
       ctx.fillStyle = "#fff4be";
       ctx.fillText(ruptureLabel.text, ruptureLabel.x, ruptureLabel.y);
+      if (ruptureLabel.sub) {
+        ctx.font = font(9.5, 700);
+        ctx.lineWidth = 3;
+        ctx.strokeText(ruptureLabel.sub, ruptureLabel.x, ruptureLabel.y + 13);
+        ctx.fillStyle = "rgba(255,244,190,.88)";
+        ctx.fillText(ruptureLabel.sub, ruptureLabel.x, ruptureLabel.y + 13);
+      }
+      ctx.restore();
+    }
+
+    // Flechas del sentido del deslizamiento: una a cada lado de la falla, sobre la superficie. Crecen con el deslizamiento
+    // que va liberando la ruptura; su largo no es la distancia que se movió el terreno (por eso el rótulo dice «no a escala»).
+    if (fault && faultCorners && slipSense && !edgeOn) {
+      let released = 0;
+      let total = 0;
+      for (const sub of fault.subfaults) {
+        total += sub.slip;
+        released += sub.slip * (ruptureTime === null ? 1 : sub.t === null ? 0 : clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1));
+      }
+      const progress = total > 0 ? released / total : 1;
+      const cLng = faultCorners.reduce((sum, c) => sum + c[0], 0) / faultCorners.length;
+      const cLat = faultCorners.reduce((sum, c) => sum + c[1], 0) / faultCorners.length;
+      const kx = Math.cos((cLat * Math.PI) / 180) * KM_PER_DEG;
+      const onSurface = (eastKm: number, northKm: number) => project(at(cLng + eastKm / kx, cLat + northKm / KM_PER_LAT, 0));
+      const dipSide = [Math.sin(((slipSense.strike + 90) * Math.PI) / 180), Math.cos(((slipSense.strike + 90) * Math.PI) / 180)];
+      const reach = 24 * (0.35 + 0.65 * progress);
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.globalAlpha = 0.55 + 0.45 * progress;
+      for (const sign of [1, -1]) {
+        const [mx, my] = [dipSide[0] * 13 * sign, dipSide[1] * 13 * sign];
+        const [dx, dy] = [slipSense.east * sign, slipSense.north * sign];
+        const tail = onSurface(mx - dx * reach, my - dy * reach);
+        const tip = onSurface(mx + dx * reach, my + dy * reach);
+        const angle = Math.atan2(tip.sy - tail.sy, tip.sx - tail.sx);
+        const head = clamp(Math.hypot(tip.sx - tail.sx, tip.sy - tail.sy) * 0.4, 6, 11);
+        for (const [width, color] of [[5.2, "rgba(20,8,40,.9)"], [2.4, "#fff4be"]] as const) {
+          ctx.lineWidth = width;
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(tail.sx, tail.sy);
+          ctx.lineTo(tip.sx, tip.sy);
+          ctx.moveTo(tip.sx - head * Math.cos(angle - 0.5), tip.sy - head * Math.sin(angle - 0.5));
+          ctx.lineTo(tip.sx, tip.sy);
+          ctx.lineTo(tip.sx - head * Math.cos(angle + 0.5), tip.sy - head * Math.sin(angle + 0.5));
+          ctx.stroke();
+        }
+      }
       ctx.restore();
     }
 
@@ -1178,7 +1252,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
+  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -1462,6 +1536,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             <span className="q3-anim-note">
               Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {playSpeed} veces más rápida que la realidad.
               {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
+              {slipSense && ` Flechas: hacia dónde se movió cada lado de la falla según el mecanismo focal del USGS (rumbo ${slipSense.strike}°, buzamiento ${slipSense.dip}°, ángulo de deslizamiento ${slipSense.rake}°: ${slipSense.kind}); su largo no es cuánto se movió.`}
             </span>
           </div>
         )}
@@ -1535,6 +1610,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           {waveField && (
             <span><span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>Onda de sacudida: intensidad estimada por el USGS</span>
           )}
+          {slipSense && <span title="Hacia dónde se movió cada lado de la falla, según el mecanismo focal del USGS"><b aria-hidden="true">⇄</b>Flechas: sentido del deslizamiento ({slipSense.kind}), no a escala</span>}
           {plates && <PlatesLegend />}
         </div>
         <p className="q3-note">
