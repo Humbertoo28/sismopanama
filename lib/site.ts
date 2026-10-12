@@ -4,10 +4,10 @@ import type { Metadata } from "next";
 // el sitemap y los datos estructurados digan lo mismo. Si algún día el sitio tiene dominio propio, basta con definir
 // NEXT_PUBLIC_SITE_URL en Vercel.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.ojopanama.com").replace(/\/$/, "");
-export const SITE_NAME = "Sismo Panamá";
-export const SITE_TITLE = "Sismo Panamá | Sismos y réplicas en vivo, mapa y alertas";
+export const SITE_NAME = "Ojo Panamá";
+export const SITE_TITLE = "Ojo Panamá | Sismos y temblores en vivo, mapa y alertas en tiempo real";
 export const SITE_DESCRIPTION =
-  "Sismos y réplicas en Panamá en vivo: mapa, magnitud, profundidad y hora local, con datos de USGS, IGC y EMSC y avisos al celular.";
+  "Monitoreo de sismos y temblores en Panamá en tiempo real. Mapa en vivo, magnitud, réplicas y alertas tempranas al celular con datos oficiales de IGC-UP, USGS y EMSC.";
 
 const OG_IMAGE = { url: "/opengraph-image", width: 1200, height: 630, alt: "Sismo Panamá: sismos y réplicas en vivo, mapa y avisos al celular" };
 

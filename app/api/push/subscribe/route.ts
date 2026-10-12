@@ -1,12 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { endpointHost, isPushEndpoint, isPushKeys, keyBytes, parseMinMagnitude, readJsonObject } from "@/lib/push-validation";
+import { isAllowedOrigin, isAutomatedBot } from "@/lib/bot-defense";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 const INVALID = { error: "Suscripción Push inválida. Se requiere endpoint, p256dh y auth." };
 
 export async function POST(req: NextRequest) {
+  // Defensa anti-bot y validación de origen
+  const userAgent = req.headers.get("user-agent");
+  if (isAutomatedBot(userAgent) || !isAllowedOrigin(req)) {
+    return NextResponse.json({ error: "Acceso no autorizado" }, { status: 403 });
+  }
+
+  // Rate limiting para prevenir saturación de la base de datos (15 suscripciones/min por IP)
+  const clientIp = getClientIp(req);
+  const limit = checkRateLimit(`sub:${clientIp}`, 15, 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas peticiones. Por favor intenta más tarde." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
+  }
+
   try {
     // endpoint: dirección del buzón push del navegador. oldEndpoint: la anterior cuando el navegador renovó la
     // suscripción; se traspasa su umbral y se borra.

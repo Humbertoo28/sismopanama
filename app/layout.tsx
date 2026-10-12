@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Accessibility, { SkipLink } from "./accessibility";
+import AntiInspect from "./anti-inspect";
 import SampledAnalytics from "./sampled-analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
 import { SiteStructuredData } from "./structured-data";
@@ -17,6 +18,26 @@ export const metadata: Metadata = {
   title: { default: SITE_TITLE, template: `%s | ${SITE_NAME}` },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
+  keywords: [
+    "sismo panama",
+    "temblor panama",
+    "ojo panama",
+    "sismo panama hoy",
+    "temblor panama hoy",
+    "ultimo sismo panama",
+    "alerta sismica panama",
+    "terremoto panama",
+    "instituto de geociencias panama",
+    "igc up",
+    "sinaproc panama",
+    "ojopanama",
+    "ojopanama.com",
+    "ojopanama507",
+  ],
+  authors: [{ name: "Ojo Panamá", url: "https://www.ojopanama.com" }],
+  creator: "Ojo Panamá",
+  publisher: "Ojo Panamá",
+  category: "weather",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
@@ -66,6 +87,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body>
+        <AntiInspect />
         <SkipLink />
         {children}
         <Accessibility />

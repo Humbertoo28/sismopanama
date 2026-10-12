@@ -99,6 +99,40 @@
   .hs-halo{stroke-width:3px}
   .hs-dot{stroke-width:2px}
 }
+
+/* Mapa aparte de los 12 más grandes: número = puesto en la tabla */
+.hs-figure{display:grid;gap:14px;align-items:start}
+.hs-figure.hs-has-inset{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}
+.hs-figure figure{margin:0;min-width:0}
+.hs-fig-inset figcaption{margin-top:8px;font-size:calc(14px*var(--ts,1));color:#4a5568}
+.hs-pin circle{stroke:#fff;stroke-width:2.2}
+.hs-pin text{font:800 15px "Space Grotesk","DM Sans",sans-serif;fill:#0b2a5b;pointer-events:none}
+.hs-pin-inset text{font-size:17px}
+.hs-pin.hs-e1 circle{fill:#b7c8e4}
+.hs-pin.hs-e2 circle{fill:#5fa0f0}
+.hs-pin.hs-e3 circle{fill:#ffd166}
+.hs-pin.hs-now circle{fill:#da121a}
+.hs-pin.hs-now text{fill:#fff}
+.hs-group rect{fill:#ffffff10;stroke:#ffd166;stroke-width:1.6;stroke-dasharray:6 5}
+.hs-group text{fill:#ffd166;font:800 14px "DM Sans",sans-serif;paint-order:stroke;stroke:#0b2a5b;stroke-width:4px;stroke-linejoin:round}
+.hs-group .hs-group-hint{font-weight:600;font-size:12px;fill:#ffe9a8}
+.hs-leader{stroke:#fff;stroke-width:1.5;opacity:.85}
+.hs-truepoint{fill:#fff}
+.hs-rank{display:inline-grid;place-items:center;min-width:30px;height:30px;padding:0 4px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #17253c33;font:800 calc(14px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif;color:#0b2a5b}
+.hs-rank.hs-e1{background:#b7c8e4}
+.hs-rank.hs-e2{background:#5fa0f0}
+.hs-rank.hs-e3{background:#ffd166}
+.hs-rank.hs-now{background:#da121a;color:#fff}
+@media(max-width:900px){.hs-figure.hs-has-inset{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:700px){
+  /* En celular el mapa se reduce a ~40 %: los números se agrandan para seguir leyéndose. */
+  .hs-pin-main circle{r:26px}
+  .hs-pin-main text{font-size:26px}
+  .hs-group text{font-size:24px}
+  .hs-group .hs-group-hint{font-size:20px}
+  .hs-pin-inset circle{r:17px}
+  .hs-pin-inset text{font-size:18px}
+}
 html[data-a11y-contrast="high"] .hs-card{border-color:#3b4756}
 html[data-a11y-contrast="high"] :is(.hs-sub,.hs-note,.hs-dec-max,.hs-legend,.hs-source p,.hs-lead,.hs-table thead th,.hs-table small){color:#10151c}
 html[data-a11y-contrast="high"] .hs-tiles span{color:#fff}

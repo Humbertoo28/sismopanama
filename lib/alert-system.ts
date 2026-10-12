@@ -890,6 +890,8 @@ export function getTelegramShareUrl(event: Earthquake, currentUrl: string): stri
 export type PushedQuake = { id?: string; magnitude?: number; place?: string; time?: number; lat?: number; lng?: number; depth?: number };
 export function earthquakeFromPush(quake: PushedQuake): Earthquake | null {
   if (!quake.id || !Number.isFinite(quake.time)) return null;
+  if (quake.id.startsWith("anuncio-") || quake.id.startsWith("test-")) return null;
+  if (!Number.isFinite(quake.magnitude) || quake.magnitude! <= 0 || quake.magnitude! >= 9.5) return null;
   return {
     id: quake.id,
     properties: { mag: Number.isFinite(quake.magnitude) ? quake.magnitude! : null, place: quake.place ?? null, time: quake.time!, url: null },
