@@ -10,7 +10,7 @@ import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
 import { PROVINCE_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
 import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
-import { ACTIVE_FAULTS, ACTIVE_FAULTS_SOURCE } from "../lib/active-faults";
+import { ACTIVE_FAULTS, ACTIVE_FAULTS_SOURCE, labelPoint } from "../lib/active-faults";
 import PlatesLegend from "./plates-legend";
 import { intensityColor } from "../lib/usgs-colors";
 import { SLIP_GRADIENT, buildSlipRaster, feltRadiusM, sideOf, teethAlong } from "./map-layers";
@@ -663,12 +663,12 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     if (!layers.faults) return;
     const group = L.layerGroup();
     for (const fault of ACTIVE_FAULTS) {
-      const latlngs = fault.points.map(([lng, lat]) => [lat, lng]);
+      const latlngs = fault.lines.map(line => line.map(([lng, lat]) => [lat, lng]));
       L.polyline(latlngs, { pane: "plates", interactive: false, color: "#b8102b", weight: 7, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(group);
       L.polyline(latlngs, { pane: "plates", color: "#ffffff", weight: 3, opacity: 1, lineCap: "round", lineJoin: "round" })
         .bindTooltip(`${fault.name}: falla activa, ${fault.kind}. ${fault.facts[0]}`, { sticky: true, className: "fault-tip" })
         .addTo(group);
-      const [lng, lat] = fault.points[Math.floor(fault.points.length / 2)];
+      const [lng, lat] = labelPoint(fault);
       L.marker([lat, lng], {
         pane: "plates", interactive: false, keyboard: false,
         icon: L.divIcon({ className: "plate-label-wrap", html: `<span class="fault-label" aria-hidden="true">${fault.name}</span>`, iconSize: [0, 0] }),
@@ -687,7 +687,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     faultsSeen.current = faultsKey;
     setLayers(current => ({ ...current, faults: true }));
     setView3d(false);
-    const bounds = L.latLngBounds(ACTIVE_FAULTS.flatMap(fault => fault.points.map(([lng, lat]) => [lat, lng])));
+    const bounds = L.latLngBounds(ACTIVE_FAULTS.flatMap(fault => fault.lines.flat().map(([lng, lat]) => [lat, lng])));
     map.flyToBounds(bounds.pad(0.35), { duration: reducedMotion() ? 0 : 1.2, maxZoom: 11 });
   }, [faultsKey, ready]);
 
@@ -1024,7 +1024,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       ><span className="chip-long">Placas tectónicas</span><span className="chip-short" aria-hidden="true">Placas</span></button>
       <button
         type="button" className={`layer-chip${layers.faults ? " on" : ""}`} aria-pressed={layers.faults} onClick={() => toggleLayer("faults")}
-        title="Fallas activas en tierra junto al Canal y la capital: Pedro Miguel y Limón (Rockwell et al., 2010; CCAF-DB/GEM)"
+        title="Fallas activas en tierra en el centro del país: Pedro Miguel, Limón y Gatún (CCAF-DB/GEM; Rockwell et al., 2010; Gath et al.)"
       ><span className="chip-long">Fallas activas</span><span className="chip-short" aria-hidden="true">Fallas</span></button>
     </>
   );
@@ -1186,7 +1186,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           {layers.plates && <div className="plates-legend"><PlatesLegend detailed /></div>}
           {layers.faults && (
             <div className="faults-legend">
-              <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel y Limón. Trazado aproximado (escala 1:100 000).</span>
+              <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel, Limón y Gatún. Trazado aproximado (escalas de 1:75 000 a 1:300 000).</span>
               <span className="plate-note">{ACTIVE_FAULTS_SOURCE}.</span>
             </div>
           )}

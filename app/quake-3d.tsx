@@ -8,7 +8,7 @@ import { PROVINCE_BY_ID } from "../lib/province-of";
 import { PROVINCE_LABELS, TOWN_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
 import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
-import { ACTIVE_FAULTS } from "../lib/active-faults";
+import { ACTIVE_FAULTS, FAULT_DEPTH_KM, labelPoint } from "../lib/active-faults";
 import PlatesLegend from "./plates-legend";
 import { intensityColor, intensityRgb } from "../lib/usgs-colors";
 import { SLIP_GRADIENT, slipRgb } from "./map-layers";
@@ -753,6 +753,39 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       return { event, mag, depth, fixed: isRoundDepth(depthRaw), tier, radius: base, p: at(lng, lat, depth), top: ground(lng, lat) };
     });
 
+    // Fallas activas en profundidad: un plano desde el trazado en la superficie hasta FAULT_DEPTH_KM, con la inclinación de la
+    // CCAF-DB (vertical, o bajando hacia el este en Limón). Translúcido y ordenado con los sismos, para ver quién queda delante.
+    if (activeFaults) {
+      for (const item of ACTIVE_FAULTS) {
+        const run = item.dip >= 89.5 ? 0 : FAULT_DEPTH_KM / Math.tan((item.dip * Math.PI) / 180);
+        for (const line of item.lines) {
+          for (let i = 0; i < line.length - 1; i++) {
+            const [[lngA, latA], [lngB, latB]] = [line[i], line[i + 1]];
+            const shiftA = item.dipDir === "E" ? run / (KM_PER_DEG * Math.cos((latA * Math.PI) / 180)) : 0;
+            const shiftB = item.dipDir === "E" ? run / (KM_PER_DEG * Math.cos((latB * Math.PI) / 180)) : 0;
+            const quad = [at(lngA, latA, 0), at(lngB, latB, 0), at(lngB + shiftB, latB, FAULT_DEPTH_KM), at(lngA + shiftA, latA, FAULT_DEPTH_KM)].map(project);
+            drawables.push({
+              depth: quad.reduce((sum, q) => sum + q.depth, 0) / 4,
+              draw: () => {
+                ctx.beginPath();
+                quad.forEach((q, k) => pathTo(k, q.sx, q.sy));
+                ctx.closePath();
+                ctx.fillStyle = "rgba(225,40,70,.26)";
+                ctx.fill();
+                // Borde inferior del plano, para que se lea hasta dónde llega.
+                ctx.beginPath();
+                ctx.moveTo(quad[2].sx, quad[2].sy);
+                ctx.lineTo(quad[3].sx, quad[3].sy);
+                ctx.strokeStyle = "rgba(255,150,165,.7)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+              },
+            });
+          }
+        }
+      }
+    }
+
     // Las celdas de la falla se pintan después de los sismos, algo translúcidas: así el reparto del deslizamiento se lee
     // limpio y los sismos que quedan detrás se ven a través.
     const faultCells: Drawable[] = [];
@@ -1136,7 +1169,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       for (const item of ACTIVE_FAULTS) {
         for (const [width, color] of [[6, "rgba(184,16,43,.95)"], [2.4, "#ffffff"]] as const) {
           ctx.beginPath();
-          item.points.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
+          for (const line of item.lines) line.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
           ctx.strokeStyle = color;
           ctx.lineWidth = width;
           ctx.stroke();
@@ -1229,7 +1262,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       }
       if (activeFaults) {
         for (const item of ACTIVE_FAULTS) {
-          const [lng, lat] = item.points[Math.floor(item.points.length / 2)];
+          const [lng, lat] = labelPoint(item);
           put(item.name, lng, lat, 11.5 * boost, 700, 0.97, false, "#ffffff", -8);
         }
       }
@@ -1834,7 +1867,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           )}
           {slipSense && <span title="Hacia dónde se movió cada lado de la falla, según el mecanismo focal del USGS"><b aria-hidden="true">⇄</b>Flechas: sentido del deslizamiento ({slipSense.kind}), no a escala</span>}
           {plates && <PlatesLegend />}
-          {activeFaults && <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel y Limón (trazado aproximado)</span>}
+          {activeFaults && <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel, Limón y Gatún. Bajo tierra, su plano hasta {FAULT_DEPTH_KM} km: profundidad ilustrativa (la base de datos no la publica)</span>}
         </div>
         <p className="q3-note">
           {exaggeration === 1 ? "Profundidad a escala real." : `Profundidad exagerada ×${exaggeration} (las marcas de km son reales).`}
