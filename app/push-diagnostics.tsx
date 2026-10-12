@@ -92,17 +92,17 @@ export default function PushDiagnostics({ minMagnitude, onChanged }: { minMagnit
   const tips = {
     android: (
       <ul>
-        <li><b>Batería:</b> Ajustes → Aplicaciones → Chrome (o «Sismo Panamá» si la instalaste) → Batería → <b>Sin restricciones</b>.</li>
+        <li><b>Batería:</b> Ajustes → Aplicaciones → Chrome (o «Ojo Panamá» si la instalaste) → Batería → <b>Sin restricciones</b>.</li>
         <li><b>Xiaomi, Redmi, POCO:</b> además activa <b>Inicio automático</b> para Chrome. <b>Huawei:</b> Inicio de apps → Chrome → gestionar manualmente y activar todo.</li>
         <li><b>Samsung:</b> Ajustes → Batería → Límites de uso en segundo plano: quita Chrome de «Apps en suspensión».</li>
         <li>No uses «Forzar detención» con Chrome ni lo cierres con limpiadores de memoria: dejan de llegar los avisos.</li>
-        <li>Mantén pulsada una alerta de Sismo Panamá → Ajustes: que esté permitida, con sonido y, si se puede, como <b>Urgente</b>.</li>
+        <li>Mantén pulsada una alerta de Ojo Panamá → Ajustes: que esté permitida, con sonido y, si se puede, como <b>Urgente</b>.</li>
       </ul>
     ),
     ios: (
       <ul>
         <li>Necesitas iOS 16.4 o más reciente y la app <b>instalada</b> (Compartir → «Agregar a pantalla de inicio»). En una pestaña de Safari no llegan.</li>
-        <li>Ajustes → Notificaciones → Sismo Panamá: permitir, con <b>sonidos</b> y entrega <b>inmediata</b> (no en el resumen programado).</li>
+        <li>Ajustes → Notificaciones → Ojo Panamá: permitir, con <b>sonidos</b> y entrega <b>inmediata</b> (no en el resumen programado).</li>
         <li>Revisa que el modo <b>Concentración</b> (No molestar, Dormir) no silencie la app.</li>
       </ul>
     ),

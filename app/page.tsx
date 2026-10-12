@@ -621,9 +621,9 @@ export default function Home() {
 
       <header className="site-header">
         <div className="site-header-bar">
-          <a className="site-brand" href="#inicio" aria-label="Sismo Panamá, inicio">
+          <a className="site-brand" href="#inicio" aria-label="Ojo Panamá, inicio">
             <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
-            <span>Sismo Panamá</span>
+            <span>Ojo Panamá</span>
           </a>
           <div className="site-header-tools">
             <span className="site-clock">Hora de Panamá: {clock}</span>
@@ -734,7 +734,7 @@ export default function Home() {
 
           <footer>
             <span>
-              © {new Date().getFullYear()} Sismo Panamá · Creado por{" "}
+              © {new Date().getFullYear()} Ojo Panamá · Creado por{" "}
               <a
                 href="https://www.instagram.com/humbertiex_?dlrf=MXZsN3N2ZGpnZGI3&utm_source=qr"
                 target="_blank"

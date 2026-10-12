@@ -19,9 +19,9 @@ export default function PageHeader({ current, children }: { current: string; chi
   return (
     <header className="site-header page-header">
       <div className="site-header-bar">
-        <Link className="site-brand" href="/" aria-label="Sismo Panamá, inicio">
+        <Link className="site-brand" href="/" aria-label="Ojo Panamá, inicio">
           <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
-          <span>Sismo Panamá</span>
+          <span>Ojo Panamá</span>
         </Link>
         <div className="page-header-tools">
           {children}

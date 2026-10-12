@@ -3,7 +3,7 @@ import { SITE_URL } from "../lib/site";
 
 // Imagen que se ve al compartir el enlace en WhatsApp, LinkedIn, X, Telegram... Es fija y no promete nada en vivo:
 // solo dice qué es el sitio y de dónde salen los datos.
-export const alt = "Sismo Panamá: sismos y réplicas en vivo, mapa y avisos al celular";
+export const alt = "Ojo Panamá: sismos y réplicas en vivo, mapa y avisos al celular";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -43,7 +43,7 @@ export default function Image() {
         <div style={{ display: "flex", alignItems: "center", gap: 36 }}>
           <Flag />
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", fontSize: 76, letterSpacing: 8 }}>SISMO</div>
+            <div style={{ display: "flex", fontSize: 76, letterSpacing: 8 }}>OJO</div>
             <div style={{ display: "flex", fontSize: 30, letterSpacing: 18, color: "#b3c2d2", marginTop: 4 }}>PANAMÁ</div>
           </div>
         </div>

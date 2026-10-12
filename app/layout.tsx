@@ -13,7 +13,7 @@ import "./theme.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  // Las demás páginas ponen solo su nombre y el sitio completa con "| Sismo Panamá".
+  // Las demás páginas ponen solo su nombre y el sitio completa con "| Ojo Panamá".
   title: { default: SITE_TITLE, template: `%s | ${SITE_NAME}` },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
@@ -72,7 +72,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Sismo Panamá" />
+        <meta name="apple-mobile-web-app-title" content="Ojo Panamá" />
         <meta name="theme-color" content="#ffffff" />
         <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />

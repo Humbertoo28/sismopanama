@@ -13,9 +13,9 @@ const TITLE = "Noticias sobre el sismo en Panamá";
 const DESCRIPTION = "Titulares de Telemetro y TVN y comunicados oficiales de SINAPROC y MEDUCA sobre el sismo del 9 de octubre en Panamá, con el enlace a cada nota.";
 
 export const metadata: Metadata = {
-  title: TITLE, // el sitio añade "| Sismo Panamá"
+  title: TITLE, // el sitio añade "| Ojo Panamá"
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/noticias", true),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/noticias", true),
 };
 
 // La página se genera una vez y se renueva como máximo cada 5 minutos: los visitantes reciben la copia ya hecha y las
@@ -130,7 +130,7 @@ export default async function NoticiasPage() {
 
   return (
     <div className="nw-root">
-      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Noticias sobre el sismo", path: "/noticias" }]} />
+      <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Noticias sobre el sismo", path: "/noticias" }]} />
       <PageHeader current="/noticias" />
 
       <main className="nw-wrap">

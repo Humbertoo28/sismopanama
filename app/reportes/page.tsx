@@ -11,13 +11,13 @@ const DESCRIPTION = "Reportes de las personas que sintieron (o no) cada sismo y 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/reportes"),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/reportes"),
 };
 
 export default function ReportesPage() {
   return (
     <>
-      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Reportes", path: "/reportes" }]} />
+      <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Reportes", path: "/reportes" }]} />
       <PageHeader current="/reportes" />
       <ReportsDashboardView>
         <section className="rp-about" aria-labelledby="rp-about-title">

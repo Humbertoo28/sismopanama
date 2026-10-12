@@ -1,6 +1,6 @@
 -- =========================================================================
 -- ESQUEMA DE BASE DE DATOS SUPABASE PARA ALERTAS SÍSMICAS EN TIEMPO REAL
--- Proyecto: Sismo Panamá
+-- Proyecto: Ojo Panamá
 -- =========================================================================
 
 -- 1. Tabla para registrar suscripciones de dispositivos (Web Push)
