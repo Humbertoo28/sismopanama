@@ -57,7 +57,7 @@ const PRESETS = {
 const homeFor = (w: number, h: number): Camera => {
   const aspect = w / h;
   // Se mira desde el sur-suroeste, hacia donde buza la falla: así la ruptura se ve de frente y no de canto.
-  return aspect < 0.8 ? { yaw: 65, pitch: 48, zoom: 1, px: 0, py: 0 } : { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 };
+  return aspect < 0.8 ? { yaw: 78, pitch: 48, zoom: 1, px: 0, py: 0 } : { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 };
 };
 const EXAGGERATIONS = [1, 4, 8] as const;
 // Opacidad de la imagen satelital (algo translúcida para que se integre con el fondo).
@@ -84,6 +84,13 @@ type Item = {
   p: Point;
   top: Point;
 };
+
+// Caja que contiene todo el país (tierra firme e islas), para que la escena siempre muestre Panamá completo.
+const COUNTRY = (() => {
+  const points = PANAMA_RINGS.flat();
+  const [lngs, lats] = [points.map(p => p[0]), points.map(p => p[1])];
+  return { west: Math.min(...lngs), east: Math.max(...lngs), south: Math.min(...lats), north: Math.max(...lats) };
+})();
 
 type SceneInfo = {
   south: number; north: number; west: number; east: number;
@@ -244,12 +251,11 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
 
   const scene = useMemo(() => {
     const coords = events.map(event => event.geometry.coordinates);
-    const lats = coords.map(c => c[1]);
-    const lngs = coords.map(c => c[0]);
+    // Siempre Panamá completo; si algún sismo o la falla caen fuera del país (réplicas mar adentro), la caja crece para incluirlos.
+    const lats = [COUNTRY.south, COUNTRY.north, ...coords.map(c => c[1])];
+    const lngs = [COUNTRY.west, COUNTRY.east, ...coords.map(c => c[0])];
     if (fault) for (const sub of fault.subfaults) for (const [lng, lat] of sub.ring) { lats.push(lat); lngs.push(lng); }
-    // Si no hay nada que mostrar, se enmarca Panamá.
-    if (!lats.length) { lats.push(7, 9.5); lngs.push(-82.5, -78); }
-    const pad = 0.35;
+    const pad = 0.3;
     const south = Math.min(...lats) - pad;
     const north = Math.max(...lats) + pad;
     const west = Math.min(...lngs) - pad;
@@ -265,7 +271,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
 
   // Imagen satelital de la superficie: se piden los mosaicos de la zona que se está viendo (el navegador los guarda un día).
   const [south, north, west, east] = [scene.south, scene.north, scene.west, scene.east].map(value => Math.round(value * 100) / 100);
-  const maxTiles = size.w < 520 ? 24 : 48;
+  const maxTiles = size.w < 520 ? 32 : 48;
   useEffect(() => {
     if (!satellite) {
       mosaicRef.current = null;
@@ -727,11 +733,26 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
 
     ctx.restore();
 
+    // Rótulo de la ruptura (bajo su borde inferior; arriba suele estar el enjambre de réplicas). Se calcula antes que los
+    // nombres para reservarle el sitio.
+    let ruptureLabel: { text: string; x: number; y: number; width: number } | null = null;
+    if (fault && faultEdge && !edgeOn) {
+      const size1 = fault.lengthKm !== null && fault.widthKm !== null ? ` · ${Math.round(fault.lengthKm)} × ${Math.round(fault.widthKm)} km` : "";
+      const text = `Ruptura${size1} · máx. ${fault.maxSlipM.toFixed(1)} m`;
+      ctx.save();
+      ctx.font = font(10.5, 800);
+      const width = ctx.measureText(text).width;
+      ctx.restore();
+      const midX = (faultEdge[2].p.sx + faultEdge[3].p.sx) / 2;
+      ruptureLabel = { text, width, x: clamp(midX, width / 2 + 6, w - width / 2 - 6), y: Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 13 };
+    }
+
     // Nombres de las provincias y, al acercar, de las cabeceras de distrito. Cada uno se omite si choca con otro ya
     // puesto; de canto (sin ver la superficie) no se escriben.
     if (!edgeOn) {
       // Primero se reserva el sitio de las etiquetas de magnitud ("M 7.7"), que mandan sobre los nombres.
       const placed: { x0: number; y0: number; x1: number; y1: number }[] = labeled.map(l => ({ x0: l.sx - 32, x1: l.sx + 32, y0: l.sy - 14, y1: l.sy + 5 }));
+      if (ruptureLabel) placed.push({ x0: ruptureLabel.x - ruptureLabel.width / 2 - 4, x1: ruptureLabel.x + ruptureLabel.width / 2 + 4, y0: ruptureLabel.y - 14, y1: ruptureLabel.y + 4 });
       const inside = (lng: number, lat: number) => lng >= scene.west && lng <= scene.east && lat >= scene.south && lat <= scene.north;
       const put = (text: string, lng: number, lat: number, px: number, weight: number, alpha: number, town: boolean) => {
         if (!inside(lng, lat)) return;
@@ -771,23 +792,17 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       }
     }
 
-    // Rótulo de la ruptura sobre su borde superior.
-    if (fault && faultEdge && !edgeOn) {
-      // Bajo el borde inferior de la falla: arriba suele estar el enjambre de réplicas.
-      const mid = { sx: (faultEdge[2].p.sx + faultEdge[3].p.sx) / 2, sy: Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 22 };
-      const size1 = fault.lengthKm !== null && fault.widthKm !== null ? ` · ${Math.round(fault.lengthKm)} × ${Math.round(fault.widthKm)} km` : "";
-      const text = `Ruptura${size1} · máx. ${fault.maxSlipM.toFixed(1)} m`;
+    if (ruptureLabel) {
       ctx.save();
       ctx.font = font(10.5, 800);
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
-      const x = clamp(mid.sx, ctx.measureText(text).width / 2 + 6, w - ctx.measureText(text).width / 2 - 6);
       ctx.lineJoin = "round";
       ctx.lineWidth = 3.4;
       ctx.strokeStyle = "rgba(20,8,40,.92)";
-      ctx.strokeText(text, x, mid.sy - 9);
+      ctx.strokeText(ruptureLabel.text, ruptureLabel.x, ruptureLabel.y);
       ctx.fillStyle = "#fff4be";
-      ctx.fillText(text, x, mid.sy - 9);
+      ctx.fillText(ruptureLabel.text, ruptureLabel.x, ruptureLabel.y);
       ctx.restore();
     }
 
@@ -896,7 +911,12 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     };
     frame.current = requestAnimationFrame(step);
   };
-  const home = (): Camera => homeFor(size.w, size.h);
+  // Punto de vista inicial según el tamaño real del escenario en este instante (el estado `size` puede ir un cuadro atrasado
+  // justo al abrir).
+  const home = (): Camera => {
+    const stage = box.current;
+    return homeFor(stage?.clientWidth || size.w, stage?.clientHeight || size.h);
+  };
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   useEffect(() => {
     if (reducedMotion()) return;
@@ -1157,7 +1177,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           {mainshock && <span><i className="q3-dot" style={{ background: COLORS.main }} />Principal</span>}
           <span title="Profundidad de exactamente 10 o 5 km: el catálogo suele asignarla cuando no logra calcularla"><i className="q3-dot hollow" />Profundidad fijada{facts.fixed > 0 ? ` (${facts.fixed})` : ""}</span>
           {fault && (
-            <span><i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />Ruptura: más claro, más deslizamiento</span>
+            <span><i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />Ruptura: de poco (violeta) a mucho deslizamiento (amarillo)</span>
           )}
           {shaking && (
             <span><span className="felt-scale" aria-hidden="true">{shaking.map(c => <i key={c.value} style={{ background: intensityColor(c.value) }} />)}</span>Sacudida estimada (USGS)</span>
