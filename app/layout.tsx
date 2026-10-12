@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import Accessibility, { SkipLink } from "./accessibility";
-import AntiInspect from "./anti-inspect";
 import SampledAnalytics from "./sampled-analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
 import { SiteStructuredData } from "./structured-data";
@@ -87,7 +86,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body>
-        <AntiInspect />
         <SkipLink />
         {children}
         <Accessibility />
