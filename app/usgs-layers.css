@@ -201,3 +201,10 @@ html[data-a11y-motion="reduce"] .q3-canvas.quake-shake { animation: none; }
 .plate-label { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; color: #8de8ff; font: 800 calc(11px*var(--ts,1))/1 "Space Grotesk", system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 0 3px #04101f, 0 0 7px #04101f, 0 1px 2px #04101f; }
 .leaflet-container.map-detail .plate-label { display: none; }
 @media (max-width: 700px) { .plate-label { font-size: calc(9.5px*var(--ts,1)); } }
+
+/* Ficha «Las placas tectónicas, explicadas». */
+.plate-kinds { list-style: none; padding-left: 0 !important; display: grid; gap: 8px; }
+.plate-kinds li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+.plate-kinds i { display: block; height: 5px; margin-top: 8px; border-radius: 3px; box-shadow: 0 0 0 1px #0a1a3340; }
+.plate-kinds i.dashed { background: repeating-linear-gradient(90deg, currentColor 0 7px, transparent 7px 11px) !important; box-shadow: none; }
+.plates-explainer .usgs-body p + p { margin-top: 8px; }

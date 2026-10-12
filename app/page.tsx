@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import MainshockUsgs from "./mainshock-usgs";
+import PlatesExplainer from "./plates-explainer";
 import QuakeMap from "./quake-map";
 import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
@@ -764,6 +765,7 @@ export default function Home() {
             </div>
             <p className="map-caption">Los círculos representan eventos reportados, según su ubicación y magnitud. Selecciona uno para ver más información. Límites provinciales: © colaboradores de OpenStreetMap (ODbL), vía geoBoundaries. Localidades: GeoNames (CC BY 4.0).</p>
             {main && <MainshockUsgs />}
+            {main && <PlatesExplainer main={main} />}
             {main && sequenceAftershocks.length > 0 && (
               <div className="sequence-card">
                 <span className="section-kicker">SECUENCIA SÍSMICA</span>

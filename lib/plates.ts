@@ -62,3 +62,22 @@ export const PLATE_LABELS: { code: string; lat: number; lng: number }[] = [
 ];
 
 export const PLATES_SOURCE = "Placas: modelo PB2002, P. Bird (2003), vía H. Ahlenius/Nordpil (ODC-By)";
+
+// Límite de placas más cercano a un punto (distancia a las líneas del mapa, en km, con la aproximación plana de siempre).
+export function nearestBoundary(lat: number, lng: number) {
+  const kx = Math.cos((lat * Math.PI) / 180) * 111.32;
+  const ky = 110.57;
+  let best: { boundary: PlateBoundary; km: number } | null = null;
+  for (const boundary of PLATE_BOUNDARIES) {
+    for (let i = 0; i < boundary.points.length - 1; i++) {
+      const [ax, ay] = boundary.points[i];
+      const [bx, by] = boundary.points[i + 1];
+      const [dx, dy] = [(bx - ax) * kx, (by - ay) * ky];
+      const [px, py] = [(lng - ax) * kx, (lat - ay) * ky];
+      const t = dx === 0 && dy === 0 ? 0 : Math.max(0, Math.min(1, (px * dx + py * dy) / (dx * dx + dy * dy)));
+      const km = Math.hypot(px - t * dx, py - t * dy);
+      if (!best || km < best.km) best = { boundary, km };
+    }
+  }
+  return best;
+}
