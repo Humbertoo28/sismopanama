@@ -34,6 +34,7 @@ import { DISTRICTS } from "../lib/places";
 import { setLatestQuake } from "../lib/latest-quake";
 import { SOURCE_NAMES, reportUrl } from "../lib/quake-facts";
 import QuakeSheet from "./quake-sheet";
+import { createPortal } from "react-dom";
 import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
 import { SINCE, isAftershock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
@@ -440,6 +441,13 @@ export default function Home() {
   // Ficha completa del sismo que se tocó (en el mapa o en la lista) y petición de «ver cómo se propagó».
   const [sheet, setSheet] = useState<{ id: string; from: "list" | "map" } | null>(null);
   const [propagation, setPropagation] = useState<{ event: Earthquake; key: number } | null>(null);
+  // En la pantalla completa del navegador solo se ve el marco del mapa y lo que esté dentro: la ficha se monta ahí.
+  const [fullscreenHost, setFullscreenHost] = useState<Element | null>(null);
+  useEffect(() => {
+    const update = () => setFullscreenHost(document.fullscreenElement);
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
   const filtersKey = minimum > 0 || timeRange !== "all" || province !== "all" || city !== "all" || onlyAftershocks ? [minimum, timeRange, province, city, onlyAftershocks].join("|") : "";
   const sheetEvent = sheet ? allEvents.find(event => event.id === sheet.id) ?? null : null;
   const featured = mapEvents.find(event => event.id === selectedId) ?? (province === "all" ? newest ?? latest : latest);
@@ -833,7 +841,8 @@ export default function Home() {
         }}
         latestEvent={latest ?? main}
       />
-      {sheetEvent && (
+      {sheetEvent && (() => {
+        const sheetNode = (
         <QuakeSheet
           event={sheetEvent}
           mainshock={main}
@@ -845,7 +854,9 @@ export default function Home() {
           }}
           onShowOnMap={sheet?.from === "list" ? () => { setSheet(null); chooseEvent(sheetEvent); } : undefined}
         />
-      )}
+        );
+        return fullscreenHost ? createPortal(sheetNode, fullscreenHost) : sheetNode;
+      })()}
     </div>
   );
 }

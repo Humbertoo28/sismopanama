@@ -42,7 +42,8 @@ export default function QuakeSheet({
     node?.focus({ preventScroll: true });
     const onKey = (key: KeyboardEvent) => {
       if (key.key === "Escape") {
-        key.stopPropagation();
+        // Solo cierra la ficha: el mapa ampliado que haya debajo se queda hasta el siguiente Escape.
+        key.stopImmediatePropagation();
         closeRef.current();
       } else if (key.key === "Tab" && node) {
         const items = [...node.querySelectorAll<HTMLElement>(FOCUSABLE)];
@@ -57,9 +58,9 @@ export default function QuakeSheet({
         }
       }
     };
-    document.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     return () => {
-      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       before?.focus?.();
     };
   }, []);

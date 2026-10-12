@@ -38,6 +38,10 @@ type Props = {
   fitKey: number;
   // Sube cuando se pide «ver cómo se propagó» el sismo principal: la animación de ruptura y onda empieza de nuevo.
   restartKey: number;
+  // Pantalla completa: la maneja el mapa (el plano y el 3D comparten el marco). `overlay` = ampliado sobre la página, sin la API del navegador.
+  expanded: boolean;
+  overlay: boolean;
+  onToggleExpanded: () => void;
   mainshock: Earthquake | null;
   selectedId: string | null;
   replay: ReplayStep | null;
@@ -205,7 +209,7 @@ const moveText = (meters: number) => (meters >= 1 ? `${meters.toFixed(1)} m` : m
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -213,10 +217,6 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
   const [exaggeration, setExaggeration] = useState<number>(4);
   // Por defecto los puntos se colorean por profundidad: es lo que esta vista enseña mejor.
   const [colorBy, setColorBy] = useState<"depth" | "mag">("depth");
-  // `expanded`: pantalla completa del navegador. `overlay`: respaldo para navegadores que no la permiten (iPhone): la
-  // escena se abre sobre toda la página.
-  const [expanded, setExpanded] = useState(false);
-  const [overlay, setOverlay] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [surfaceOpacity, setSurfaceOpacity] = useState(90);
   // La pantalla tiembla cuando la onda de sacudida llega al centro de la vista (efecto visual; se puede apagar).
@@ -259,46 +259,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
   const frame = useRef(0);
 
   // El navegador gestiona Escape y devuelve el mapa a su sitio al salir.
-  useEffect(() => {
-    const update = () => {
-      const active = document.fullscreenElement === root.current?.parentElement;
-      setExpanded(active);
-      if (active) setOverlay(false);
-    };
-    document.addEventListener("fullscreenchange", update);
-    return () => document.removeEventListener("fullscreenchange", update);
-  }, []);
-  const toggleExpanded = async () => {
-    const container = root.current?.parentElement;
-    if (document.fullscreenElement === container) {
-      await document.exitFullscreen();
-    } else if (overlay) {
-      setOverlay(false);
-    } else {
-      try {
-        if (!container?.requestFullscreen) throw new Error("Fullscreen unavailable");
-        // Algunos navegadores integrados dejan la promesa sin resolver: se espera un instante y, si no se logró, se usa el respaldo.
-        await Promise.race([container.requestFullscreen(), new Promise((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 900))]);
-        if (document.fullscreenElement !== container) throw new Error("Fullscreen not granted");
-      } catch {
-        // Safari móvil y navegadores integrados: se amplía sobre la página.
-        setOverlay(true);
-      }
-    }
-  };
-  // Con el respaldo abierto, Escape lo cierra y la página de abajo no se desplaza.
-  useEffect(() => {
-    if (!overlay) return;
-    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setOverlay(false);
-    const previous = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.documentElement.style.overflow = previous;
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [overlay]);
-  const isExpanded = expanded || overlay;
+  const isExpanded = expanded;
 
   useEffect(() => {
     cameraRef.current = camera;
@@ -1622,7 +1583,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
     <div ref={root} className={`q3${isExpanded ? " q3-expanded" : ""}${overlay ? " q3-overlay" : ""}`}>
       <div className="q3-heading">
         <div className="q3-heading-title"><SceneIcon name="Box" size={24} /><div><span>EXPLORADOR SÍSMICO / PANAMÁ</span><h3>La actividad sísmica, en profundidad.</h3></div></div>
-        <button className="q3-expand" type="button" aria-label={isExpanded ? "Salir de vista ampliada" : "Pantalla completa del mapa 3D"} aria-pressed={isExpanded} onClick={toggleExpanded}>
+        <button className="q3-expand" type="button" aria-label={isExpanded ? "Salir de vista ampliada" : "Pantalla completa del mapa 3D"} aria-pressed={isExpanded} onClick={onToggleExpanded}>
           {isExpanded ? <SceneIcon name="Minimize2" size={16} /> : <SceneIcon name="Maximize2" size={16} />}<span>{isExpanded ? "Salir" : "Pantalla completa"}</span>
         </button>
       </div>

@@ -78,8 +78,8 @@
 .map-frame:has(.q3-expanded) .q3-stage { height: max(680px, 85svh); }
 /* Respaldo de pantalla completa (iPhone): la escena cubre la ventana, con su propio desplazamiento. */
 /* La tarjeta se desvanece según el desplazamiento de la página: con la escena ampliada debe verse siempre. */
-.map-card:has(.q3-overlay) { animation: none !important; opacity: 1 !important; overflow: visible; }
-.map-frame:has(.q3-overlay) { position: fixed; inset: 0; z-index: 3000; width: 100vw; height: 100dvh; border-radius: 0; overflow-y: auto; background: #071523; }
+.map-card:has(.q3-overlay), .map-card:has(.map-overlay-flag) { animation: none !important; opacity: 1 !important; overflow: visible; }
+.map-frame:has(.q3-overlay), .map-frame:has(.map-overlay-flag) { position: fixed; inset: 0; z-index: 3000; width: 100vw; height: 100dvh; border-radius: 0; overflow-y: auto; background: #071523; }
 .map-frame:has(.q3-overlay) .q3 { min-height: 100%; border-radius: 0; }
 .map-frame:has(.q3-overlay) .q3-stage { height: max(440px, 68dvh); }
 .map-frame:has(.q3-overlay) .map-layer-selector, .map-frame:has(.q3-overlay) .map-label { display: none; }
@@ -324,6 +324,22 @@ html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdro
 .wave-hud-top button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .wave-hud p { margin: 4px 0 2px; font-weight: 600; }
 .wave-hud small { display: block; color: #b9c9de; font-size: calc(11px*var(--ts,1)); }
-@media (max-width: 700px) { .wave-hud { top: 98px; left: 12px; right: 12px; max-width: none; } }
+@media (max-width: 700px) { .wave-hud { top: 98px; left: 12px; right: 60px; max-width: none; } }
 @media (pointer: coarse) { .wave-hud-top button { min-height: 40px; } }
+
+/* Pantalla completa del mapa plano (la del navegador y el respaldo sobre la página): el mapa llena el marco y los paneles de abajo
+   (capas, leyenda) quedan a su alcance; el 3D tiene sus propias reglas arriba. */
+.map-frame:fullscreen:not(:has(.q3)),
+.map-frame:has(.map-overlay-flag):not(:has(.q3)) { display: flex; flex-direction: column; background: #071523; border-radius: 0; }
+.map-frame:fullscreen:not(:has(.q3)) #leaflet-map,
+.map-frame:has(.map-overlay-flag):not(:has(.q3)) #leaflet-map { flex: 1 1 auto; height: auto; min-height: 260px; border-radius: 0; }
+.map-frame:fullscreen:not(:has(.q3)) .map-layers,
+.map-frame:has(.map-overlay-flag):not(:has(.q3)) .map-layers { flex: none; }
+.map-fullscreen-btn svg { flex: none; }
+@media (max-width: 1100px) { .map-fullscreen-btn .layer-text-full { display: none; } }
+
+/* Celular: el selector de mapa (con el botón de pantalla completa) ocupa la franja de arriba y llega hasta el control de zoom, que baja debajo de él. */
+@media (max-width: 700px) {
+  #leaflet-map .leaflet-top.leaflet-right { margin-top: 84px; }
+}
 

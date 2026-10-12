@@ -122,6 +122,48 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   const mapMode = useSyncExternalStore(subscribeMapMode, readMapMode, () => "satellite" as MapLayerMode);
   // Vista 3D y capas con datos del USGS (ruptura de la falla y «lo que se sintió»), compartidas por el mapa y el 3D.
   const [view3d, setView3d] = useState(false);
+  // Pantalla completa del mapa (el plano y el 3D comparten el mismo marco): la del navegador si la permite y, si no (iPhone y
+  // navegadores integrados), el marco se amplía sobre toda la página.
+  const mapDiv = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState<"off" | "native" | "overlay">("off");
+  useEffect(() => {
+    const update = () => {
+      const active = document.fullscreenElement !== null && document.fullscreenElement === mapDiv.current?.parentElement;
+      setFullscreen(mode => (active ? "native" : mode === "native" ? "off" : mode));
+    };
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  const toggleFullscreen = async () => {
+    const frame = mapDiv.current?.parentElement;
+    if (!frame) return;
+    if (document.fullscreenElement === frame) {
+      await document.exitFullscreen();
+    } else if (fullscreen === "overlay") {
+      setFullscreen("off");
+    } else {
+      try {
+        if (!frame.requestFullscreen) throw new Error("Fullscreen unavailable");
+        // Algunos navegadores integrados dejan la promesa sin resolver: se espera un instante y, si no se logró, se usa el respaldo.
+        await Promise.race([frame.requestFullscreen(), new Promise((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 900))]);
+        if (document.fullscreenElement !== frame) throw new Error("Fullscreen not granted");
+      } catch {
+        setFullscreen("overlay");
+      }
+    }
+  };
+  // Con el respaldo abierto, Escape lo cierra y la página de abajo no se desplaza.
+  useEffect(() => {
+    if (fullscreen !== "overlay") return;
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setFullscreen("off");
+    const previous = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.documentElement.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [fullscreen]);
   const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false });
   const usgs = useMainshockDetail();
   const usgsLayerRef = useRef<any>(null);
@@ -145,6 +187,12 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   useEffect(() => {
     latest.current = { events, mainshock, onSelect, onReplay, onPropagationEnd };
   });
+
+  // Al entrar o salir de la pantalla completa el marco cambia de tamaño: Leaflet lo mide de nuevo.
+  useEffect(() => {
+    const timer = window.setTimeout(() => mapRef.current?.invalidateSize({ animate: false }), 250);
+    return () => window.clearTimeout(timer);
+  }, [fullscreen]);
 
   // Respaldo de detección de Leaflet si onReady ya ocurrió antes
   useEffect(() => {
@@ -803,7 +851,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         onLoad={() => setReady(true)}
         onReady={() => setReady(true)}
       />
-      <div id="leaflet-map" role="group" aria-label="Mapa interactivo de sismos en Panamá" data-filtered={filtersKey !== "" ? "true" : undefined} />
+      <div id="leaflet-map" ref={mapDiv} role="group" aria-label="Mapa interactivo de sismos en Panamá" data-filtered={filtersKey !== "" ? "true" : undefined} />
+      {fullscreen === "overlay" && <span className="map-overlay-flag" hidden />}
       {propagation && waveHud && !view3d && (
         <div className="wave-hud" role="status">
           <div className="wave-hud-top">
@@ -828,7 +877,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       {view3d && (
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
-            events={events} filtersKey={filtersKey} fitKey={fitKey} restartKey={restart3d} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
+            events={events} filtersKey={filtersKey} fitKey={fitKey} restartKey={restart3d} expanded={fullscreen !== "off"} overlay={fullscreen === "overlay"} onToggleExpanded={toggleFullscreen} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
             fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
             layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />
@@ -878,6 +927,19 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           <span aria-hidden="true">🧊</span>
           <span className="layer-text-full">3D</span>
           <span className="layer-text-short">3D</span>
+        </button>
+        <button
+          type="button"
+          className={`layer-btn map-fullscreen-btn${fullscreen !== "off" ? " active" : ""}`}
+          aria-pressed={fullscreen !== "off"}
+          onClick={toggleFullscreen}
+          aria-label={fullscreen !== "off" ? "Salir de la pantalla completa del mapa" : "Pantalla completa del mapa"}
+          title={fullscreen !== "off" ? "Salir de la pantalla completa" : "Ver el mapa en pantalla completa"}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d={fullscreen !== "off" ? "M21 3l-7 7m0-6v6h6M3 21l7-7m-6 0h6v6" : "M15 3h6v6m0-6-7 7M9 21H3v-6m0 6 7-7"} />
+          </svg>
+          <span className="layer-text-full">{fullscreen !== "off" ? "Salir" : "Pantalla completa"}</span>
         </button>
       </div>
       {!view3d && (
