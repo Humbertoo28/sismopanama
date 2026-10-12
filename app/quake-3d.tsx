@@ -11,6 +11,7 @@ import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } f
 import PlatesLegend from "./plates-legend";
 import { intensityColor, intensityRgb, slipColor } from "../lib/usgs-colors";
 import { depthColor, isRoundDepth } from "../lib/depth";
+import { buildGroundModel, groundMotion } from "../lib/ground-motion";
 import { loadMosaic, paintMosaic, paintTexture, planTiles, type Mosaic } from "./satellite-tiles";
 import { reducedMotion, shakeElement } from "./shake";
 // Inline SVG keeps these small controls independent of the icon library runtime.
@@ -112,6 +113,7 @@ const COUNTRY = (() => {
 
 type SceneInfo = {
   south: number; north: number; west: number; east: number;
+  lat0: number; lng0: number;
   toKm: (lng: number, lat: number) => { x: number; y: number };
   floorKm: number; halfW: number; halfH: number;
 };
@@ -171,6 +173,33 @@ function faultOutline(fault: Fault, strike: number): [number, number, number][] 
     return corners[best];
   });
 }
+
+// Punto de la superficie (longitud, latitud) que cae en el centro de la vista: se busca con el método de Newton sobre la
+// proyección (unas pocas vueltas bastan).
+function surfaceAtCenter(scene: SceneInfo, camera: Camera, w: number, h: number, exaggeration: number) {
+  const proj = makeProjection(scene, camera, w, h, exaggeration);
+  let lng = scene.lng0;
+  let lat = scene.lat0;
+  const step = 0.05;
+  for (let i = 0; i < 8; i++) {
+    const p = proj.project(proj.at(lng, lat, 0));
+    const [ex, ey] = [proj.originX - p.sx, h / 2 - p.sy];
+    if (Math.hypot(ex, ey) < 0.5) break;
+    const pe = proj.project(proj.at(lng + step, lat, 0));
+    const pn = proj.project(proj.at(lng, lat + step, 0));
+    const [j11, j21, j12, j22] = [(pe.sx - p.sx) / step, (pe.sy - p.sy) / step, (pn.sx - p.sx) / step, (pn.sy - p.sy) / step];
+    const det = j11 * j22 - j12 * j21;
+    if (Math.abs(det) < 1e-9) break;
+    lng += (ex * j22 - ey * j12) / det;
+    lat += (ey * j11 - ex * j21) / det;
+  }
+  return { lng: clamp(lng, scene.west, scene.east), lat: clamp(lat, scene.south, scene.north) };
+}
+
+// Rosa de los vientos de 16 rumbos (abreviada y completa) para decir hacia dónde se mueve el terreno.
+const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"] as const;
+const COMPASS_LONG = ["norte", "nornoreste", "noreste", "estenoreste", "este", "estesureste", "sureste", "sursureste", "sur", "sursuroeste", "suroeste", "oestesuroeste", "oeste", "oestenoroeste", "noroeste", "nornoroeste"] as const;
+const moveText = (meters: number) => (meters >= 1 ? `${meters.toFixed(1)} m` : meters >= 0.01 ? `${Math.round(meters * 100)} cm` : "menos de 1 cm");
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
@@ -416,6 +445,32 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
     const lateral = Math.abs(plane.rake) <= 45 ? "lateral izquierdo" : Math.abs(plane.rake) >= 135 ? "lateral derecho" : "oblicuo";
     return { east: east / length, north: north / length, strike: plane.strike, dip: plane.dip, rake: plane.rake, kind: lateral };
   }, [fault, mechanism]);
+  // Cuánto se mueve el terreno (en horizontal, en metros reales, sin exagerar) en el centro de la vista, calculado con las
+  // ecuaciones de Okada (1985) y el deslizamiento que lleva cada celda del modelo del USGS en este segundo.
+  const groundModel = useMemo(
+    () => (fault && slipSense && fault.strike !== null ? buildGroundModel(fault, fault.strike, slipSense.rake) : null),
+    [fault, slipSense],
+  );
+  const ground = useMemo(() => {
+    if (!groundModel || !fault) return null;
+    const center = surfaceAtCenter(scene, camera, size.w, size.h, exaggeration);
+    const slips = fault.subfaults.map(sub => sub.slip * (ruptureTime === null || sub.t === null ? 1 : clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1)));
+    const { east, north } = groundMotion(groundModel, slips, center.lng, center.lat);
+    const meters = Math.hypot(east, north);
+    const point = Math.round((((Math.atan2(east, north) * 180) / Math.PI + 360) % 360) / 22.5) % 16;
+    // Localidad cercana (si hay una a menos de 30 km), para decir dónde se está mirando.
+    const kx = Math.cos((center.lat * Math.PI) / 180) * KM_PER_DEG;
+    let town: string | null = null;
+    let best = 30;
+    for (const candidate of TOWN_LABELS) {
+      const km = Math.hypot((candidate.lng - center.lng) * kx, (candidate.lat - center.lat) * KM_PER_LAT);
+      if (km < best) {
+        best = km;
+        town = candidate.name;
+      }
+    }
+    return { meters, short: COMPASS[point], long: COMPASS_LONG[point], town };
+  }, [groundModel, fault, scene, camera, size, exaggeration, ruptureTime]);
 
   // La línea de tiempo llega hasta que la onda cubre la escena (si se muestra) o hasta que termina la ruptura.
   const ruptureDuration = fault?.durationS == null ? null : Math.max(fault.durationS, waveField?.end ?? 0);
@@ -1524,7 +1579,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
         </button>
       </div>
       <div className="q3-stage" ref={box}>
-        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ruptureTime !== null && <span className="q3-live"><i />Segundo <strong>{ruptureTime.toFixed(0)}</strong></span>}</div>
+        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ground && <span title={`Movimiento horizontal del terreno en el centro de la vista${ground.town ? `, cerca de ${ground.town}` : ""}, calculado con el modelo de deslizamiento del USGS (Okada, 1985). No es una medición y no está exagerado.`}>Terreno <strong>{moveText(ground.meters)}</strong>{ground.meters >= 0.01 && ` al ${ground.short}`}</span>}{ruptureTime !== null && <span className="q3-live"><i />Segundo <strong>{ruptureTime.toFixed(0)}</strong></span>}</div>
         <div className="q3-navigation" role="group" aria-label="Navegación de la escena">
           <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar" title="Acercar"><SceneIcon name="Plus" size={17} /></button>
           <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
@@ -1587,6 +1642,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
             <span className="q3-anim-note">
               Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {playSpeed} veces más rápida que la realidad.
               {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
+              {ground && ` «Terreno» es cuánto se mueve el suelo en horizontal en el centro de la vista${ground.town ? ` (cerca de ${ground.town})` : ""}: ${moveText(ground.meters)}${ground.meters >= 0.01 ? ` hacia el ${ground.long}` : ""}. Se calcula con las ecuaciones de Okada (1985) y el deslizamiento que modela el USGS en cada celda (con el ángulo de deslizamiento de su mecanismo); no es una medición y está en metros reales, sin exagerar: a esta escala no se vería moverse.`}
               {slipSense && ` Flechas: hacia dónde se movió cada lado de la falla según el mecanismo focal del USGS (rumbo ${slipSense.strike}°, buzamiento ${slipSense.dip}°, ángulo de deslizamiento ${slipSense.rake}°: ${slipSense.kind}); su largo no es cuánto se movió.`}
             </span>
           </div>
@@ -1689,6 +1745,7 @@ export default function Quake3D({ events, filtersKey, mainshock, selectedId, rep
             {felt && " Los cuadros de color sobre la superficie son la intensidad que reportó la gente."}
             {shaking && " Las curvas de colores sobre la superficie son la intensidad de la sacudida que estima el USGS."}
             {waveField && " La onda de sacudida colorea el país a medida que la onda S llega a cada lugar: el color es la intensidad que estima el USGS y el frente reciente se ve más claro; un tinte azul tenue anticipa la llegada de la onda P. Los tiempos se calculan con velocidades típicas, no con registros."}
+            {ground && " «Terreno»: movimiento horizontal del suelo en el centro de la vista, calculado con el modelo de deslizamiento del USGS (Okada, 1985), en metros reales y sin exagerar; no es una medición."}
             {plates && " Las líneas gruesas de colores son los límites entre placas tectónicas: rojo discontinuo, subducción (una placa se hunde bajo otra); amarillo, falla transformante (se deslizan de lado); celeste, extensión (se separan); morado, convergencia (chocan). Salen del modelo PB2002 de P. Bird (2003), que no es de una agencia de gobierno; son límites aproximados y en Panamá el contacto entre placas es una zona ancha."}
             {(fault || felt || shaking) && " Fuente de estas capas: USGS."}
           </p>
