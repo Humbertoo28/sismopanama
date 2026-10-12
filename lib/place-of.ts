@@ -26,6 +26,8 @@ export type PlaceMatch = { place: Place; km: number } | null;
 // ninguno (EMSC solo da coordenadas), se usa la localidad más cercana dentro de la provincia del sismo.
 const cache = new Map<string, PlaceMatch>();
 export function placeOfEvent(event: Earthquake): PlaceMatch {
+  // Un sismo de los alrededores no se asigna a una localidad panameña.
+  if (event.properties.nearby) return null;
   const [lng, lat] = event.geometry.coordinates;
   const key = `${lat.toFixed(3)},${lng.toFixed(3)}|${event.properties.place ?? ""}`;
   if (!cache.has(key)) {

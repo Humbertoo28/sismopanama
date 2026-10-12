@@ -6,26 +6,46 @@ import { isValidEarthquake, queryUsgs } from "./usgs";
 // Geociencias de la Universidad de Panamá (IGC), que opera la red sísmica nacional, lo publicó a los 3.
 // Se consultan los tres y se combinan; si uno falla, los otros siguen sirviendo.
 export type CatalogStatus = { usgs: boolean; igc: boolean; emsc: boolean };
+// "panama": los sismos de Panamá (lo que usa toda la app: lista, alertas, conteos). "nearby": los de alrededor (Costa Rica,
+// Colombia, mar abierto) dentro de la misma zona del mapa; solo se muestran si la persona enciende «Incluir alrededores».
+export type Scope = "panama" | "nearby";
+
+const inRegion = (lat: number, lon: number) =>
+  lat >= Number(REGION.minlatitude) && lat <= Number(REGION.maxlatitude) && lon >= Number(REGION.minlongitude) && lon <= Number(REGION.maxlongitude);
+// Región de EMSC (regiones de Flinn-Engdahl, en inglés y mayúsculas) en español: "PANAMA-COSTA RICA BORDER REGION" →
+// "Frontera Panamá-Costa Rica", "SOUTH OF PANAMA" → "Al sur de Panamá".
+const titleCase = (value: string) => value.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (_, gap: string, letter: string) => gap + letter.toUpperCase()).replace(/\bPanama\b/g, "Panamá");
+const DIRECTION: Record<string, string> = { NORTH: "norte", SOUTH: "sur", EAST: "este", WEST: "oeste" };
+function regionEs(region: string) {
+  const upper = region.trim().toUpperCase();
+  const border = /^(.+?)-(.+?) BORDER REGION$/.exec(upper);
+  if (border) return `Frontera ${titleCase(border[1])}-${titleCase(border[2])}`;
+  const side = /^(NORTH|SOUTH|EAST|WEST) OF (.+)$/.exec(upper);
+  if (side) return `Al ${DIRECTION[side[1]]} de ${titleCase(side[2])}`;
+  const coast = /^(?:OFF )?COAST OF (.+)$/.exec(upper);
+  if (coast) return `Frente a la costa de ${titleCase(coast[1])}`;
+  return titleCase(region);
+}
 
 type EmscProperties = {
   source_id?: string; time?: string; mag?: number; magtype?: string; depth?: number;
   lat?: number; lon?: number; flynn_region?: string; evtype?: string;
 };
 
-async function fetchUsgs(since: number): Promise<Earthquake[]> {
+async function fetchUsgs(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
   const data = (await queryUsgs({
     starttime: new Date(since).toISOString(), orderby: "time", limit: "2000", ...REGION,
   })) as { features?: Earthquake[] } | null;
   return (data?.features ?? [])
-    .filter(item => isValidEarthquake(item) && isPanamaPlace(item.properties.place))
-    .map(item => ({ ...item, properties: { ...item.properties, source: "usgs" as const } }));
+    .filter(item => isValidEarthquake(item) && isPanamaPlace(item.properties.place) === (scope === "panama"))
+    .map(item => ({ ...item, properties: { ...item.properties, source: "usgs" as const, ...(scope === "nearby" ? { nearby: true } : {}) } }));
 }
 
 const IGC_URL = "https://sismosgeociencias.up.ac.pa/";
 const IGC_MIN_INTERVAL_MS = 4_000;
 // El IGC no tiene API: publica una tabla HTML de los últimos 7 días. Se lee con respeto: identificándonos,
 // con caché condicional (ETag) y sin consultar más de una vez cada 4 s por instancia del servidor.
-let igcCache: { at: number; etag: string | null; events: Earthquake[] } | null = null;
+let igcCache: { at: number; etag: string | null; events: Earthquake[]; nearby: Earthquake[] } | null = null;
 
 const entities: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " " };
 const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&(amp|lt|gt|quot|#39|nbsp);/g, m => entities[m]).replace(/\s+/g, " ").trim();
@@ -56,8 +76,15 @@ export function isIgcPanamaEvent(place: string, lat: number, lon: number, mag: n
   return lat >= 6 && lat <= 10.7 && lon >= -83 && lon <= -77;
 }
 
+// Sismos de Panamá de la tabla del IGC.
 export function parseIgc(html: string): Earthquake[] {
+  return parseIgcAll(html).panama;
+}
+
+// Los de Panamá y, aparte, los de alrededor (dentro de la zona del mapa).
+export function parseIgcAll(html: string): { panama: Earthquake[]; nearby: Earthquake[] } {
   const events = new Map<string, Earthquake>();
+  const nearby = new Map<string, Earthquake>();
   for (const row of html.match(/<tr[\s\S]*?<\/tr>/gi) ?? []) {
     const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(match => text(match[1]));
     if (cells.length < 8) continue;
@@ -70,14 +97,16 @@ export function parseIgc(html: string): Earthquake[] {
     // Se valida todo: lo que llega de una página ajena nunca se da por bueno sin comprobarlo.
     if (!Number.isFinite(time) || !(lat > 4 && lat < 12) || !(lon > -86 && lon < -75) || !(mag >= 0 && mag < 10)) continue;
     let place = region.replace(/^Localizado en\s+/i, "").slice(0, 120);
-    if (!isIgcPanamaEvent(place, lat, lon, mag)) continue;
+    const isPanama = isIgcPanamaEvent(place, lat, lon, mag);
+    if (!isPanama && !inRegion(lat, lon)) continue;
+    const target = isPanama ? events : nearby;
     // Sin país en la etiqueta: se completa para que se lea igual que los demás ("Panamá a 33km al oeste de Tonosí").
     if (/^a\s+\d/i.test(place)) place = `Panamá ${place}`;
     const id = `igc:${Math.round(time / 1000)}`;
     const reviewed = /^REVISADO$/i.test(state);
     // El IGC a veces repite la misma fila: se conserva una, y la revisada si una de las dos lo está.
-    if (events.has(id) && events.get(id)!.properties.status === "reviewed" && !reviewed) continue;
-    events.set(id, {
+    if (target.has(id) && target.get(id)!.properties.status === "reviewed" && !reviewed) continue;
+    target.set(id, {
       id,
       properties: {
         mag,
@@ -86,16 +115,18 @@ export function parseIgc(html: string): Earthquake[] {
         url: IGC_URL,
         status: reviewed ? "reviewed" : "automatic",
         source: "igc",
+        ...(isPanama ? {} : { nearby: true }),
       },
       geometry: { coordinates: [lon, lat, depth ? Number(depth[1]) : undefined] },
     });
   }
-  return [...events.values()];
+  return { panama: [...events.values()], nearby: [...nearby.values()] };
 }
 
-export async function fetchIgc(since: number): Promise<Earthquake[]> {
+export async function fetchIgc(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
+  const pick = (cache: NonNullable<typeof igcCache>) => (scope === "panama" ? cache.events : cache.nearby).filter(e => e.properties.time >= since);
   const now = Date.now();
-  if (igcCache && now - igcCache.at < IGC_MIN_INTERVAL_MS) return igcCache.events.filter(e => e.properties.time >= since);
+  if (igcCache && now - igcCache.at < IGC_MIN_INTERVAL_MS) return pick(igcCache);
   const headers: Record<string, string> = {
     Accept: "text/html",
     "User-Agent": "OjoPanama/1.0 (+https://www.ojopanama.com)",
@@ -104,18 +135,18 @@ export async function fetchIgc(since: number): Promise<Earthquake[]> {
   const response = await fetch(IGC_URL, { headers, signal: AbortSignal.timeout(15_000), cache: "no-store" });
   if (response.status === 304 && igcCache) {
     igcCache.at = now;
-    return igcCache.events.filter(e => e.properties.time >= since);
+    return pick(igcCache);
   }
   if (!response.ok) throw new Error(`IGC respondió ${response.status}`);
   const html = await response.text();
   if (html.length > 3_000_000) throw new Error("Respuesta del IGC demasiado grande");
-  const events = parseIgc(html);
-  if (events.length === 0 && !/Listado de sismos/i.test(html)) throw new Error("La página del IGC cambió de formato");
-  igcCache = { at: now, etag: response.headers.get("etag"), events };
-  return events.filter(e => e.properties.time >= since);
+  const { panama, nearby } = parseIgcAll(html);
+  if (panama.length === 0 && !/Listado de sismos/i.test(html)) throw new Error("La página del IGC cambió de formato");
+  igcCache = { at: now, etag: response.headers.get("etag"), events: panama, nearby };
+  return pick(igcCache);
 }
 
-async function fetchEmsc(since: number): Promise<Earthquake[]> {
+async function fetchEmsc(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
   const query = new URLSearchParams({
     format: "json", orderby: "time", limit: "2000", starttime: new Date(since).toISOString().slice(0, 19), ...REGION,
   });
@@ -132,18 +163,20 @@ async function fetchEmsc(since: number): Promise<Earthquake[]> {
     const time = Date.parse(p?.time ?? "");
     if (!p?.source_id || !Number.isFinite(time) || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return [];
     if (p.evtype && p.evtype !== "ke") return []; // solo sismos conocidos, no explosiones ni otros eventos
-    if (!isPanamaPlace(p.flynn_region)) return [];
+    if (isPanamaPlace(p.flynn_region) !== (scope === "panama")) return [];
     const lat = p.lat!;
     const lon = p.lon!;
+    const coords = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(2)}°${lon < 0 ? "O" : "E"}`;
     return [{
       id: `emsc:${p.source_id}`,
       properties: {
         mag: Number.isFinite(p.mag) ? p.mag! : null,
-        place: `Panamá (${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(2)}°${lon < 0 ? "O" : "E"})`,
+        place: scope === "panama" ? `Panamá (${coords})` : `${p.flynn_region ? regionEs(p.flynn_region) : "Fuera de Panamá"} (${coords})`,
         time,
         url: `https://www.emsc-csem.org/Earthquake_information/earthquake.php?id=${encodeURIComponent(p.source_id)}`,
         magType: p.magtype ? p.magtype[0].toUpperCase() + p.magtype.slice(1) : null,
         source: "emsc",
+        ...(scope === "nearby" ? { nearby: true } : {}),
       },
       geometry: { coordinates: [lon, lat, Number.isFinite(p.depth) ? p.depth : undefined] },
     }];
@@ -190,6 +223,18 @@ export async function fetchPanamaEvents(since: number): Promise<{ events: Earthq
   if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
   // Prioridad al elegir qué registro mostrar de un mismo sismo: USGS (revisión y datos adicionales), luego
   // IGC (red local, etiqueta del lugar) y por último EMSC.
+  return {
+    events: merge(merge(fromUsgs, fromIgc), fromEmsc),
+    catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
+  };
+}
+
+// Sismos de los alrededores de Panamá (Costa Rica, Colombia, mar abierto) dentro de la zona del mapa, combinados igual que
+// los de Panamá. No los usa nada más que la lista y el mapa cuando se pide «Incluir alrededores»: ni alertas ni conteos.
+export async function fetchNearbyEvents(since: number): Promise<{ events: Earthquake[]; catalogs: CatalogStatus }> {
+  const [usgs, igc, emsc] = await Promise.allSettled([fetchUsgs(since, "nearby"), fetchIgc(since, "nearby"), fetchEmsc(since, "nearby")]);
+  if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
+  const [fromUsgs, fromIgc, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
   return {
     events: merge(merge(fromUsgs, fromIgc), fromEmsc),
     catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },

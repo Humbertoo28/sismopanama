@@ -416,7 +416,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         ? baseSize + 3
         : baseSize;
 
-      const kind = isLatest ? " latest" : isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
+      // Los sismos de los alrededores («Incluir alrededores») no son réplicas aunque sean posteriores al principal.
+      const after = !event.properties.nearby && !!mainshock && isAftershock(event, mainshock);
+      const kind = isLatest ? " latest" : isMain ? " main" : after ? " after" : "";
       const ageClass = isVeryRecent ? " recent-3h" : isRecent12h ? " recent-12h" : isAged ? " aged" : "";
       const recent = !isMain && !isLatest && isVeryRecent ? " recent" : "";
       const highlight = fresh.current?.id === event.id && now < fresh.current.until ? " fresh" : "";
@@ -439,8 +441,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const role = isMain ? "Sismo principal" : isLatest
-        ? (mainshock && isAftershock(event, mainshock) ? "Última réplica" : "Último sismo")
-        : mainshock && isAftershock(event, mainshock) ? "Réplica" : "Sismo";
+        ? (after ? "Última réplica" : "Último sismo")
+        : after ? "Réplica" : event.properties.nearby ? "Sismo fuera de Panamá" : "Sismo";
       const magLabel = mag === null ? "—" : mag.toFixed(1);
       const marker = L.marker([lat, lng], { icon, zIndexOffset: zIndex }).addTo(layer);
       // Nombre para lectores de pantalla (antes era un `title`, que además mostraba un recuadro nativo lento y en inglés).
@@ -480,7 +482,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       if (isLatest) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-latest";
-        badge.textContent = mainshock && isAftershock(event, mainshock)
+        badge.textContent = after
           ? "📍 ÚLTIMA RÉPLICA · SISMO M 7.7"
           : "📍 ÚLTIMO SISMO REGISTRADO";
         popup.appendChild(badge);
@@ -489,7 +491,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         badge.className = "popup-badge-main";
         badge.textContent = "⭐ SISMO PRINCIPAL · M 7.7";
         popup.appendChild(badge);
-      } else if (mainshock && isAftershock(event, mainshock)) {
+      } else if (after) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-after";
         badge.textContent = "🔄 RÉPLICA DEL SISMO M 7.7";

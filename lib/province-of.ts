@@ -7,6 +7,8 @@ import { PROVINCES, type Province } from "./provinces";
 // que eso quedan en "Mar adentro".
 export const PROVINCE_BY_ID = new Map<string, Province>(PROVINCES.map(province => [province.id, province]));
 export const FAR_OFFSHORE = "mar";
+// Valor del filtro para los sismos de los alrededores (fuera de Panamá), que solo aparecen con «Incluir alrededores».
+export const OUTSIDE = "fuera";
 const NEAR_KM = 90;
 
 export type ProvinceMatch = { id: string; name: string; offshore: boolean } | null;
@@ -78,10 +80,12 @@ export function provinceOfEvent(event: Earthquake): ProvinceMatch {
 
 /** Valor del filtro de un sismo: el id de su provincia o comarca, o "mar" si cae lejos de toda costa. */
 export function provinceKey(event: Earthquake) {
+  if (event.properties.nearby) return OUTSIDE;
   return provinceOfEvent(event)?.id ?? FAR_OFFSHORE;
 }
 
 export function provinceLabel(event: Earthquake) {
+  if (event.properties.nearby) return "Fuera de Panamá";
   const match = provinceOfEvent(event);
   if (!match) return "Mar adentro";
   return match.offshore ? `Mar frente a ${match.name}` : match.name;

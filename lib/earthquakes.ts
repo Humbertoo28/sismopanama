@@ -16,6 +16,8 @@ export type Earthquake = {
     aliases?: string[];
     // Qué catálogos publicaron este sismo y qué magnitud puso cada uno (solo si hay más de uno; si no, vale `source`).
     agencies?: { source: "usgs" | "igc" | "emsc"; mag: number | null; magType?: string | null }[];
+    // Sismo de los alrededores (fuera de Panamá): solo llega con «Incluir alrededores» y no cuenta como réplica.
+    nearby?: boolean;
   };
   geometry: { coordinates: [number, number, number?] };
 };
