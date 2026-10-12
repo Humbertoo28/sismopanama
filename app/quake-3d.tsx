@@ -762,7 +762,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     const pending = (event: Earthquake) => replay !== null && (replay.index === 0 || event.properties.time > replay.time);
     const currentReplay = (event: Earthquake) => replay !== null && replay.index > 0 && event.properties.time === replay.time;
     hits.current = [];
-    const labeled: { sx: number; sy: number; text: string; rank: number }[] = [];
+    const labeled: { sx: number; sy: number; text: string; rank: number; keep: boolean }[] = [];
     for (const item of items) {
       if (pending(item.event)) continue;
       const q = project(item.p);
@@ -837,7 +837,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         },
       });
       hits.current.push({ id: item.event.id, x: q.sx, y: q.sy, r: Math.max(r + 5, 11), depth: q.depth });
-      if (isMain || (item.mag ?? 0) >= 6 || selected) labeled.push({ sx: q.sx, sy: q.sy - r - 7, text: `M ${item.mag === null ? "—" : item.mag.toFixed(1)}${selected ? ` · ${km(item.depth)}` : ""}`, rank: selected ? 99 : item.mag ?? 0 });
+      if (isMain || (item.mag ?? 0) >= 6 || selected) labeled.push({ sx: q.sx, sy: q.sy - r - 7, text: `M ${item.mag === null ? "—" : item.mag.toFixed(1)}${selected ? ` · ${km(item.depth)}` : ""}`, rank: isMain ? 100 : selected ? 99 : item.mag ?? 0, keep: selected });
     }
 
     // Fondo: lo más lejano primero. El suelo (superficie) se pinta entre lo profundo y los epicentros.
@@ -1259,21 +1259,28 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     ctx.font = font(11.5, 800);
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    // Sin que se pisen: primero el seleccionado y los más fuertes; el que choca con uno ya puesto se omite.
+    // Sin que se pisen: primero el sismo principal (su «M 7.7» nunca se pierde), luego el seleccionado y los más fuertes. El que
+    // choca con uno ya puesto se omite, salvo el seleccionado, que se corre hacia arriba o abajo hasta quedar libre.
     const placedLabels: { sx: number; sy: number }[] = [];
     for (const label of labeled.sort((a, b) => b.rank - a.rank)) {
-      if (placedLabels.some(other => Math.abs(other.sx - label.sx) < 72 && Math.abs(other.sy - label.sy) < 25)) continue;
-      placedLabels.push(label);
+      const clashes = (y: number) => placedLabels.some(other => Math.abs(other.sx - label.sx) < 72 && Math.abs(other.sy - y) < 25);
+      let y = label.sy;
+      if (clashes(y)) {
+        const shift = label.keep ? [-26, 26, -52, 52].find(dy => !clashes(label.sy + dy)) : undefined;
+        if (shift === undefined) continue;
+        y = label.sy + shift;
+      }
+      placedLabels.push({ sx: label.sx, sy: y });
       const labelWidth = ctx.measureText(label.text).width + 16;
       ctx.beginPath();
-      ctx.roundRect(label.sx - labelWidth / 2, label.sy - 15, labelWidth, 22, 5);
+      ctx.roundRect(label.sx - labelWidth / 2, y - 15, labelWidth, 22, 5);
       ctx.fillStyle = "rgba(5,18,29,.9)";
       ctx.fill();
       ctx.lineWidth = 0.8;
       ctx.strokeStyle = "rgba(163,221,230,.4)";
       ctx.stroke();
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(label.text, label.sx, label.sy);
+      ctx.fillText(label.text, label.sx, y);
     }
 
     // Brújula: hacia dónde queda el norte en pantalla (la vista de frente de la falla deja el mapa «al revés»).
