@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = { value: number; from?: number; decimals?: number; duration?: number };
 
-const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// El dispositivo o la opción «Reducir animaciones» del panel de accesibilidad.
+const reducedMotion = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.a11yMotion === "reduce";
 
 // Cuenta hacia el valor nuevo desde lo que se esté mostrando. Con "reducir movimiento" salta directo.
 export default function CountUp({ value, from, decimals = 0, duration = 1100 }: Props) {

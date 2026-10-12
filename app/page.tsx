@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Bell, BellRing, House, Info, List, Map as MapIcon, ShieldCheck } from "lucide-react";
 import MainshockUsgs from "./mainshock-usgs";
 import PlatesExplainer from "./plates-explainer";
 import QuakeMap from "./quake-map";
@@ -8,8 +9,7 @@ import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
 import Sources from "./sources";
 import FlagMark from "./flag-mark";
-import CountUp from "./count-up";
-import SeismoTrace from "./seismo-trace";
+import StatusNow from "./status-now";
 import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
 import PwaInstall from "./pwa-install";
@@ -37,7 +37,7 @@ import QuakeSheet from "./quake-sheet";
 import { createPortal } from "react-dom";
 import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
-import { SINCE, isAftershock, isBeforeMainshock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
+import { isAftershock, isBeforeMainshock, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
 // La lista de sismos en tiempo real se consulta cada 35 s.
 // El sismo principal histórico y conteo de réplicas se consulta cada 5 min (300 s) para proteger cuotas del servidor.
@@ -52,7 +52,7 @@ const dateTime = new Intl.DateTimeFormat("es-PA", {
   hour: "2-digit", minute: "2-digit", hour12: true,
 });
 const clockFormat = new Intl.DateTimeFormat("es-PA", {
-  timeZone: "America/Panama", hour: "2-digit", minute: "2-digit", hour12: true,
+  timeZone: "America/Panama", hour: "numeric", minute: "2-digit", hour12: true,
 });
 
 function magText(event: Earthquake) {
@@ -66,27 +66,10 @@ function depthText(event: Earthquake) {
   return Number.isFinite(depth) ? `${Math.round(depth!)} km` : "No disponible";
 }
 const NAV = [
-  ["inicio", "◫", "Panel general", "Panel"], ["mapa", "◎", "Mapa sísmico", "Mapa"], ["eventos", "≡", "Últimos eventos", "Eventos"],
-  ["recomendaciones", "✚", "Qué hacer ahora", "Qué hacer"], ["fuentes", "✓", "Fuentes", "Fuentes"], ["preparacion", "✳", "Preparación", "Prepárate"],
+  ["inicio", House, "Inicio"], ["mapa", MapIcon, "Mapa"], ["eventos", List, "Sismos"],
+  ["recomendaciones", ShieldCheck, "Qué hacer"], ["fuentes", Info, "Fuentes"],
 ] as const;
 const SPIED = ["inicio", "mapa", "eventos", "recomendaciones", "fuentes"];
-const sinceLabel = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "long" }).format(new Date(SINCE));
-const PAGER: Record<string, string> = { green: "Verde", yellow: "Amarilla", orange: "Naranja", red: "Roja" };
-const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-const INTENSITY = ["No sentido", "Débil", "Débil", "Ligera", "Moderada", "Fuerte", "Muy fuerte", "Severa", "Violenta"];
-function intensityText(mmi: number) {
-  const level = Math.min(12, Math.max(1, Math.round(mmi)));
-  return `${ROMAN[level - 1]} · ${INTENSITY[level - 1] ?? "Extrema"}`;
-}
-function elapsed(time: number) {
-  const minutes = Math.max(0, Math.floor((Date.now() - time) / 60_000));
-  if (minutes < 1) return ["Ahora", "mismo instante"];
-  if (minutes < 60) return [String(minutes), minutes === 1 ? "minuto" : "minutos"];
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return [String(hours), hours === 1 ? "hora" : "horas"];
-  const days = Math.floor(hours / 24);
-  return [String(days), days === 1 ? "día" : "días"];
-}
 
 // "35 min" o "1 h 5 min".
 function agoText(minutes: number) {
@@ -367,11 +350,6 @@ export default function Home() {
     () => sort === "magnitude" ? [...events].sort((a, b) => (b.properties.mag ?? -10) - (a.properties.mag ?? -10)) : events,
     [events, sort],
   );
-  const strongest = useMemo(
-    () => events.reduce<Earthquake | null>((best, event) =>
-      !best || (event.properties.mag ?? -10) > (best.properties.mag ?? -10) ? event : best, null),
-    [events],
-  );
   const latest = events[0] ?? null;
   // El último sismo registrado de todos, sin importar los filtros de magnitud o de réplicas de la lista.
   const newest = useMemo(
@@ -437,11 +415,6 @@ export default function Home() {
     } : null,
     [events, main],
   );
-  // Réplicas de toda la secuencia, sin filtros: el mismo criterio que /api/earthquakes/mainshock, para que las cifras coincidan.
-  const totalAftershocks = useMemo(
-    () => main ? allEvents.filter(event => isAftershock(event, main)).length : 0,
-    [allEvents, main],
-  );
   // La reproducción usa los sismos que el filtro deja ver (el principal y sus réplicas); hacen falta al menos dos.
   const replayCount = useMemo(
     () => main ? mapEvents.filter(event => event.id === main.id || isAftershock(event, main)).length : 0,
@@ -467,18 +440,8 @@ export default function Home() {
   const featured = mapEvents.find(event => event.id === selectedId) ?? (province === "all" ? newest ?? latest : latest);
   // El panel de accesibilidad lee en voz alta el último sismo registrado.
   useEffect(() => { setLatestQuake(newest); }, [newest]);
-  const [recentValue, recentUnit] = latest ? elapsed(latest.properties.time) : ["—", ""];
-  const [mainValue, mainUnit] = main ? elapsed(main.properties.time) : ["—", ""];
   const hero = newest ?? main;
-  const hasDistinctMain = Boolean(main && newest && main.id !== newest.id && !sameEvent(main, newest));
-  const [heroValue, heroUnit] = hero ? elapsed(hero.properties.time) : ["—", ""];
-  const heroSource = SOURCE_NAMES[hero?.properties.source ?? "usgs"];
-  const heroUrl = reportUrl(hero);
-  const mainMmi = main?.properties.mmi;
-  const mainFelt = main?.properties.felt;
-  const mainAlert = main?.properties.alert;
   const mainUrl = reportUrl(main);
-  const tellUsUrl = mainUrl.includes("/eventpage/") ? `${mainUrl}/tellus` : null;
 
   const share = async (target: Earthquake | null) => {
     if (!target) return;
@@ -516,24 +479,6 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar" aria-label="Navegación principal">
-        <a className="brand" href="#inicio" aria-label="SISMO PANAMÁ, inicio">
-          <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
-          <span><strong>SISMO</strong>{" "}<small>PANAMÁ</small></span>
-        </a>
-        <div className="side-label">EXPLORAR</div>
-        <nav className="side-nav">
-          {NAV.map(([id, icon, label, short]) => (
-            <a key={id} href={`#${id}`} title={label} className={section === id ? "active" : ""} aria-current={section === id ? "location" : undefined}
-              onClick={() => { navLock.current = performance.now() + 900; setSection(id); }}><span className="nav-icon">{icon}</span><span className="nav-label">{label}</span><span className="nav-label-short" aria-hidden="true">{short}</span></a>
-          ))}
-        </nav>
-        <div className="side-bottom">
-          <div className="source-indicator"><span className="pulse-dot" /><span>DATOS DEL USGS</span></div>
-          <p>Información sísmica de Panamá.</p>
-          <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">Conocer la fuente <span aria-hidden="true">↗</span></a>
-        </div>
-      </aside>
 
       {alert && alert.key !== dismissedKey && (
         <div className="live-toast" role="alert">
@@ -594,180 +539,56 @@ export default function Home() {
         </div>
       )}
 
-      <main id="inicio" className="main-content">
-        <header className="topbar">
-          <a className="brand topbar-brand" href="#inicio" aria-label="SISMO PANAMÁ, inicio">
+      <header className="site-header">
+        <div className="site-header-bar">
+          <a className="site-brand" href="#inicio" aria-label="Sismo Panamá, inicio">
             <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
-            <span><strong>SISMO</strong>{" "}<small>PANAMÁ</small></span>
+            <span>Sismo Panamá</span>
           </a>
-          <div className="breadcrumb">INICIO <span>/</span> PANEL GENERAL</div>
-          <div className="topbar-right">
-            <span className="local-time">Hora de Panamá · {clock}</span>
-            <PwaInstall />
+          <div className="site-header-tools">
+            <span className="site-clock">Hora de Panamá: {clock}</span>
+            <span className="site-install"><PwaInstall /></span>
             <button
               type="button"
-              className={`alert-topbar-btn${permStatus === "granted" ? " active" : ""}`}
+              className={`alerts-button${permStatus === "granted" ? " on" : ""}`}
               onClick={() => setAlertModalOpen(true)}
-              title="Configurar y probar alertas sísmicas para todos"
             >
-              <span className={permStatus === "granted" ? "btn-pulse-dot" : undefined} aria-hidden="true">
-                {permStatus === "granted" ? null : "🔔"}
-              </span>
-              <span className="alert-btn-text">{permStatus === "granted" ? "Alertas Activas" : "Activar Alertas"}</span>
-              <span className="alert-btn-short">{permStatus === "granted" ? "Activas" : "Alertas"}</span>
+              {permStatus === "granted" ? <BellRing aria-hidden="true" size={20} /> : <Bell aria-hidden="true" size={20} />}
+              <span className="alerts-button-long">{permStatus === "granted" ? "Alertas activadas" : "Recibir alertas"}</span>
+              <span className="alerts-button-short">Alertas</span>
             </button>
-            <span className="live-pill"><i /> MONITOREO ACTIVO</span>
           </div>
-        </header>
+        </div>
+        <nav className="site-nav" aria-label="Secciones de la página">
+          {NAV.map(([id, Icon, label]) => (
+            <a key={id} href={`#${id}`} className={section === id ? "active" : ""} aria-current={section === id ? "location" : undefined}
+              onClick={() => { navLock.current = performance.now() + 900; setSection(id); }}>
+              <Icon aria-hidden="true" size={22} /><span>{label}</span>
+            </a>
+          ))}
+          <span className="site-nav-pages">
+            <a href="/analisis">Gráficos</a>
+            <a href="/noticias">Noticias</a>
+            <a href="/historia">Historia</a>
+          </span>
+        </nav>
+      </header>
 
+      <main id="inicio" className="main-content">
         <div className="content-wrap">
           <InAppBrowserNotice />
-          <section className="page-intro" aria-labelledby="page-title">
-            <div>
-              <div className="eyebrow"><span className="eyebrow-line" /> OBSERVATORIO SÍSMICO</div>
-              <h1 id="page-title">Sismo en Panamá:<br /><em>lo que necesitas saber.</em></h1>
-              <p>Explora la actividad sísmica reciente en Panamá. Información clara para estar al tanto, cuando más importa.</p>
-            </div>
-            <div className="page-intro-actions">
-              <button
-                type="button"
-                className="alert-topbar-btn active intro-alert-btn"
-                onClick={() => setAlertModalOpen(true)}
-              >
-                <span><span aria-hidden="true">🔔</span> Configurar / Difundir Alerta</span>
-              </button>
-              <button
-                className={`refresh-button${status === "loading" ? " loading" : ""}`}
-                type="button"
-                aria-label="Actualizar datos de sismos"
-                disabled={status === "loading"}
-                onClick={() => { setRefreshKey(key => key + 1); setSlowKey(key => key + 1); }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span>Actualizar datos</span>
-              </button>
-              <a className="refresh-button" href="/analisis">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span>Gráficos de sismos</span>
-              </a>
-              <a className="refresh-button" href="/noticias">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM9 8h6M9 12h6M9 16h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span>Noticias</span>
-              </a>
-              <a className="refresh-button" href="/historia">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v4h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span>Historia sísmica</span>
-              </a>
-            </div>
-          </section>
-
-          {hero && (
-            <section className="mainshock" aria-labelledby="hero-quake-title">
-              <SeismoTrace replay={replay} />
-              <div className="mainshock-head">
-                <div className="mainshock-mag">
-                  <strong>
-                    {hero.properties.mag === null ? "—" : <CountUp value={hero.properties.mag} from={0} decimals={1} duration={1500} />}
-                  </strong>
-                  <span>MAGNITUD</span>
-                </div>
-                <div className="mainshock-title">
-                  <span className="mainshock-kicker">
-                    <i /> {hasDistinctMain ? "ÚLTIMA RÉPLICA REGISTRADA (SISMO M 7.7)" : "SISMO PRINCIPAL · M 7.7"} · {heroValue === "Ahora" ? "AHORA MISMO" : `HACE ${heroValue} ${heroUnit}`.toUpperCase()}
-                  </span>
-                  <h2 id="hero-quake-title">{placeText(hero)}</h2>
-                  <p>
-                    {hasDistinctMain ? "Réplica del sismo principal de M 7.7 · " : ""}{dateTime.format(new Date(hero.properties.time))} · hora de Panamá · {depthText(hero)} de profundidad · {heroSource}
-                  </p>
-                  {hero.properties.status && (
-                    <span className={`review-chip${hero.properties.status === "reviewed" ? " ok" : ""}`}>
-                      {hero.properties.status === "reviewed" ? `✓ Revisado por ${heroSource}` : `Datos automáticos de ${heroSource}, preliminar`}
-                    </span>
-                  )}
-                </div>
-                <div className="mainshock-actions">
-                  <button type="button" className="primary" onClick={() => chooseEvent(hero)}>
-                    <span aria-hidden="true">📍</span> Ver en el mapa
-                  </button>
-                  <a href="#recomendaciones">Qué hacer ahora</a>
-                  <button type="button" onClick={() => share(hero)} aria-live="polite">
-                    {shared ? "Enlace copiado" : "Compartir"}
-                  </button>
-                  <a
-                    className="wide"
-                    href={getWhatsAppShareUrl(hero, typeof window !== "undefined" ? window.location.href : "")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ background: "#25d366", color: "#033a17", border: "0", fontWeight: "800", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                  >
-                    <span aria-hidden="true">📲</span> Mandar alerta a todos por WhatsApp
-                  </a>
-                  <a className="wide" href={heroUrl} target="_blank" rel="noopener noreferrer">
-                    Reporte de {heroSource} <span aria-hidden="true">↗</span>
-                  </a>
-                </div>
-              </div>
-
-              {hasDistinctMain && main && mainshock && (
-                <div className="mainshock-principal" role="group" aria-label="Sismo principal de la secuencia">
-                  <div className="principal-head">
-                    <div className="principal-mag">
-                      <strong>{magText(main)}</strong>
-                      <span>M PRINCIPAL</span>
-                    </div>
-                    <div className="principal-info">
-                      <span className="principal-kicker">
-                        <span aria-hidden="true">⭐</span> SISMO PRINCIPAL · M 7.7 · {mainValue === "Ahora" ? "AHORA MISMO" : `HACE ${mainValue} ${mainUnit}`.toUpperCase()}
-                      </span>
-                      <h3 className="principal-place">{placeText(main)}</h3>
-                      <small>
-                        {dateTime.format(new Date(main.properties.time))} · {depthText(main)} de profundidad · {SOURCE_NAMES[main.properties.source ?? "usgs"]}
-                        {main.properties.status === "reviewed" ? " · revisado" : " · preliminar"}
-                      </small>
-                    </div>
-                    <div className="principal-actions">
-                      <button type="button" onClick={() => chooseEvent(main)}>
-                        <span aria-hidden="true">📍</span> Ver sismo principal en mapa
-                      </button>
-                      <a href={mainUrl} target="_blank" rel="noopener noreferrer">
-                        Reporte del USGS <span aria-hidden="true">↗</span>
-                      </a>
-                    </div>
-                  </div>
-                  <dl className="mainshock-stats">
-                    <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
-                    {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span><small>impacto estimado (USGS)</small></dd></div>}
-                    {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}<small>estimada por el USGS</small></dd></div>}
-                    {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></dd></div>}
-                    <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></dd></div>
-                  </dl>
-                </div>
-              )}
-
-              {!hasDistinctMain && main && mainshock && (
-                <dl className="mainshock-stats">
-                  <div><dt>PROFUNDIDAD</dt><dd>{depthText(main)}</dd></div>
-                  {mainAlert && PAGER[mainAlert] && <div><dt>ALERTA PAGER</dt><dd><span className={`pager ${mainAlert}`}>{PAGER[mainAlert]}</span><small>impacto estimado (USGS)</small></dd></div>}
-                  {typeof mainMmi === "number" && <div><dt>INTENSIDAD MÁX.</dt><dd>{intensityText(mainMmi)}<small>estimada por el USGS</small></dd></div>}
-                  {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></dd></div>}
-                  <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></dd></div>
-                </dl>
-              )}
-
-              <p className="mainshock-note">Cifras del USGS, <a href="#fuentes">contrastadas con otras agencias</a>: se actualizan y pueden cambiar a medida que se revisan. No reemplazan los avisos oficiales de SINAPROC.</p>
-            </section>
-          )}
-
-          <div className={`status-strip${status === "error" ? " error" : ""}`} role="status" aria-live="polite">
-            <div className="status-left"><span className="status-spark" /><strong>{status === "loading" ? "Consultando sismos recientes…" : status === "error" ? "No se pudo consultar el catálogo" : "Datos sísmicos actualizados"}</strong><span>{status === "loading" ? "Fuentes: USGS, IGC y EMSC" : status === "error" ? "Revisa tu conexión e intenta actualizar de nuevo." : main ? `1 sismo principal (M 7.7) y ${totalAftershocks} ${totalAftershocks === 1 ? "réplica" : "réplicas"} en Panamá desde el ${sinceLabel}${catalogs && !(catalogs.usgs && catalogs.igc && catalogs.emsc) ? ` · ${(Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]).join(" y ")} no responde: puede haber retraso` : ""}` : `${allEvents.length} ${allEvents.length === 1 ? "evento reportado" : "eventos reportados"} en Panamá desde el ${sinceLabel}${catalogs && !(catalogs.usgs && catalogs.igc && catalogs.emsc) ? ` · ${(Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]).join(" y ")} no responde: puede haber retraso` : ""}`}</span></div>
-            <span>{lastUpdate ? `Última consulta: ${clockFormat.format(new Date(lastUpdate))}` : "Última consulta: --"}</span>
-          </div>
-
-          <section className="metric-grid" aria-label="Resumen de actividad sísmica">
-            <article className="metric-card"><div className="metric-top"><span>{main ? "RÉPLICAS REGISTRADAS" : "EVENTOS REGISTRADOS"}</span><span className="metric-icon">◎</span></div><div className="metric-main"><strong>{status === "error" && !lastUpdate ? "—" : <CountUp value={listCounts ? listCounts.after : events.length} />}</strong><span>{main ? "+ 1 sismo principal M 7.7" : `desde el ${sinceLabel}`}</span></div><p>{main ? "Secuencia sísmica en Panamá" : "Solo Panamá"}</p></article>
-            <article className="metric-card"><div className="metric-top"><span>{main ? "MAYOR RÉPLICA" : "MAYOR MAGNITUD"}</span><span className="metric-icon coral" aria-hidden="true">⌁</span></div><div className="metric-main"><strong>{strongest && strongest.properties.mag !== null ? <CountUp value={strongest.properties.mag} decimals={1} /> : "—"}</strong><span>{main && strongest && strongest.id === main.id ? "sismo principal" : "magnitud"}</span></div><p>{strongest ? placeText(strongest) : "Sin eventos disponibles"}</p></article>
-            <article className="metric-card"><div className="metric-top"><span>{main && latest && isAftershock(latest, main) ? "ÚLTIMA RÉPLICA" : "EVENTO MÁS RECIENTE"}</span><span className="metric-icon blue">◷</span></div><div className="metric-main"><strong>{recentValue}</strong><span>{recentUnit}</span></div><p>{latest ? dateTime.format(new Date(latest.properties.time)) : "Hora local de Panamá (UTC−5)"}</p></article>
-          </section>
+          <StatusNow
+            latest={hero}
+            main={main}
+            mainshock={mainshock}
+            status={status}
+            lastUpdate={lastUpdate}
+            catalogs={catalogs}
+            shared={shared}
+            onShowOnMap={chooseEvent}
+            onShare={share}
+            onRefresh={() => { setRefreshKey(key => key + 1); setSlowKey(key => key + 1); }}
+          />
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
             <div className="section-heading"><div><span className="section-kicker">VISTA GEOGRÁFICA</span><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3">M 3.0+ Sentidos</option><option value="3.5">M 3.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+ Fuertes</option><option value="6">M 6.0+</option><option value="7">M 7.0+</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 h</option><option value="6h">Últimas 6 h</option></select></label><label className="magnitude-filter">Provincia <select aria-label="Filtrar por provincia o comarca" value={province} onChange={event => { setProvince(event.target.value); setCity("all"); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option><optgroup label="Provincias">{PROVINCES.filter(item => item.kind === "provincia").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup><optgroup label="Comarcas indígenas">{PROVINCES.filter(item => item.kind === "comarca").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup>{(provinceCounts.get(FAR_OFFSHORE) ?? 0) > 0 && <option value={FAR_OFFSHORE}>Mar adentro · {provinceCounts.get(FAR_OFFSHORE)}</option>}</select></label><label className="magnitude-filter">Ciudad <select aria-label="Filtrar por ciudad o localidad" value={city} onChange={event => { setCity(event.target.value); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option>{cityGroups.map(group => <optgroup key={group.code} label={province === "all" ? `${PROVINCE_BY_ID.get(group.province)?.name ?? ""} · ${group.name}` : group.name}>{group.options.length > 1 && <option value={`d:${group.code}`}>Todo {group.name} · {group.total}</option>}{group.options.map(({ place, count }) => <option key={place.id} value={place.id}>{place.name} · {count}</option>)}</optgroup>)}</select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && (replay === null

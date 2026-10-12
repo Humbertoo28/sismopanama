@@ -9,6 +9,7 @@ import "./globals.css";
 import "./responsive.css";
 import "./usgs-layers.css";
 import "./accessibility.css";
+import "./theme.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: SITE_NAME,
   },
   ...pageSocial(SITE_TITLE, SITE_DESCRIPTION, "/"),
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#072357",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
   // La app instalada usa la barra de estado translúcida: el contenido llega hasta el borde y el CSS
@@ -50,9 +51,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Sismo Panamá" />
-        <meta name="theme-color" content="#072357" />
+        <meta name="theme-color" content="#ffffff" />
         <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <SiteStructuredData />
