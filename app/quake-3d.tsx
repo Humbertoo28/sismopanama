@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { isAftershock, type Earthquake, type ReplayStep } from "../lib/earthquakes";
+import { isAftershock, isBeforeMainshock, type Earthquake, type ReplayStep } from "../lib/earthquakes";
 import type { Contour, Fault, Felt, Mechanism, ShakeGrid } from "../lib/usgs-detail";
 import { PANAMA_RINGS } from "../lib/panama";
 import { PROVINCE_BY_ID } from "../lib/province-of";
@@ -277,7 +277,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   }, []);
 
   const baseEvents = useMemo(
-    () => (showAftershocks || replay !== null || !mainshock ? events : events.filter(event => !isAftershock(event, mainshock))),
+    () => (showAftershocks || replay !== null || !mainshock ? events : events.filter(event => !isAftershock(event, mainshock) && !isBeforeMainshock(event, mainshock))),
     [events, mainshock, showAftershocks, replay],
   );
   const visibleEvents = useMemo(() => {

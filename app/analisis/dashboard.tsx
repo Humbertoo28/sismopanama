@@ -154,11 +154,16 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
     [mainshockTime, quakes, now],
   );
   const shown = useMemo(() => filterQuakes(quakes, filters, now, sequenceStart), [quakes, filters, now, sequenceStart]);
-  const inSequence = useMemo(() => quakes.filter((quake) => quake.time >= sequenceStart).length, [quakes, sequenceStart]);
+  // Réplicas = sismos posteriores al principal. El principal entra en los gráficos, pero no en los totales ni en «mayor réplica».
+  const afterShown = useMemo(() => (mainshockTime === null ? shown : shown.filter((quake) => quake.time > mainshockTime)), [shown, mainshockTime]);
+  const inSequence = useMemo(
+    () => quakes.filter((quake) => quake.time >= sequenceStart && (mainshockTime === null || quake.time > mainshockTime)).length,
+    [quakes, sequenceStart, mainshockTime],
+  );
 
   const from = windowStart(filters.window, now, sequenceStart);
-  const latest = shown.reduce<Quake | null>((best, quake) => (!best || quake.time > best.time ? quake : best), null);
-  const strongest = shown.reduce<Quake | null>((best, quake) => (!best || quake.mag > best.mag ? quake : best), null);
+  const latest = afterShown.reduce<Quake | null>((best, quake) => (!best || quake.time > best.time ? quake : best), null);
+  const strongest = afterShown.reduce<Quake | null>((best, quake) => (!best || quake.mag > best.mag ? quake : best), null);
   const points = useMemo<TimelinePoint[]>(
     () => shown.map((quake) => ({ ...quake, role: quake.id === MAINSHOCK_ID ? "main" : quake.id === latest?.id ? "latest" : "normal" })),
     [shown, latest?.id],
@@ -168,7 +173,7 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
   const facts = useMemo(() => observedFacts(bySource, mainshockTime, now), [bySource, mainshockTime, now]);
   const depths = shown.flatMap((quake) => (quake.depth === null ? [] : [quake.depth]));
   const medianDepth = median(depths);
-  const recent3h = shown.filter((quake) => now - quake.time <= 3 * HOUR).length;
+  const recent3h = afterShown.filter((quake) => now - quake.time <= 3 * HOUR).length;
   const selected = selectedId ? quakes.find((quake) => quake.id === selectedId) ?? null : null;
   const isFresh = (id: string) => fresh[id] !== undefined && now - fresh[id] < FRESH_MS;
   const stale = lastOk !== null && now - lastOk > 3 * POLL_MS;
@@ -258,7 +263,7 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
             </div>
 
             <section className="an-kpis" aria-label="Resumen">
-              <Kpi label="Total réplicas" value={fmtInt.format(shown.length)} sub={`de ${fmtInt.format(inSequence)} desde el sismo principal`} />
+              <Kpi label="Total réplicas" value={fmtInt.format(afterShown.length)} sub={`de ${fmtInt.format(inSequence)} desde el sismo principal`} />
               <Kpi label="Última réplica" value={latest ? `M ${latest.mag.toFixed(1)}` : "—"} sub={latest ? ago(now - latest.time) : "Sin datos"} badge={latest && isFresh(latest.id) ? "NUEVA" : undefined} />
               <Kpi label="Mayor réplica" value={strongest ? `M ${strongest.mag.toFixed(1)}` : "—"} sub={strongest ? ago(now - strongest.time) : "Sin datos"} />
               <Kpi label="Últimas 3 horas" value={fmtInt.format(recent3h)} sub={`réplicas registradas (${(recent3h / 3).toFixed(1)} por hora)`} />

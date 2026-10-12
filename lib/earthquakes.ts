@@ -105,12 +105,19 @@ export function sameEvent(a: Earthquake, b: Earthquake) {
   return Math.abs(a.properties.time - b.properties.time) <= 60_000 && distanceKm(a, b) <= 120;
 }
 
-// El sismo principal fue de M 7.7. En Panamá, todos los demás sismos de la secuencia son réplicas.
+// El sismo principal fue de M 7.7. Una réplica es un sismo posterior a él: los anteriores (hubo uno de M 2.6, doce horas
+// antes y a 5 km del epicentro) no son réplicas aunque la lista arranque el 9 de octubre.
 export function isAftershock(event: Earthquake, mainshock: Earthquake) {
   return (
     event.id !== mainshock.id &&
-    !sameEvent(event, mainshock)
+    !sameEvent(event, mainshock) &&
+    event.properties.time > mainshock.properties.time
   );
+}
+
+// Los sismos de la lista que ocurrieron antes que el principal (ni son el principal ni son réplicas).
+export function isBeforeMainshock(event: Earthquake, mainshock: Earthquake) {
+  return event.id !== mainshock.id && !sameEvent(event, mainshock) && event.properties.time < mainshock.properties.time;
 }
 
 export const REGION = {

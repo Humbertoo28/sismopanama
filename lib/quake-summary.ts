@@ -1,4 +1,4 @@
-import { MAINSHOCK_ID, isAftershock, type Earthquake } from "./earthquakes";
+import { MAINSHOCK_ID, isAftershock, isBeforeMainshock, type Earthquake } from "./earthquakes";
 import { placeLabel, whereText } from "./place-of";
 import { provinceOfEvent } from "./province-of";
 
@@ -87,6 +87,7 @@ export function buildSummary(events: Earthquake[], now: number, options: Summary
   const strongest = recent.reduce<Earthquake | null>((best, event) => (!best || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
   const main = recent.find(event => event.id === MAINSHOCK_ID) ?? strongest;
   const aftershocks = main ? recent.filter(event => isAftershock(event, main)) : [];
+  const beforeMain = main ? recent.filter(event => isBeforeMainshock(event, main)).length : 0;
   const strongestAfter = aftershocks.reduce<Earthquake | null>((best, event) => (!best || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
   const last24 = recent.filter(event => now - event.properties.time <= 24 * HOUR).length;
   const lastHour = recent.filter(event => now - event.properties.time <= HOUR).length;
@@ -107,7 +108,7 @@ export function buildSummary(events: Earthquake[], now: number, options: Summary
   if (main) sections.push({ heading: "Sismo principal", lines: [quakeSentence(main)] });
   const figures = [
     main
-      ? `Desde el 9 de octubre se han registrado ${plural(recent.length, "sismo", "sismos")} en Panamá: el sismo principal y ${plural(aftershocks.length, "réplica", "réplicas")}.`
+      ? `Desde el 9 de octubre se han registrado ${plural(recent.length, "sismo", "sismos")} en Panamá: el sismo principal${beforeMain ? "," : " y"} ${plural(aftershocks.length, "réplica", "réplicas")}${beforeMain ? ` y ${beforeMain === 1 ? "1 sismo anterior" : `${beforeMain} sismos anteriores`} al principal` : ""}.`
       : `Desde el 9 de octubre se han registrado ${plural(recent.length, "sismo", "sismos")} en Panamá.`,
     `En las últimas 24 horas hubo ${plural(last24, "sismo", "sismos")}.`,
     `En la última hora hubo ${plural(lastHour, "sismo", "sismos")}.`,
