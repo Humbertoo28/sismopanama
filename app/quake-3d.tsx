@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { Earthquake, ReplayStep } from "../lib/earthquakes";
-import type { Contour, Fault, Felt } from "../lib/usgs-detail";
+import type { Contour, Fault, Felt, ShakeGrid } from "../lib/usgs-detail";
 import { PANAMA_RINGS } from "../lib/panama";
 import { PROVINCE_BY_ID } from "../lib/province-of";
 import { PROVINCE_LABELS, TOWN_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
 import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
 import PlatesLegend from "./plates-legend";
-import { intensityColor, slipColor } from "../lib/usgs-colors";
+import { intensityColor, intensityRgb, slipColor } from "../lib/usgs-colors";
 import { depthColor, isRoundDepth } from "../lib/depth";
-import { loadMosaic, paintMosaic, planTiles, type Mosaic } from "./satellite-tiles";
+import { loadMosaic, paintMosaic, paintTexture, planTiles, type Mosaic } from "./satellite-tiles";
 import { reducedMotion, shakeElement } from "./shake";
 // Inline SVG keeps these small controls independent of the icon library runtime.
 const ICON_PATHS = {
@@ -39,6 +39,9 @@ type Props = {
   shaking: Contour[] | null;
   // Límites de las placas tectónicas (datos estáticos).
   plates: boolean;
+  // Onda de sacudida: cómo se propagó por el país (intensidad del ShakeMap + llegada calculada con velocidades típicas).
+  wave: boolean;
+  shakeGrid: ShakeGrid | null;
   // Interruptores de las capas del USGS, que maneja el mapa.
   layerControls: ReactNode;
   onSelect: (id: string) => void;
@@ -69,6 +72,11 @@ const SAT_ALPHA = 0.9;
 const SAT_KEY = "sismo_3d_satellite";
 // Velocidad de la animación de la ruptura respecto al tiempo real del modelo (la ruptura dura unos 43 s).
 const RUPTURE_SPEED = 3;
+// Velocidades típicas de las ondas sísmicas en la corteza (km/s). Con ellas se calcula cuándo llega cada onda a cada punto.
+const VP = 6.0;
+const VS = 3.5;
+// Con la onda de sacudida el recorrido dura más (llega a todo el país), así que la animación va más rápida.
+const WAVE_SPEED = 6;
 const COLORS = { low: "#f5c542", mid: "#f08a24", high: "#da121a", latest: "#1d6bff", main: "#a21caf" };
 const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
 
@@ -162,7 +170,7 @@ function faultOutline(fault: Fault, strike: number): [number, number, number][] 
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, plates, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -200,6 +208,8 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const [tiles, setTiles] = useState({ loaded: 0, failed: 0, total: 0 });
   const mosaicRef = useRef<Mosaic | null>(null);
   const bufferRef = useRef<HTMLCanvasElement | null>(null);
+  const waveTexRef = useRef<HTMLCanvasElement | null>(null);
+  const waveBufRef = useRef<HTMLCanvasElement | null>(null);
   const hits = useRef<{ id: string; x: number; y: number; r: number; depth: number }[]>([]);
   const frame = useRef(0);
 
@@ -324,8 +334,60 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const selectedEvent = useMemo(() => events.find(event => event.id === selectedId) ?? null, [events, selectedId]);
 
   // La ruptura se puede animar si el modelo trae el tiempo de cada celda.
-  const ruptureDuration = fault?.durationS ?? null;
+  // Llegada de las ondas a cada celda del ShakeMap: cada celda de la falla emite desde el segundo en que se rompe, y a cada
+  // punto la onda le llega desde la celda más cercana en tiempo. Es un cálculo con velocidades típicas, no un registro.
+  const waveField = useMemo(() => {
+    if (!wave || !shakeGrid || !fault || fault.durationS === null) return null;
+    const { nx, ny, west, east, south, north } = shakeGrid;
+    const raw = atob(shakeGrid.mmi10);
+    if (raw.length !== nx * ny) return null;
+    const mmi = new Uint8Array(nx * ny);
+    for (let i = 0; i < raw.length; i++) mmi[i] = raw.charCodeAt(i);
+    const sources = fault.subfaults.map(sub => ({
+      lng: sub.ring.reduce((sum, c) => sum + c[0], 0) / 4,
+      lat: sub.ring.reduce((sum, c) => sum + c[1], 0) / 4,
+      depth: sub.ring.reduce((sum, c) => sum + c[2], 0) / 4,
+      t: sub.t ?? 0,
+    }));
+    const [arrivalS, arrivalP] = [new Float32Array(nx * ny), new Float32Array(nx * ny)];
+    let end = 0;
+    let originLng = 0;
+    let originLat = 0;
+    if (mainshock) [originLng, originLat] = mainshock.geometry.coordinates;
+    const nearKm = new Float32Array(nx * ny);
+    for (let iy = 0; iy < ny; iy++) {
+      const lat = south + ((north - south) * iy) / (ny - 1);
+      const [kx, ky] = [Math.cos((lat * Math.PI) / 180) * KM_PER_DEG, KM_PER_LAT];
+      for (let ix = 0; ix < nx; ix++) {
+        const lng = west + ((east - west) * ix) / (nx - 1);
+        let [bestS, bestP] = [Infinity, Infinity];
+        for (const source of sources) {
+          const d = Math.hypot((lng - source.lng) * kx, (lat - source.lat) * ky, source.depth);
+          bestS = Math.min(bestS, source.t + d / VS);
+          bestP = Math.min(bestP, source.t + d / VP);
+        }
+        const k = iy * nx + ix;
+        arrivalS[k] = bestS;
+        arrivalP[k] = bestP;
+        nearKm[k] = Math.hypot((lng - originLng) * kx, (lat - originLat) * ky);
+        // Solo cuenta lo que cae dentro de la escena (Panamá y sus alrededores) para decidir cuánto dura el recorrido.
+        if (lng >= scene.west && lng <= scene.east && lat >= scene.south && lat <= scene.north) end = Math.max(end, bestS);
+      }
+    }
+    return { nx, ny, mmi, arrivalS, arrivalP, nearKm, end: Math.ceil(end) };
+  }, [wave, shakeGrid, fault, mainshock, scene]);
+
+  // La línea de tiempo llega hasta que la onda cubre la escena (si se muestra) o hasta que termina la ruptura.
+  const ruptureDuration = fault?.durationS == null ? null : Math.max(fault.durationS, waveField?.end ?? 0);
+  const playSpeed = waveField ? WAVE_SPEED : RUPTURE_SPEED;
   const isPlaying = playing && ruptureDuration !== null;
+  // Hasta qué distancia del epicentro ya llegó la onda S en el segundo `t`.
+  const reachedKm = (t: number) => {
+    if (!waveField) return null;
+    let far = 0;
+    for (let k = 0; k < waveField.arrivalS.length; k++) if (waveField.arrivalS[k] <= t && waveField.nearKm[k] > far) far = waveField.nearKm[k];
+    return Math.round(far / 5) * 5;
+  };
   const startRupture = () => {
     clockRef.current = 0;
     setRuptureTime(0);
@@ -337,7 +399,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     let previous = -1;
     const tick = (now: number) => {
       if (previous < 0) previous = now;
-      clockRef.current += ((now - previous) / 1000) * RUPTURE_SPEED;
+      clockRef.current += ((now - previous) / 1000) * playSpeed;
       previous = now;
       if (clockRef.current >= ruptureDuration) {
         setRuptureTime(null);
@@ -349,7 +411,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, ruptureDuration]);
+  }, [playing, ruptureDuration, playSpeed]);
   // Al abrir el 3D con la falla cargada, la ruptura se reproduce una vez (salvo que se pidan menos animaciones).
   useEffect(() => {
     if (ruptureDuration === null || autoPlayed.current || reducedMotion()) return;
@@ -749,6 +811,61 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     [sw, se, ne, nw].forEach((p, i) => { const q = project(p); pathTo(i, q.sx, q.sy); });
     ctx.closePath();
     ctx.clip();
+    // Onda de sacudida: cada celda del ShakeMap se descubre cuando llega la onda S (con su color de intensidad) y, antes, apenas
+    // se insinúa la llegada de la P. El frente reciente va más claro. Sin animación se ve el campo completo.
+    if (waveField && shakeGrid) {
+      const { nx, ny, mmi, arrivalS, arrivalP } = waveField;
+      const tex = (waveTexRef.current ??= document.createElement("canvas"));
+      if (tex.width !== nx || tex.height !== ny) {
+        tex.width = nx;
+        tex.height = ny;
+      }
+      const tctx = tex.getContext("2d");
+      const buf = (waveBufRef.current ??= document.createElement("canvas"));
+      if (buf.width !== w || buf.height !== h) {
+        buf.width = w;
+        buf.height = h;
+      }
+      const bctx = buf.getContext("2d");
+      if (tctx && bctx) {
+        const image = tctx.createImageData(nx, ny);
+        const clock = ruptureTime ?? Infinity;
+        for (let iy = 0; iy < ny; iy++) {
+          for (let ix = 0; ix < nx; ix++) {
+            const k = iy * nx + ix;
+            const o = ((ny - 1 - iy) * nx + ix) * 4; // la fila 0 de la imagen es el norte
+            if (clock >= arrivalS[k]) {
+              const [r, g, b] = intensityRgb(mmi[k] / 10);
+              const front = clock === Infinity ? 0 : Math.max(0, 1 - (clock - arrivalS[k]) / 3.5);
+              image.data[o] = r + (255 - r) * front * 0.7;
+              image.data[o + 1] = g + (255 - g) * front * 0.7;
+              image.data[o + 2] = b + (255 - b) * front * 0.7;
+              image.data[o + 3] = 255 * (0.62 + front * 0.38);
+            } else if (clock >= arrivalP[k]) {
+              image.data[o] = 150;
+              image.data[o + 1] = 195;
+              image.data[o + 2] = 255;
+              image.data[o + 3] = 50;
+            }
+          }
+        }
+        tctx.putImageData(image, 0, 0);
+        const [hx, hy] = [(shakeGrid.east - shakeGrid.west) / (nx - 1) / 2, (shakeGrid.north - shakeGrid.south) / (ny - 1) / 2];
+        const tb = { west: shakeGrid.west - hx, east: shakeGrid.east + hx, south: shakeGrid.south - hy, north: shakeGrid.north + hy };
+        bctx.setTransform(1, 0, 0, 1, 0, 0);
+        bctx.clearRect(0, 0, w, h);
+        bctx.imageSmoothingEnabled = true;
+        bctx.imageSmoothingQuality = "high";
+        const cols = clamp(Math.round(w / 34), 10, 28);
+        const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 22);
+        paintTexture(bctx, tex, (lng, lat) => [((lng - tb.west) / (tb.east - tb.west)) * nx, ((tb.north - lat) / (tb.north - tb.south)) * ny], scene, (lng, lat) => {
+          const q = project(at(lng, lat, 0));
+          return { sx: q.sx, sy: q.sy };
+        }, cols, rows, true);
+        ctx.drawImage(buf, 0, 0, w, h);
+      }
+    }
+
     if (felt) {
       for (const [s, w2, n, e, cdi] of felt.cells) {
         const cell = [at(w2, s, 0), at(e, s, 0), at(e, n, 0), at(w2, n, 0)].map(project);
@@ -1007,7 +1124,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
+  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -1203,7 +1320,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
         </button>
       </div>
       <div className="q3-stage" ref={box}>
-        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ruptureTime !== null && <span className="q3-live"><i />Ruptura <strong>{ruptureTime.toFixed(0)} s</strong></span>}</div>
+        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ruptureTime !== null && <span className="q3-live"><i />Segundo <strong>{ruptureTime.toFixed(0)}</strong></span>}</div>
         <div className="q3-navigation" role="group" aria-label="Navegación de la escena">
           <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar" title="Acercar"><SceneIcon name="Plus" size={17} /></button>
           <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
@@ -1245,7 +1362,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           <div className="q3-anim" role="group" aria-label="Animación de la ruptura">
             <button type="button" className="q3-play" onClick={() => (isPlaying ? setPlaying(false) : ruptureTime === null ? startRupture() : setPlaying(true))}>
               <span aria-hidden="true">{isPlaying ? "❚❚" : "▶"}</span>
-              {isPlaying ? "Pausar" : ruptureTime === null ? "Ver cómo se rompió" : "Continuar"}
+              {isPlaying ? "Pausar" : ruptureTime === null ? (waveField ? "Ver la ruptura y la onda" : "Ver cómo se rompió") : "Continuar"}
             </button>
             <input
               type="range" min={0} max={ruptureDuration} step={0.1} value={ruptureTime ?? ruptureDuration} className="q3-scrub"
@@ -1260,10 +1377,13 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             />
             <span className="q3-anim-readout">
               {ruptureTime === null
-                ? `Ruptura completa: ${ruptureDuration.toFixed(0)} s, deslizamiento máx. ${fault.maxSlipM.toFixed(1)} m`
-                : `Segundo ${ruptureTime.toFixed(0)} de ${ruptureDuration.toFixed(0)} · hasta ahora, deslizamiento máx. ${fault.subfaults.reduce((m, sub) => Math.max(m, sub.t === null ? 0 : sub.slip * clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1)), 0).toFixed(1)} m`}
+                ? `Ruptura completa: ${fault.durationS?.toFixed(0)} s, deslizamiento máx. ${fault.maxSlipM.toFixed(1)} m${waveField ? `. La sacudida cubre el país unos ${waveField.end} s después de empezar` : ""}`
+                : `Segundo ${ruptureTime.toFixed(0)} de ${ruptureDuration.toFixed(0)} · deslizamiento máx. hasta ahora ${fault.subfaults.reduce((m, sub) => Math.max(m, sub.t === null ? 0 : sub.slip * clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1)), 0).toFixed(1)} m${waveField ? ` · la sacudida ya llegó a unos ${reachedKm(ruptureTime)} km del epicentro` : ""}`}
             </span>
-            <span className="q3-anim-note">Cada celda se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {RUPTURE_SPEED} veces más rápida que la realidad.</span>
+            <span className="q3-anim-note">
+              Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {playSpeed} veces más rápida que la realidad.
+              {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos."}
+            </span>
           </div>
         )}
         <div className="q3-bar" role="group" aria-label="Controles de la vista 3D">
@@ -1326,6 +1446,9 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           {felt && (
             <span><span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>Intensidad que reportó la gente</span>
           )}
+          {waveField && (
+            <span><span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>Onda de sacudida: intensidad estimada por el USGS</span>
+          )}
           {plates && <PlatesLegend />}
         </div>
         <p className="q3-note">
@@ -1344,6 +1467,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             {fault && " La ruptura es el modelo de falla que publica el USGS para el sismo principal."}
             {felt && " Los cuadros de color sobre la superficie son la intensidad que reportó la gente."}
             {shaking && " Las curvas de colores sobre la superficie son la intensidad de la sacudida que estima el USGS."}
+            {waveField && " La onda de sacudida colorea el país a medida que la onda S llega a cada lugar: el color es la intensidad que estima el USGS y el frente reciente se ve más claro; un tinte azul tenue anticipa la llegada de la onda P. Los tiempos se calculan con velocidades típicas, no con registros."}
             {plates && " Las líneas gruesas de colores son los límites entre placas tectónicas: rojo discontinuo, subducción (una placa se hunde bajo otra); amarillo, falla transformante (se deslizan de lado); celeste, extensión (se separan); morado, convergencia (chocan). Salen del modelo PB2002 de P. Bird (2003), que no es de una agencia de gobierno; son límites aproximados y en Panamá el contacto entre placas es una zona ancha."}
             {(fault || felt || shaking) && " Fuente de estas capas: USGS."}
           </p>

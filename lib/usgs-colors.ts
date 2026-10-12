@@ -19,13 +19,17 @@ const INTENSITY_STOPS: [number, [number, number, number]][] = [
   [10, [200, 0, 0]],
 ];
 
-export function intensityColor(value: number, alpha = 1) {
+export function intensityRgb(value: number): [number, number, number] {
   const v = Math.min(10, Math.max(1, value));
   const upper = INTENSITY_STOPS.findIndex(([stop]) => stop >= v);
   const [hiStop, hi] = INTENSITY_STOPS[Math.max(upper, 0)];
   const [loStop, lo] = INTENSITY_STOPS[Math.max(upper - 1, 0)];
   const t = hiStop === loStop ? 0 : (v - loStop) / (hiStop - loStop);
-  const [r, g, b] = lo.map((c, i) => Math.round(c + (hi[i] - c) * t));
+  return lo.map((c, i) => Math.round(c + (hi[i] - c) * t)) as [number, number, number];
+}
+
+export function intensityColor(value: number, alpha = 1) {
+  const [r, g, b] = intensityRgb(value);
   return `rgba(${r},${g},${b},${alpha})`;
 }
 

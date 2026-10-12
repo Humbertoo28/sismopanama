@@ -42,6 +42,10 @@ export type Felt = { responses: number; maxIntensity: number | null; cells: Felt
 // una lista de [lng, lat].
 export type Contour = { value: number; lines: [number, number][][] };
 
+// Rejilla de intensidad del ShakeMap (la intensidad que estima el USGS para cada punto), reducida a la mitad de su resolución.
+// `mmi10` es la intensidad por diez (32 = 3.2) de cada celda, de oeste a este y de sur a norte, en bytes codificados en base64.
+export type ShakeGrid = { west: number; east: number; south: number; north: number; nx: number; ny: number; mmi10: string };
+
 export type MainshockDetail = {
   id: string;
   url: string;
@@ -49,6 +53,7 @@ export type MainshockDetail = {
   fault: Fault | null;
   felt: Felt | null;
   shaking: Contour[] | null;
+  shakeGrid: ShakeGrid | null;
   fetchedAt: string;
 };
 
@@ -160,19 +165,55 @@ async function shakingOf(product: Product | undefined): Promise<Contour[] | null
   return contours.length ? contours.sort((a, b) => a.value - b.value) : null;
 }
 
+type Coverage = {
+  domain?: { axes?: { x?: { start?: number; stop?: number; num?: number }; y?: { start?: number; stop?: number; num?: number } } };
+  ranges?: { MMI?: { values?: (number | null)[]; axisNames?: string[] } };
+};
+
+async function shakeGridOf(product: Product | undefined): Promise<ShakeGrid | null> {
+  const url = product?.contents["download/coverage_mmi_low_res.covjson"]?.url;
+  if (!url) return null;
+  const coverage = (await getJson(url)) as Coverage;
+  const { x, y } = coverage.domain?.axes ?? {};
+  const values = coverage.ranges?.MMI?.values;
+  const order = coverage.ranges?.MMI?.axisNames;
+  if (!x || !y || !values || typeof x.start !== "number" || typeof x.stop !== "number" || typeof y.start !== "number" || typeof y.stop !== "number" || !x.num || !y.num) return null;
+  // Se espera el orden [y][x], con el sur primero; si el archivo trae otro, mejor no dibujar nada que dibujarlo mal.
+  if (order?.join() !== "y,x" || values.length !== x.num * y.num) return null;
+  const [dx, dy] = [(x.stop - x.start) / (x.num - 1), (y.stop - y.start) / (y.num - 1)];
+  const [nx, ny] = [Math.floor(x.num / 2), Math.floor(y.num / 2)];
+  const bytes: number[] = [];
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const block = [values[2 * j * x.num + 2 * i], values[2 * j * x.num + 2 * i + 1], values[(2 * j + 1) * x.num + 2 * i], values[(2 * j + 1) * x.num + 2 * i + 1]].filter((v): v is number => typeof v === "number");
+      const mean = block.length ? block.reduce((sum, v) => sum + v, 0) / block.length : 0;
+      bytes.push(Math.max(0, Math.min(255, Math.round(mean * 10))));
+    }
+  }
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return {
+    // Centros de la primera y la última celda: cada celda reducida cubre dos de las originales.
+    west: round(x.start + 0.5 * dx, 4), east: round(x.start + (2 * (nx - 1) + 0.5) * dx, 4),
+    south: round(y.start + 0.5 * dy, 4), north: round(y.start + (2 * (ny - 1) + 0.5) * dy, 4),
+    nx, ny, mmi10: btoa(binary),
+  };
+}
+
 export async function fetchMainshockDetail(): Promise<MainshockDetail> {
   const detail = (await queryUsgs({ eventid: MAINSHOCK_ID })) as Detail | null;
   const products = detail?.properties.products;
   if (!detail || !products) throw new Error("Respuesta inválida del catálogo");
   // La lista de cada producto viene con la versión preferida primero.
-  const [mechanism, fault, felt, shaking] = await Promise.allSettled([
+  const [mechanism, fault, felt, shaking, shakeGrid] = await Promise.allSettled([
     Promise.resolve(mechanismOf(products["moment-tensor"]?.[0])),
     faultOf(products["finite-fault"]?.[0]),
     feltOf(products["dyfi"]?.[0]),
     shakingOf(products["shakemap"]?.[0]),
+    shakeGridOf(products["shakemap"]?.[0]),
   ]);
   const value = <T,>(result: PromiseSettledResult<T | null>) => (result.status === "fulfilled" ? result.value : null);
-  [mechanism, fault, felt, shaking].forEach(result => result.status === "rejected" && console.error("USGS producto no disponible:", result.reason));
+  [mechanism, fault, felt, shaking, shakeGrid].forEach(result => result.status === "rejected" && console.error("USGS producto no disponible:", result.reason));
   return {
     id: MAINSHOCK_ID,
     url: detail.properties.url ?? `https://earthquake.usgs.gov/earthquakes/eventpage/${MAINSHOCK_ID}`,
@@ -180,6 +221,7 @@ export async function fetchMainshockDetail(): Promise<MainshockDetail> {
     fault: value(fault),
     felt: value(felt),
     shaking: value(shaking),
+    shakeGrid: value(shakeGrid),
     fetchedAt: new Date().toISOString(),
   };
 }

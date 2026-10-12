@@ -61,16 +61,19 @@ export function loadMosaic(plan: TilePlan, onTile: (ok: boolean) => void): { mos
 
 type Screen = { sx: number; sy: number };
 
-// Pinta el mosaico sobre el rectángulo de la superficie ya proyectado: se divide en una cuadrícula y cada celda en dos
-// triángulos, y cada triángulo recibe la transformación que lleva su trozo de imagen a la pantalla. El contexto debe
-// traer ya la escala del dispositivo.
-export function paintMosaic(
+// Pinta una imagen sobre el rectángulo de la superficie ya proyectado: se divide en una cuadrícula y cada celda en dos
+// triángulos, y cada triángulo recibe la transformación que lleva su trozo de imagen a la pantalla. `uv` dice en qué
+// punto de la imagen cae cada longitud y latitud. El contexto debe traer ya la escala del dispositivo.
+export function paintTexture(
   ctx: CanvasRenderingContext2D,
-  { canvas, plan }: Mosaic,
+  canvas: HTMLCanvasElement,
+  uv: (lng: number, lat: number) => [number, number],
   bounds: { west: number; east: number; south: number; north: number },
   project: (lng: number, lat: number) => Screen,
   cols: number,
   rows: number,
+  // Con imágenes semitransparentes, cada triángulo borra antes lo que hay en su zona para que las uniones no se vean más oscuras.
+  replace = false,
 ) {
   const grid: { u: number; v: number; sx: number; sy: number }[][] = [];
   for (let j = 0; j <= rows; j++) {
@@ -79,7 +82,8 @@ export function paintMosaic(
     for (let i = 0; i <= cols; i++) {
       const lng = bounds.west + ((bounds.east - bounds.west) * i) / cols;
       const { sx, sy } = project(lng, lat);
-      line.push({ u: (mercatorX(lng, plan.z) - plan.x0) * TILE, v: (mercatorY(lat, plan.z) - plan.y0) * TILE, sx, sy });
+      const [u, v] = uv(lng, lat);
+      line.push({ u, v, sx, sy });
     }
     grid.push(line);
   }
@@ -110,6 +114,7 @@ export function paintMosaic(
     });
     ctx.closePath();
     ctx.clip();
+    if (replace) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.transform(m.a, m.b, m.c, m.d, a.sx - m.a * a.u - m.c * a.v, a.sy - m.b * a.u - m.d * a.v);
     ctx.drawImage(canvas, 0, 0);
     ctx.restore();
@@ -120,4 +125,16 @@ export function paintMosaic(
       triangle(grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]);
     }
   }
+}
+
+// El mosaico satelital: la imagen está en proyección Web Mercator.
+export function paintMosaic(
+  ctx: CanvasRenderingContext2D,
+  { canvas, plan }: Mosaic,
+  bounds: { west: number; east: number; south: number; north: number },
+  project: (lng: number, lat: number) => Screen,
+  cols: number,
+  rows: number,
+) {
+  paintTexture(ctx, canvas, (lng, lat) => [(mercatorX(lng, plan.z) - plan.x0) * TILE, (mercatorY(lat, plan.z) - plan.y0) * TILE], bounds, project, cols, rows);
 }

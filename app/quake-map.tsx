@@ -112,7 +112,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
   const mapMode = useSyncExternalStore(subscribeMapMode, readMapMode, () => "satellite" as MapLayerMode);
   // Vista 3D y capas con datos del USGS (ruptura de la falla y «lo que se sintió»), compartidas por el mapa y el 3D.
   const [view3d, setView3d] = useState(false);
-  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false });
+  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false });
   const usgs = useMainshockDetail();
   const usgsLayerRef = useRef<any>(null);
   const platesLayerRef = useRef<any>(null);
@@ -442,10 +442,10 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
     if (autoRupture.current) {
       autoRupture.current = false;
       loadMainshockDetail();
-      setLayers(current => ({ ...current, rupture: true }));
+      setLayers(current => ({ ...current, rupture: true, wave: true }));
     }
   };
-  const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates") => {
+  const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates" | "wave") => {
     if (name !== "plates") loadMainshockDetail();
     setLayers(current => ({ ...current, [name]: !current[name] }));
   };
@@ -618,7 +618,14 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       ><span className="chip-long">Placas tectónicas</span><span className="chip-short" aria-hidden="true">Placas</span></button>
     </>
   );
-  const layerNote = usgs.status === "loading" && anyLayer
+  // La onda de sacudida solo existe en la vista 3D.
+  const waveChip = (
+    <button
+      type="button" className={`layer-chip${layers.wave ? " on" : ""}`} aria-pressed={layers.wave} onClick={() => toggleLayer("wave")}
+      title="Cómo se propagó la sacudida por el país: color = intensidad estimada por el USGS; el frente avanza a velocidades típicas de las ondas"
+    ><span className="chip-long">Onda de sacudida</span><span className="chip-short" aria-hidden="true">Onda</span></button>
+  );
+  const layerNote = usgs.status === "loading" && (anyLayer || layers.wave)
     ? <span className="map-layers-note" role="status">Cargando datos del USGS…</span>
     : usgs.status === "error"
     ? <span className="map-layers-note" role="alert">No se pudieron cargar los datos del USGS. <button type="button" onClick={loadMainshockDetail}>Reintentar</button></span>
@@ -637,8 +644,8 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
             events={events} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
-            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} onSelect={onSelect}
-            layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}</div>{layerNote}</>}
+            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} onSelect={onSelect}
+            layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />
         </Suspense>
       )}
