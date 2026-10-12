@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import FlagMark from "./flag-mark";
 import ThemeToggle from "./theme-toggle";
 
@@ -12,7 +13,9 @@ const PAGES = [
   ["/historia", "Historia"],
 ] as const;
 
-export default function PageHeader({ current }: { current: (typeof PAGES)[number][0] }) {
+// `children`: algo propio de la página que va en la barra, junto al botón del tema (por ejemplo, «En vivo» en Gráficos).
+// `current`: la página en la que se está (si no está en el menú, como el resumen, ninguna queda marcada).
+export default function PageHeader({ current, children }: { current: string; children?: ReactNode }) {
   return (
     <header className="site-header page-header">
       <div className="site-header-bar">
@@ -20,7 +23,10 @@ export default function PageHeader({ current }: { current: (typeof PAGES)[number
           <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
           <span>Sismo Panamá</span>
         </Link>
-        <ThemeToggle />
+        <div className="page-header-tools">
+          {children}
+          <ThemeToggle />
+        </div>
       </div>
       <nav className="page-nav" aria-label="Páginas">
         {PAGES.map(([href, label]) => (

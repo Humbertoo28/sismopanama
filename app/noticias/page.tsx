@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import PageHeader from "../page-header";
 import { fetchMediaNews, MEDIA, type MediaNews } from "../../lib/media-news";
 import { fetchOfficialNews, SOURCES, type NewsItem, type NewsSource, type OfficialNews } from "../../lib/news";
 import { OFFICIAL_ACCOUNTS, type OfficialAccount } from "../../lib/official-accounts";
@@ -131,11 +131,7 @@ export default async function NoticiasPage() {
   return (
     <div className="nw-root">
       <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Noticias sobre el sismo", path: "/noticias" }]} />
-      <header className="nw-header">
-        <Link className="nw-back" href="/">← Panel principal</Link>
-        <div className="nw-brand" aria-label="Sismo Panamá"><strong>SISMO</strong><small>PANAMÁ</small></div>
-        <span className="nw-spacer" aria-hidden="true" />
-      </header>
+      <PageHeader current="/noticias" />
 
       <main className="nw-wrap">
         <section className="nw-intro" aria-labelledby="nw-title">

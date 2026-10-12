@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import PageHeader from "../page-header";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DEFAULT_FILTERS, HOUR, MINUTE, SOURCES, WINDOWS, activitySeries, ago, filterQuakes, median, observedFacts, pickBucket,
@@ -190,14 +190,12 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
 
   return (
     <div className="an-root">
-      <header className="an-header">
-        <Link className="an-back" href="/">← Panel principal</Link>
-        <div className="an-brand" aria-label="Sismo Panamá"><strong>SISMO</strong><small>PANAMÁ</small></div>
+      <PageHeader current="/analisis">
         <span className={`an-live${failed && stale ? " an-live-off" : ""}`} role="status">
           <i aria-hidden="true" />
           {lastOk === null ? (failed ? "Sin conexión" : "Conectando…") : failed && stale ? `Sin conexión · datos de ${fmtClock.format(lastOk)}` : `En vivo · ${fmtClock.format(lastOk)}`}
         </span>
-      </header>
+      </PageHeader>
 
       {toast && (
         <div className="an-toast" role="status" key={toast.key}>

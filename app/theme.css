@@ -727,3 +727,40 @@ html[data-theme="dark"] :is(.rp-totals dd.yes, .rp-stats dd.yes) { color: #8fb8f
 .pd-tips { margin-top: 14px; font-size: calc(15px*var(--ts,1)); color: var(--ink-2); }
 .pd-tips ul { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; }
 html[data-theme="dark"] .pd-message.ok { background: #12301f; color: #8ee0ad; }
+
+/* =====================================================================
+   PÁGINAS SECUNDARIAS (Gráficos, Noticias, Historia, Resumen): encabezado común, tipografía del sitio, etiquetas en
+   texto normal y modo oscuro. Gráficos y Noticias tienen variables propias: se conectan a las del tema.
+   ===================================================================== */
+.page-header-tools { display: flex; align-items: center; gap: 12px; }
+.page-header .an-live { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: calc(14px*var(--ts,1)); font-weight: 600; letter-spacing: 0; text-transform: none; background: none; border: 0; padding: 0; }
+.page-header .an-live i { background: #1e8a4c; }
+.page-header .an-live-off i { background: var(--red); }
+/* En el celular el encabezado no tiene sitio para la hora: queda el punto (el texto sigue para lectores de pantalla). */
+@media (max-width: 700px) { .page-header .an-live { font-size: 0; gap: 0; } .page-header .an-live i { width: 10px; height: 10px; } }
+
+html .an-root { --an-surface: var(--surface); --an-canvas: var(--bg); --an-ink: var(--ink); --an-muted: var(--muted); --an-grid: var(--line); --an-hover: var(--surface-2); --an-navy: var(--primary); font-size: calc(15px*var(--ts,1)); }
+html .nw-root { --nw-surface: var(--surface); --nw-canvas: var(--bg); --nw-ink: var(--ink); --nw-muted: var(--muted); --nw-line: var(--line); --nw-navy: var(--primary); --nw-link: var(--primary); --nw-tag-bg: var(--red-soft); --nw-tag-ink: var(--red); font-size: calc(16px*var(--ts,1)); }
+html :is(.hs-main, .rs-main) { color: var(--ink); }
+
+/* Títulos con la letra del sitio (antes Space Grotesk, muy apretada) y el acento rojo. */
+html :is(.an-root, .nw-root, .hs-main, .rs-main) :is(h1, h2, h3) { font-family: "DM Sans", sans-serif; letter-spacing: -.01em; color: var(--ink); }
+html :is(.an-intro h1, .nw-intro h1, .hs-main h1, .rs-main h1) { font-size: calc(32px*var(--ts,1)); font-weight: 700; line-height: 1.15; }
+:is(.an-intro h1, .nw-intro h1, .hs-main h1, .rs-main h1):after { content: ""; display: block; width: 44px; height: 4px; margin-top: 10px; border-radius: 2px; background: var(--flag-red, #d21034); }
+html :is(.hs-table thead th, .an-field > span) { font-size: calc(14px*var(--ts,1)); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); }
+
+/* Tarjetas y textos de Historia y Resumen (colores escritos a mano en sus hojas). */
+html :is(.hs-card, .rs-card) { background: var(--surface); border-color: var(--line); box-shadow: none; }
+html :is(.hs-lead, .hs-sub, .hs-note, .rs-updated, .rs-note, .hs-lead strong) { color: var(--ink-2); }
+html .hs-tiles li { background: var(--navy, #0b2a5b); box-shadow: none; }
+:is(.hs-source a, .hs-next a, .rs-downloads button) { color: var(--primary); }
+html[data-theme="dark"] :is(.hs-source a, .hs-next a, .rs-downloads button, .nw-root a, .an-root a) { color: #8fb8ff; }
+html[data-theme="dark"] :is(.hs-table td, .hs-table tbody th, .hs-facts li, .rs-card, .rs-card li, .hs-card p) { color: var(--ink-2); }
+html[data-theme="dark"] :is(.hs-table tbody th strong, .rs-card strong) { color: var(--ink); }
+html[data-theme="dark"] .rs-downloads button { background: var(--surface-2); border-color: var(--line-strong); }
+@media (max-width: 700px) { html :is(.an-intro h1, .nw-intro h1, .hs-main h1, .rs-main h1) { font-size: calc(26px*var(--ts,1)); } }
+html[data-theme="dark"] .page-header .site-brand { color: var(--ink); }
+html[data-theme="dark"] .page-header .page-nav a:not(.active) { color: var(--ink-2); }
+html[data-theme="dark"] .nw-note { background: #33290f; border-color: #7a5c12; color: #f3e6bf; }
+html[data-theme="dark"] .nw-note strong { color: #fff4d6; }
+html[data-theme="dark"] .rs-ago { color: var(--ink-2); }

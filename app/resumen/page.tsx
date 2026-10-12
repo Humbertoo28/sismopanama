@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import PageHeader from "../page-header";
 import type { EarthquakeResponse } from "../../lib/earthquakes";
 import { buildSummary, type QuakeSummary } from "../../lib/quake-summary";
 import { SITE_URL, pageSocial } from "../../lib/site";
@@ -40,9 +40,7 @@ export default async function ResumenPage() {
   return (
     <>
       <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Resumen en texto sencillo", path: "/resumen" }]} />
-      <header className="rs-header">
-        <Link href="/">← Volver al panel principal</Link>
-      </header>
+      <PageHeader current="/resumen" />
       <main className="rs-main">
         <h1>Resumen de sismos en Panamá</h1>
         <LiveSummary initial={summary} />
