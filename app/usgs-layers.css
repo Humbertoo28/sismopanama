@@ -82,7 +82,7 @@
 .map-frame:has(.q3-overlay), .map-frame:has(.map-overlay-flag) { position: fixed; inset: 0; z-index: 3000; width: 100vw; height: 100dvh; border-radius: 0; overflow-y: auto; overscroll-behavior: contain; background: #071523;
   /* Con notch o barra de inicio (iPhone, iPad) los controles no quedan debajo. */
   box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-.map-frame:has(.q3-overlay) .q3 { min-height: 100%; border-radius: 0; }
+.map-frame:has(.q3-overlay) .q3 { min-height: 100%; border-radius: 0; padding-top: 0; } /* sin el hueco del selector de capas, que aquí está oculto */
 .map-frame:has(.q3-overlay) .q3-stage { height: max(440px, 68dvh); }
 .map-frame:has(.q3-overlay) .map-layer-selector, .map-frame:has(.q3-overlay) .map-label { display: none; }
 .map-frame:has(.q3) .map-label { color: #acd7de; background: #153140; border: 1px solid #a4cede21; box-shadow: none; }
@@ -251,6 +251,8 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
   .q3-heading-title span { display: none; }
   .q3-heading h3 { margin: 0; font-size: calc(15px*var(--ts,1)); }
   .q3-stage { height: clamp(220px, calc(100svh - 76px), 440px); }
+  /* Con la barra de pestañas abajo (menos de 700 px) hay que dejarle su sitio. */
+  @media (max-width: 700px) { .q3-stage { height: clamp(220px, calc(100svh - 128px), 440px); } }
   /* En pantalla completa (respaldo), la escena llena lo que queda debajo del encabezado. */
   .map-frame:has(.q3-overlay) .q3-stage { height: max(220px, calc(100dvh - 64px)); }
 }
