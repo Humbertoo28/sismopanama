@@ -158,13 +158,21 @@ export function observedFacts(quakes: Quake[], mainshockTime: number | null, now
   const facts: string[] = [];
   const latest = latestOf(quakes);
   if (latest) {
+    const isAfter = mainshockTime !== null && latest.time > mainshockTime;
     const last1h = quakes.filter((quake) => now - quake.time <= HOUR).length;
     const last24h = quakes.filter((quake) => now - quake.time <= DAY).length;
-    facts.push(`El último sismo registrado fue de M ${latest.mag.toFixed(1)} ${ago(now - latest.time)}. En la última hora se registraron ${last1h} y en las últimas 24 h, ${last24h}.`);
+    const noun = isAfter ? "La última réplica registrada" : "El último sismo registrado";
+    const pluralNoun = isAfter ? "réplicas" : "sismos";
+    facts.push(
+      `${noun} fue de M ${latest.mag.toFixed(1)} ${ago(now - latest.time)}. En la última hora se registraron ${last1h} ${last1h === 1 ? (isAfter ? "réplica" : "sismo") : pluralNoun} y en las últimas 24 h, ${last24h}.`,
+    );
   }
   const day = quakes.filter((quake) => now - quake.time <= DAY);
   const top24 = strongest(day);
-  if (top24 && day.length > 1) facts.push(`El mayor de las últimas 24 h fue de M ${top24.mag.toFixed(1)} (${ago(now - top24.time)}).`);
+  if (top24 && day.length > 1) {
+    const isTopAfter = mainshockTime !== null && top24.time > mainshockTime;
+    facts.push(`La mayor ${isTopAfter ? "réplica" : "magnitud"} de las últimas 24 h fue de M ${top24.mag.toFixed(1)} (${ago(now - top24.time)}).`);
+  }
   if (mainshockTime !== null) {
     const after = quakes.filter((quake) => quake.time > mainshockTime);
     const top = strongest(after);
