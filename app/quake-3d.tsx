@@ -16,6 +16,7 @@ import { travelTime } from "../lib/travel-time";
 import { buildGroundModel, groundMotion } from "../lib/ground-motion";
 import { loadMosaic, paintMosaic, paintTexture, planTiles, type Mosaic } from "./satellite-tiles";
 import { createSurfaceGL, type SurfaceGL } from "./surface-gl";
+import { loadTerrain, type Terrain } from "./terrain";
 import { reducedMotion, shakeElement } from "./shake";
 import { clamp, exploring, homeFor, makeProjection, marginsFor, orbit, type Camera, type Point, type SceneInfo } from "./quake-3d-camera";
 // Inline SVG keeps these small controls independent of the icon library runtime.
@@ -72,6 +73,8 @@ const PRESETS = {
   side: { yaw: 0, pitch: 4, zoom: 1, px: 0, py: 0 },
 } as const;
 const EXAGGERATIONS = [1, 4, 8] as const;
+// Cuántas veces se exagera la altura del terreno (salvo con «Real»).
+const TERRAIN_EXAGGERATION = 20;
 
 // Opacidad de la imagen satelital (algo translúcida para que se integre con el fondo).
 const SAT_ALPHA = 0.9;
@@ -288,6 +291,25 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       mosaicRef.current = null;
     };
   }, [satellite, west, east, south, north, maxTiles]);
+
+  // Relieve (alturas del terreno): se piden los mosaicos de la zona y cada uno que llega vuelve a pintar la superficie.
+  const terrainRef = useRef<Terrain | null>(null);
+  const [terrainTiles, setTerrainTiles] = useState(0);
+  useEffect(() => {
+    if (!satellite) {
+      terrainRef.current = null;
+      return;
+    }
+    let live = true;
+    queueMicrotask(() => live && setTerrainTiles(0));
+    const { terrain, cancel } = loadTerrain({ west, east, south, north }, 24, () => live && setTerrainTiles(count => count + 1));
+    terrainRef.current = terrain;
+    return () => {
+      live = false;
+      cancel();
+      terrainRef.current = null;
+    };
+  }, [satellite, west, east, south, north]);
 
   useEffect(() => {
     try {
@@ -545,6 +567,12 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
 
     const { w, h } = size;
     const { at, project, sp } = makeProjection(scene, camera, w, h, exaggeration);
+    // Relieve: la superficie y lo que va sobre ella (bordes, nombres, epicentros) suben a la altura del terreno. El país mide
+    // unos 900 km de ancho y su montaña más alta 3,5 km: a escala real no se nota. Con la profundidad exagerada, el relieve se
+    // exagera ×TERRAIN_EXAGGERATION (lo dice la línea de datos de la escena); con «Real», va a escala real.
+    const terrain = satellite && terrainTiles > 0 ? terrainRef.current : null;
+    const lift = exaggeration === 1 ? 1 : TERRAIN_EXAGGERATION / exaggeration;
+    const ground = (lng: number, lat: number) => at(lng, lat, terrain ? -terrain.elevKm(lng, lat) * lift : 0);
     const pathTo = (i: number, sx: number, sy: number) => {
       if (i) ctx.lineTo(sx, sy);
       else ctx.moveTo(sx, sy);
@@ -649,9 +677,12 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     // Superficie con WebGL si se puede (satélite y onda): una malla con perspectiva correcta en vez de cientos de triángulos 2D.
     if (glRef.current === undefined) glRef.current = createSurfaceGL();
     const surface = glRef.current?.usable() ? glRef.current : null;
-    const onSurface = (lng: number, lat: number) => project(at(lng, lat, 0));
-    const glCols = clamp(Math.round(w / 40), 12, 24);
-    const glRows = clamp(Math.round((glCols * scene.halfH) / scene.halfW), 6, 16);
+    const reliefScale = exaggeration === 1 ? 1 : TERRAIN_EXAGGERATION;
+    const onSurface = (lng: number, lat: number) => ({ ...project(ground(lng, lat)), shade: terrain ? terrain.shade(lng, lat, reliefScale) : 1 });
+    const onFlat = (lng: number, lat: number) => project(at(lng, lat, 0));
+    // Con relieve la malla es mucho más fina (cada vértice sube a su altura); sin él basta con pocas celdas.
+    const glCols = terrain ? clamp(Math.round(w / 6), 60, 200) : clamp(Math.round(w / 40), 12, 24);
+    const glRows = terrain ? clamp(Math.round((glCols * scene.halfH) / scene.halfW), 30, 130) : clamp(Math.round((glCols * scene.halfH) / scene.halfW), 6, 16);
 
     // Imagen satelital de la superficie. Va de fondo, antes que los sismos, para que estos se vean nítidos encima (la
     // profundidad la dan el hilo, la caja y las marcas de km). Se pinta opaca en un lienzo aparte, así no se notan las
@@ -668,7 +699,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       if (bctx) {
         // La imagen solo se vuelve a pintar si cambió algo que la afecta (cámara, tamaño, escena, mosaicos): mientras corre la
         // animación se reutiliza, que es lo que más alivia a los teléfonos.
-        const key = [w, h, dpr, camera.yaw, camera.pitch, camera.zoom, camera.px, camera.py, exaggeration, scene.west, scene.east, scene.south, scene.north, scene.floorKm, tiles.loaded, tiles.total].join("|");
+        const key = [w, h, dpr, camera.yaw, camera.pitch, camera.zoom, camera.px, camera.py, exaggeration, scene.west, scene.east, scene.south, scene.north, scene.floorKm, tiles.loaded, tiles.total, terrain ? terrainTiles : 0].join("|");
         if (bufferKeyRef.current !== key) {
           bufferKeyRef.current = key;
           bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -681,7 +712,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
             const cols = clamp(Math.round(w / 40), 12, 28);
             const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 24);
             paintMosaic(bctx, mosaic, scene, (lng, lat) => {
-              const q = onSurface(lng, lat);
+              const q = onFlat(lng, lat);
               return { sx: q.sx, sy: q.sy };
             }, cols, rows);
           }
@@ -716,7 +747,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       const m = mag ?? 0;
       const tier: Item["tier"] = m >= 5 ? "high" : m >= 3 ? "mid" : "low";
       const base = tier === "high" ? 6.5 + (m - 5) * 2.2 : tier === "mid" ? 3.4 + (m - 3) * 1.2 : 2.4;
-      return { event, mag, depth, fixed: isRoundDepth(depthRaw), tier, radius: base, p: at(lng, lat, depth), top: at(lng, lat, 0) };
+      return { event, mag, depth, fixed: isRoundDepth(depthRaw), tier, radius: base, p: at(lng, lat, depth), top: ground(lng, lat) };
     });
 
     // Las celdas de la falla se pintan después de los sismos, algo translúcidas: así el reparto del deslizamiento se lee
@@ -868,7 +899,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
 
     // Contorno de la ruptura: el rectángulo de la falla, su huella en la superficie (punteada) y los postes que los unen.
     const faultCorners = fault ? faultOutline(fault, fault.strike ?? 288) : null;
-    const faultEdge = faultCorners?.map(([lng, lat, d]) => ({ p: project(at(lng, lat, d)), top: project(at(lng, lat, 0)) })) ?? null;
+    const faultEdge = faultCorners?.map(([lng, lat, d]) => ({ p: project(at(lng, lat, d)), top: project(ground(lng, lat)) })) ?? null;
     if (faultEdge) {
       ctx.save();
       ctx.lineJoin = "round";
@@ -1004,7 +1035,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           const cols = clamp(Math.round(w / 34), 10, 28);
           const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 22);
           paintTexture(bctx, tex, (lng, lat) => [((lng - tb.west) / (tb.east - tb.west)) * nx, ((tb.north - lat) / (tb.north - tb.south)) * ny], scene, (lng, lat) => {
-            const q = onSurface(lng, lat);
+            const q = onFlat(lng, lat);
             return { sx: q.sx, sy: q.sy };
           }, cols, rows, true);
           ctx.drawImage(buf, 0, 0, w, h);
@@ -1014,7 +1045,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
 
     if (felt) {
       for (const [s, w2, n, e, cdi] of felt.cells) {
-        const cell = [at(w2, s, 0), at(e, s, 0), at(e, n, 0), at(w2, n, 0)].map(project);
+        const cell = [ground(w2, s), ground(e, s), ground(e, n), ground(w2, n)].map(project);
         ctx.beginPath();
         cell.forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy)));
         ctx.closePath();
@@ -1030,7 +1061,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         ctx.lineWidth = Number.isInteger(value) ? 2.2 : 1.4;
         for (const lineCoords of lines) {
           ctx.beginPath();
-          lineCoords.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
+          lineCoords.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
           ctx.stroke();
         }
       }
@@ -1043,7 +1074,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     for (const division of PROVINCES) {
       for (const ring of division.rings) {
         ctx.beginPath();
-        ring.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
+        ring.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
         ctx.closePath();
         ctx.stroke();
       }
@@ -1055,7 +1086,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     ctx.fillStyle = mosaic && tiles.loaded > 0 ? "rgba(255,255,255,0)" : "rgba(70,159,151,.20)";
     for (const ring of PANAMA_RINGS) {
       ctx.beginPath();
-      ring.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
+      ring.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -1068,7 +1099,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.strokeStyle = "#ffffff";
       for (const ring of province.rings) {
         ctx.beginPath();
-        ring.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
+        ring.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
         ctx.closePath();
         ctx.stroke();
       }
@@ -1081,7 +1112,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.lineJoin = "round";
       for (const boundary of PLATE_BOUNDARIES) {
         ctx.beginPath();
-        boundary.points.forEach(([lng, lat], i) => { const q = project(at(lng, lat, 0)); pathTo(i, q.sx, q.sy); });
+        boundary.points.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
         ctx.setLineDash([]);
         ctx.strokeStyle = "rgba(6,18,38,.8)";
         ctx.lineWidth = 5.2;
@@ -1132,7 +1163,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       const inside = (lng: number, lat: number) => lng >= scene.west && lng <= scene.east && lat >= scene.south && lat <= scene.north;
       const put = (text: string, lng: number, lat: number, px: number, weight: number, alpha: number, town: boolean, fill = "#ffffff", dy = 0) => {
         if (!inside(lng, lat)) return;
-        const projected = project(at(lng, lat, 0));
+        const projected = project(ground(lng, lat));
         const q = { ...projected, sy: projected.sy + dy };
         ctx.font = font(px, weight);
         const width = ctx.measureText(text).width;
@@ -1338,7 +1369,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime, onScreen]);
+  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, terrainTiles, colorBy, surfaceOpacity, ruptureTime, onScreen]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   // `tween(e)` da la cámara en el avance e (0 a 1) de la transición.
@@ -1620,7 +1651,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     <div ref={root} className={`q3${isExpanded ? " q3-expanded" : ""}${overlay ? " q3-overlay" : ""}`}>
       <div className="q3-stage" ref={box}>
         <p className="q3-scene-meta">
-          <span>{facts.count} {facts.count === 1 ? "sismo" : "sismos"}{facts.deepest !== null && <> · el más profundo a {km(facts.deepest)}</>} · profundidad ×{exaggeration}</span>
+          <span>{facts.count} {facts.count === 1 ? "sismo" : "sismos"}{facts.deepest !== null && <> · el más profundo a {km(facts.deepest)}</>} · profundidad ×{exaggeration}{satellite && terrainTiles > 0 && ` · relieve ×${exaggeration === 1 ? 1 : TERRAIN_EXAGGERATION}`}</span>
           {ruptureTime !== null && <span className="q3-live"><i />Segundo {ruptureTime.toFixed(0)}</span>}
           {ruptureTime !== null && ground && <span title={`Movimiento horizontal del terreno en el centro de la vista${ground.town ? `, cerca de ${ground.town}` : ""}, calculado con el modelo de deslizamiento del USGS (Okada, 1985). No es una medición y no está exagerado.`}>Terreno: {moveText(ground.meters)}{ground.meters >= 0.01 && ` al ${ground.short}`}</span>}
         </p>
