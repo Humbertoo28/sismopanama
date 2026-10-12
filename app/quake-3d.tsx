@@ -30,6 +30,8 @@ function SceneIcon({ name, size = 17 }: { name: keyof typeof ICON_PATHS; size?: 
 
 type Props = {
   events: Earthquake[];
+  // Filtros puestos en la página ("" = ninguno): con alguno se muestran las réplicas que deja pasar (si no, no se notaría).
+  filtersKey: string;
   mainshock: Earthquake | null;
   selectedId: string | null;
   replay: ReplayStep | null;
@@ -172,7 +174,7 @@ function faultOutline(fault: Fault, strike: number): [number, number, number][] 
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, filtersKey, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -188,9 +190,11 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const [surfaceOpacity, setSurfaceOpacity] = useState(90);
   // La pantalla tiembla cuando la onda de sacudida llega al centro de la vista (efecto visual; se puede apagar).
   const [screenShake, setScreenShake] = useState(true);
-  // Las réplicas están ocultas por defecto: la escena enseña el sismo principal, su ruptura y la onda. Con la secuencia en
-  // reproducción se muestran siempre (es justo lo que se está contando), y el sismo seleccionado nunca se oculta.
-  const [showAftershocks, setShowAftershocks] = useState(false);
+  // Las réplicas están ocultas por defecto: la escena enseña el sismo principal, su ruptura y la onda. Con algún filtro
+  // puesto, o con la secuencia en reproducción, se muestran (es justo lo que se está pidiendo ver), y el sismo seleccionado
+  // nunca se oculta. Lo que la persona elige con el interruptor vale mientras no cambie ningún filtro.
+  const [aftershockChoice, setAftershockChoice] = useState<{ key: string; show: boolean } | null>(null);
+  const showAftershocks = aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : filtersKey !== "";
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
   const [ruptureTime, setRuptureTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -203,6 +207,8 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     return reducedMotion() ? start : { ...start, yaw: start.yaw + 30, pitch: 74, zoom: 0.8 };
   });
   const introRef = useRef<() => void>(() => {});
+  const frameRef = useRef<() => void>(() => {});
+  const framedKey = useRef<string | null>(null);
   const zoomRef = useRef<(factor: number, fx: number, fy: number) => void>(() => {});
   const cameraRef = useRef(camera);
   const [satellite, setSatellite] = useState(() => {
@@ -1475,6 +1481,39 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     const zoom = clamp(0.8 * Math.min((size.w - marginL - marginR) / Math.max(maxX - minX, 1), (size.h - 2 * marginV) / Math.max(maxY - minY, 1)), 2, 5);
     goTo({ ...base, zoom, px: -((minX + maxX) / 2 - projection.originX) * zoom, py: -((minY + maxY) / 2 - size.h / 2) * zoom }, 900);
   };
+  // Al cambiar los filtros de la página, la cámara enmarca los sismos que dejan pasar; sin filtros vuelve a todo el país.
+  const frameFiltered = () => {
+    const base = home();
+    if (!filtersKey || !baseEvents.length) {
+      goTo(base, 900);
+      return;
+    }
+    const projection = makeProjection(scene, base, size.w, size.h, exaggeration);
+    const points = baseEvents.map(event => {
+      const [lng, lat, depth] = event.geometry.coordinates;
+      return projection.project(projection.at(lng, lat, depth ?? 0));
+    });
+    const [minX, maxX] = [Math.min(...points.map(q => q.sx)), Math.max(...points.map(q => q.sx))];
+    const [minY, maxY] = [Math.min(...points.map(q => q.sy)), Math.max(...points.map(q => q.sy))];
+    const [marginL, marginR, marginV] = marginsFor(size.w);
+    // Con uno o pocos sismos la caja sería diminuta: se le da un tamaño mínimo para no acercar de más.
+    const zoom = clamp(0.8 * Math.min((size.w - marginL - marginR) / Math.max(maxX - minX, 140), (size.h - 2 * marginV) / Math.max(maxY - minY, 100)), 1, 4);
+    goTo({ ...base, zoom, px: -((minX + maxX) / 2 - projection.originX) * zoom, py: -((minY + maxY) / 2 - size.h / 2) * zoom }, 900);
+  };
+  useEffect(() => {
+    frameRef.current = frameFiltered;
+  });
+  useEffect(() => {
+    const first = framedKey.current === null;
+    if (framedKey.current === filtersKey || (first && filtersKey === "")) {
+      framedKey.current = filtersKey;
+      return;
+    }
+    framedKey.current = filtersKey;
+    // Al abrir el 3D con filtros ya puestos se espera a que termine la animación de entrada.
+    const timer = window.setTimeout(() => frameRef.current(), first ? 1700 : 150);
+    return () => window.clearTimeout(timer);
+  }, [filtersKey]);
 
   return (
     <div ref={root} className={`q3${isExpanded ? " q3-expanded" : ""}${overlay ? " q3-overlay" : ""}`}>
@@ -1583,8 +1622,8 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           {mainshock && (
             <div className="q3-seg" role="group" aria-label="Réplicas del sismo principal">
               <span className="q3-cap" aria-hidden="true">Réplicas</span>
-              <button type="button" aria-pressed={showAftershocks} className={showAftershocks ? "on" : ""} onClick={() => setShowAftershocks(true)}>Sí</button>
-              <button type="button" aria-pressed={!showAftershocks} className={!showAftershocks ? "on" : ""} onClick={() => setShowAftershocks(false)}>No</button>
+              <button type="button" aria-pressed={showAftershocks} className={showAftershocks ? "on" : ""} onClick={() => setAftershockChoice({ key: filtersKey, show: true })}>Sí</button>
+              <button type="button" aria-pressed={!showAftershocks} className={!showAftershocks ? "on" : ""} onClick={() => setAftershockChoice({ key: filtersKey, show: false })}>No</button>
             </div>
           )}
           {waveField && (

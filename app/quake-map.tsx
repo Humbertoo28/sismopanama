@@ -19,6 +19,8 @@ import { reducedMotion, shakeElement, vibrate } from "./shake";
 const Quake3D = lazy(() => import("./quake-3d"));
 
 type Props = {
+  // Identifica los filtros de la lista que están puestos ("" = ninguno): con alguno, el 3D muestra las réplicas que deja pasar.
+  filtersKey: string;
   events: Earthquake[];
   mainshock: Earthquake | null;
   focus: FocusRequest | null;
@@ -105,7 +107,7 @@ const readMapMode = (): MapLayerMode => {
     return "satellite";
   }
 };
-export default function QuakeMap({ events, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, filtersKey, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
   // navegador, pasa al guardado sin el aviso de que el HTML no coincide.
@@ -643,7 +645,7 @@ export default function QuakeMap({ events, mainshock, focus, alert, replayKey, r
       {view3d && (
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
-            events={events} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
+            events={events} filtersKey={filtersKey} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
             fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
             layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />
