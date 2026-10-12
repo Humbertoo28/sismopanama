@@ -586,20 +586,6 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     ctx.fillStyle = shadow;
     ctx.fillRect(-w, -h * 4, w * 2, h * 8);
     ctx.restore();
-    const volume = [sw, se, ne, nw];
-    volume.map((p, i) => ({ i, depth: (project(p).depth + project(volume[(i + 1) % 4]).depth) / 2 }))
-      .sort((a, b) => a.depth - b.depth).forEach(({ i }) => {
-        const j = (i + 1) % 4;
-        const top = project(volume[i]);
-        const bottom = project(floor[i]);
-        const glass = ctx.createLinearGradient(top.sx, top.sy, bottom.sx, bottom.sy + 1);
-        glass.addColorStop(0, "rgba(66,151,179,.16)");
-        glass.addColorStop(0.45, "rgba(29,76,105,.10)");
-        glass.addColorStop(1, "rgba(12,27,49,.42)");
-        polygon([volume[i], volume[j], floor[j], floor[i]]);
-        ctx.fillStyle = glass;
-        ctx.fill();
-      });
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(160,190,230,.22)";
     ctx.setLineDash([]);
@@ -609,7 +595,6 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     ctx.fillStyle = "rgba(15,46,66,.48)";
     ctx.fill();
     ctx.stroke();
-    [sw, se, ne, nw].forEach((p, i) => line(p, floor[i]));
     ctx.strokeStyle = "rgba(98,170,189,.12)";
     for (let i = 1; i < 9; i++) {
       const x = scene.west + (scene.east - scene.west) * i / 9;
@@ -618,6 +603,27 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       line(at(scene.west, y, scene.floorKm), at(scene.east, y, scene.floorKm));
     }
 
+    const volume = [sw, se, ne, nw];
+    volume.map((p, i) => ({ i, depth: (project(p).depth + project(volume[(i + 1) % 4]).depth) / 2 }))
+      .sort((a, b) => a.depth - b.depth).forEach(({ i }) => {
+        const j = (i + 1) % 4;
+        const top = project(volume[i]);
+        const bottom = project(floor[i]);
+        // Corte del bloque: una franja clara junto a la superficie y luego roca que se oscurece con la profundidad. Las paredes
+        // se pintan antes que los sismos, así que ninguno queda tapado.
+        const glass = ctx.createLinearGradient(top.sx, top.sy, bottom.sx, bottom.sy + 1);
+        glass.addColorStop(0, "rgba(120,150,140,.85)");
+        glass.addColorStop(0.05, "rgba(58,78,88,.8)");
+        glass.addColorStop(0.4, "rgba(26,42,62,.78)");
+        glass.addColorStop(1, "rgba(9,17,31,.9)");
+        polygon([volume[i], volume[j], floor[j], floor[i]]);
+        ctx.fillStyle = glass;
+        ctx.fill();
+      });
+    // Aristas verticales del bloque, encima de las paredes.
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(160,190,230,.3)";
+    [sw, se, ne, nw].forEach((p, i) => line(p, floor[i]));
     // Cada 10 km de profundidad, una marca en la arista más cercana a quien mira y un plano tenue.
     const corners = [sw, se, ne, nw];
     const nearest = corners.map((p, i) => ({ i, d: project(p).depth })).sort((a, b) => b.d - a.d)[0].i;
@@ -1111,7 +1117,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       let y = Math.max(faultEdge[2].p.sy, faultEdge[3].p.sy) + 13;
       // El crédito de la imagen satelital (abajo; en el celular, a la derecha un poco más arriba) no debe quedar tapado: si el
       // rótulo cae encima, se sube sobre él.
-      const credit = w < 480 ? { x0: w - 8 - 215, x1: w - 8, y0: h - 72, y1: h - 54 } : { x0: 72, x1: 72 + 215, y0: h - 26, y1: h - 8 };
+      const credit = w < 480 ? { x0: w - 8 - 255, x1: w - 8, y0: h - 72, y1: h - 54 } : { x0: 72, x1: 72 + 255, y0: h - 26, y1: h - 8 };
       const [top, bottom] = [y - 14, y + (sub ? 18 : 4)];
       if (x + width / 2 > credit.x0 && x - width / 2 < credit.x1 && bottom > credit.y0 && top < credit.y1) y = credit.y0 - (sub ? 22 : 8);
       ruptureLabel = { text, sub, width, x, y };
@@ -1320,7 +1326,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     // en el celular, justo encima de la barra de navegación.
     if (mosaic && tiles.loaded > 0) {
       const narrow = w < 480;
-      const credit = "Imagen © Esri, Maxar, Earthstar Geographics";
+      const credit = "Imagen y relieve © Esri, Maxar, Earthstar Geographics";
       ctx.font = font(9.5, 600);
       ctx.textAlign = narrow ? "right" : "left";
       ctx.textBaseline = "alphabetic";

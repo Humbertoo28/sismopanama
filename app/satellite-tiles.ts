@@ -1,7 +1,8 @@
 "use client";
 
 // Imagen satelital para la superficie de la vista 3D: los mismos mosaicos de Esri World Imagery que usa el mapa 2D
-// («Esri Sat»), armados en un solo lienzo y pegados al plano con triángulos. No pasan por Vercel: los pide el navegador.
+// («Esri Sat»), armados en un solo lienzo y pegados al plano con triángulos. Sobre cada uno se mezcla el relieve sombreado de
+// Esri (World Shaded Relief): las montañas se ven con volumen y el mar algo más azul. No pasan por Vercel: los pide el navegador.
 
 const TILE = 256;
 
@@ -25,7 +26,11 @@ export function planTiles(b: { west: number; east: number; south: number; north:
 }
 
 const images = new Map<string, HTMLImageElement>();
-const tileUrl = (z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+const tileUrl = (service: string, z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/${z}/${y}/${x}`;
+const BASE = "World_Imagery";
+const RELIEF = "World_Shaded_Relief";
+// Cuánto se nota el relieve sobre la imagen (mezcla «soft-light»: aclara las laderas al sol y oscurece las de sombra).
+const RELIEF_ALPHA = 0.9;
 // Los mosaicos se piden primero con CORS: un lienzo con imágenes de otro sitio sin CORS no se puede pasar a WebGL, y con CORS la
 // superficie se dibuja en la tarjeta gráfica (ver surface-gl.ts). Si el servidor no lo permite (un mosaico que falla con CORS y
 // carga sin él), se pide como siempre y la superficie se dibuja en 2D. null = aún no se sabe.
@@ -38,37 +43,59 @@ export function loadMosaic(plan: TilePlan, onTile: (ok: boolean) => void): { mos
   canvas.height = (plan.y1 - plan.y0 + 1) * TILE;
   const ctx = canvas.getContext("2d");
   let cancelled = false;
+  // Pide un mosaico (con CORS si se puede) y avisa con la imagen o con null si no llegó.
+  const fetchTile = (service: string, x: number, y: number, done: (img: HTMLImageElement | null) => void) => {
+    const key = `${service}/${plan.z}/${x}/${y}`;
+    const cached = images.get(key);
+    if (cached?.complete && cached.naturalWidth) {
+      queueMicrotask(() => !cancelled && done(cached));
+      return;
+    }
+    const request = (withCors: boolean) => {
+      const img = new Image();
+      img.decoding = "async";
+      if (withCors) img.crossOrigin = "anonymous";
+      img.onload = () => {
+        if (withCors) cors = true;
+        else if (cors === null) cors = false;
+        images.set(key, img);
+        if (!cancelled) done(img);
+      };
+      img.onerror = () => {
+        // Con CORS puede fallar porque el servidor no lo permite: se vuelve a pedir sin él antes de darlo por perdido.
+        if (withCors) request(false);
+        else if (!cancelled) done(null);
+      };
+      img.src = tileUrl(service, plan.z, x, y);
+    };
+    request(cors !== false);
+  };
   for (let x = plan.x0; x <= plan.x1; x++) {
     for (let y = plan.y0; y <= plan.y1; y++) {
-      const key = `${plan.z}/${x}/${y}`;
-      const place = (img: HTMLImageElement) => ctx?.drawImage(img, (x - plan.x0) * TILE, (y - plan.y0) * TILE, TILE, TILE);
-      const cached = images.get(key);
-      if (cached?.complete && cached.naturalWidth) {
-        place(cached);
-        queueMicrotask(() => !cancelled && onTile(true));
-        continue;
-      }
-      const url = tileUrl(plan.z, x, y);
-      const request = (withCors: boolean) => {
-        const img = new Image();
-        img.decoding = "async";
-        if (withCors) img.crossOrigin = "anonymous";
-        img.onload = () => {
-          if (withCors) cors = true;
-          else if (cors === null) cors = false;
-          images.set(key, img);
-          if (cancelled) return;
-          place(img);
-          onTile(true);
-        };
-        img.onerror = () => {
-          // Con CORS puede fallar porque el servidor no lo permite: se vuelve a pedir sin él antes de darlo por perdido.
-          if (withCors) request(false);
-          else if (!cancelled) onTile(false);
-        };
-        img.src = url;
+      const [dx, dy] = [(x - plan.x0) * TILE, (y - plan.y0) * TILE];
+      // El relieve se mezcla cuando ya está la imagen de ese cuadro; si el relieve no llega, queda solo la imagen.
+      let base: HTMLImageElement | null | undefined;
+      let relief: HTMLImageElement | null | undefined;
+      const compose = () => {
+        if (!ctx || base === undefined || relief === undefined) return;
+        if (!base) {
+          onTile(false);
+          return;
+        }
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        ctx.drawImage(base, dx, dy, TILE, TILE);
+        if (relief) {
+          ctx.globalCompositeOperation = "soft-light";
+          ctx.globalAlpha = RELIEF_ALPHA;
+          ctx.drawImage(relief, dx, dy, TILE, TILE);
+          ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = 1;
+        }
+        onTile(true);
       };
-      request(cors !== false);
+      fetchTile(BASE, x, y, img => { base = img; compose(); });
+      fetchTile(RELIEF, x, y, img => { relief = img; compose(); });
     }
   }
   return { mosaic: { canvas, plan }, cancel: () => { cancelled = true; } };
