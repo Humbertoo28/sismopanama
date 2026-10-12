@@ -384,3 +384,12 @@ html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdro
 .quake-tip-hint { margin-top: 6px; font-size: calc(12px*var(--ts,1)); font-weight: 600; color: #0b2a5b; }
 @keyframes quake-tip-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .leaflet-tooltip.quake-tip { animation: none; } }
+
+/* Capas del USGS rediseñadas: ruptura continua, reportes en círculos y placas con su simbología. */
+.slip-raster { image-rendering: auto; }
+.legend-action { align-self: flex-start; margin-top: 4px; min-height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #c3ccd7; background: #fff; color: #0b2a5b; font: 600 calc(13px*var(--ts,1)) "DM Sans", sans-serif; cursor: pointer; }
+.legend-action:hover { background: #e8eef8; }
+.plate-symbol { flex: none; display: block; }
+.plate-label { color: #fff; font: 700 calc(11.5px*var(--ts,1))/1 "DM Sans", system-ui, sans-serif; letter-spacing: .08em; text-shadow: 0 0 3px #04101f, 0 0 8px #04101f, 0 1px 2px #04101f; }
+/* Con una capa del USGS encendida, los sismos se atenúan para que se lea la capa (el principal y el último siguen igual). */
+.leaflet-container.layers-on .quake-marker:not(.main):not(.latest) { opacity: .35; }

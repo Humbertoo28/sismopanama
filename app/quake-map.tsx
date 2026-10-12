@@ -9,9 +9,10 @@ import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
 import { PROVINCE_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
-import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES } from "../lib/plates";
+import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
 import PlatesLegend from "./plates-legend";
-import { intensityColor, slipColor } from "../lib/usgs-colors";
+import { intensityColor } from "../lib/usgs-colors";
+import { SLIP_GRADIENT, buildSlipRaster, feltRadiusM, sideOf, teethAlong } from "./map-layers";
 import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
 import { agoLabel, arrivals } from "../lib/quake-facts";
 import { placeTitle } from "../lib/quake-summary";
@@ -44,6 +45,10 @@ type Props = {
   onSelect: (id: string) => void;
   onReplay: (step: ReplayStep | null) => void;
 };
+
+// Escala de Mercalli en palabras, para los reportes de «¿Lo sentiste?».
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const INTENSITY_WORD = ["no sentido", "débil", "débil", "ligera", "moderada", "fuerte", "muy fuerte", "severa", "violenta", "extrema", "extrema", "extrema"];
 
 const dateTime = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
@@ -127,6 +132,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   const [view3d, setView3d] = useState(false);
   // Aviso que aparece un momento si se usa la rueda sobre el mapa sin Ctrl/⌘ (la página sigue desplazándose).
   const [wheelHint, setWheelHint] = useState(false);
+  // Cada vez que cambia se vuelve a animar cómo se propagó la ruptura (botón de la leyenda).
+  const [ruptureRun, setRuptureRun] = useState(0);
   const modKey = useSyncExternalStore(noSubscribe, () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"), () => "Ctrl");
   // Pantalla completa del mapa (el plano y el 3D comparten el mismo marco): la del navegador si la permite y, si no (iPhone y
   // navegadores integrados), el marco se amplía sobre toda la página.
@@ -525,21 +532,54 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       map.removeLayer(usgsLayerRef.current);
       usgsLayerRef.current = null;
     }
+    map.getContainer().classList.toggle("layers-on", Boolean(usgsDetail && (layers.rupture || layers.felt || layers.shaking)));
     if (!usgsDetail || (!layers.rupture && !layers.felt && !layers.shaking)) return;
     const group = L.layerGroup();
+    let frame = 0;
     if (layers.felt && usgsDetail.felt) {
-      for (const [south, west, north, east, cdi, count] of usgsDetail.felt.cells) {
-        L.rectangle([[south, west], [north, east]], {
-          pane: "felt", color: "#ffffff", weight: 0.6, opacity: 0.55, fillColor: intensityColor(cdi, 1), fillOpacity: 0.62,
-        }).bindTooltip(`Intensidad ${cdi.toFixed(1)} según ${count} ${count === 1 ? "reporte" : "reportes"} de personas`, { sticky: true }).addTo(group);
+      // Un círculo por zona de 10 km con respuestas: el color es la intensidad que reportaron y el tamaño, cuántas personas
+      // respondieron (una zona con un solo reporte es un dato menos firme y se ve pequeña). Los grandes primero, debajo.
+      const cells = [...usgsDetail.felt.cells].sort((a, b) => b[5] - a[5]);
+      for (const [south, west, north, east, cdi, count] of cells) {
+        const level = Math.min(12, Math.max(1, Math.round(cdi)));
+        L.circle([(south + north) / 2, (west + east) / 2], {
+          pane: "felt", radius: feltRadiusM(count), color: "#ffffff", weight: 1, opacity: 0.85, fillColor: intensityColor(cdi, 1), fillOpacity: 0.82,
+        }).bindTooltip(`Intensidad ${ROMAN[level - 1]} (${INTENSITY_WORD[level - 1]}) · ${count.toLocaleString("es-PA")} ${count === 1 ? "reporte" : "reportes"} de personas`, { sticky: true }).addTo(group);
       }
     }
     if (layers.rupture && usgsDetail.fault) {
-      const { subfaults, maxSlipM } = usgsDetail.fault;
-      for (const sub of subfaults) {
-        L.polygon(sub.ring.map(([lng, lat]) => [lat, lng]), {
-          pane: "rupture", interactive: false, stroke: false, fillColor: slipColor(sub.slip, maxSlipM, 1), fillOpacity: 0.55,
-        }).addTo(group);
+      const raster = buildSlipRaster(usgsDetail.fault);
+      if (raster) {
+        // El deslizamiento interpolado se pinta en un lienzo y se pone sobre el mapa como imagen: una mancha continua, más
+        // intensa donde más se movió la falla. El contorno es el plano de falla del modelo proyectado en la superficie.
+        const [[south, west], [north, east]] = raster.bounds;
+        const canvas = document.createElement("canvas");
+        canvas.width = 520;
+        canvas.height = Math.max(60, Math.round(520 * ((north - south) / ((east - west) * Math.cos(((south + north) / 2) * Math.PI / 180)))));
+        raster.render(canvas);
+        const overlay = L.imageOverlay(canvas.toDataURL(), raster.bounds, { pane: "rupture", className: "slip-raster", interactive: false }).addTo(group);
+        L.polygon(raster.outline, { pane: "rupture", interactive: false, color: "#ffffff", weight: 1.2, opacity: 0.75, dashArray: "4 5", fill: false }).addTo(group);
+        L.polyline(raster.topEdge, { pane: "rupture", color: "#ffffff", weight: 3.5, opacity: 0.95, lineCap: "round" })
+          .bindTooltip(`Borde superior de la falla que se rompió (a unos ${Math.round(raster.topDepthKm)} km de profundidad). La falla baja desde aquí hacia el norte.`, { sticky: true })
+          .addTo(group);
+        // Al encender la capa (o con «Ver cómo se rompió») la ruptura crece con los tiempos del modelo, comprimidos a ~5 s.
+        if (raster.durationS && !reducedMotion()) {
+          const total = raster.durationS;
+          const started = performance.now();
+          let last = 0;
+          const tick = (now: number) => {
+            const second = ((now - started) / 5000) * total;
+            if (now - last > 60 || second >= total) {
+              last = now;
+              raster.render(canvas, Math.min(total, second));
+              overlay.setUrl(canvas.toDataURL());
+            }
+            if (second < total) frame = requestAnimationFrame(tick);
+          };
+          raster.render(canvas, 0);
+          overlay.setUrl(canvas.toDataURL());
+          frame = requestAnimationFrame(tick);
+        }
       }
     }
     if (layers.shaking && usgsDetail.shaking) {
@@ -551,7 +591,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     }
     group.addTo(map);
     usgsLayerRef.current = group;
-  }, [layers, usgsDetail, ready]);
+    return () => cancelAnimationFrame(frame);
+  }, [layers, usgsDetail, ready, ruptureRun]);
 
   // Placas tectónicas: límites del modelo PB2002 (datos estáticos, no pasan por el servidor).
   useEffect(() => {
@@ -566,10 +607,33 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const group = L.layerGroup();
     for (const boundary of PLATE_BOUNDARIES) {
       const info = KIND_INFO[boundary.kind];
-      L.polyline(boundary.points.map(([lng, lat]) => [lat, lng]), {
-        pane: "plates", color: info.color, weight: 3.2, opacity: 0.95, lineCap: "round", dashArray: boundary.kind === "subduction" ? "10 6" : undefined,
-      }).bindTooltip(`${PLATE_NAMES[boundary.a] ?? boundary.a} – ${PLATE_NAMES[boundary.b] ?? boundary.b} · ${info.name.toLowerCase()}: ${info.meaning}`, { sticky: true }).addTo(group);
+      const latlngs = boundary.points.map(([lng, lat]) => [lat, lng]);
+      // Un borde oscuro debajo separa la línea de la imagen satelital.
+      L.polyline(latlngs, { pane: "plates", interactive: false, color: "#0b1a33", weight: 6.5, opacity: 0.55, lineCap: "round", lineJoin: "round" }).addTo(group);
+      L.polyline(latlngs, { pane: "plates", color: info.color, weight: 3, opacity: 1, lineCap: "round", lineJoin: "round" })
+        .bindTooltip(`${PLATE_NAMES[boundary.a] ?? boundary.a} – ${PLATE_NAMES[boundary.b] ?? boundary.b} · ${info.name.toLowerCase()}: ${info.meaning}${boundary.over ? `. Los triángulos señalan la placa que queda encima (${PLATE_SHORT[boundary.over] ?? boundary.over}).` : ""}`, { sticky: true })
+        .addTo(group);
     }
+    // Triángulos de subducción y convergencia, del lado de la placa que queda encima (simbología de los mapas geológicos). Se
+    // calculan en píxeles para que tengan el mismo tamaño y separación a cualquier zoom.
+    const teeth = L.layerGroup().addTo(group);
+    const drawTeeth = () => {
+      teeth.clearLayers();
+      for (const boundary of PLATE_BOUNDARIES) {
+        const label = boundary.over && PLATE_LABELS.find(item => item.code === boundary.over);
+        if (!label) continue;
+        const points = boundary.points.map(([lng, lat]) => map.latLngToLayerPoint([lat, lng]));
+        const side = sideOf(points, map.latLngToLayerPoint([label.lat, label.lng]));
+        for (const tooth of teethAlong(points, side, 24, 7)) {
+          L.polygon(tooth.map(point => map.layerPointToLatLng([point.x, point.y])), {
+            pane: "plates", interactive: false, stroke: true, color: "#0b1a33", weight: 0.8, opacity: 0.6,
+            fillColor: KIND_INFO[boundary.kind].color, fillOpacity: 1,
+          }).addTo(teeth);
+        }
+      }
+    };
+    drawTeeth();
+    map.on("zoomend", drawTeeth);
     for (const label of PLATE_LABELS) {
       L.marker([label.lat, label.lng], {
         pane: "plates", interactive: false, keyboard: false,
@@ -578,6 +642,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     }
     group.addTo(map);
     platesLayerRef.current = group;
+    return () => { map.off("zoomend", drawTeeth); };
   }, [layers.plates, ready]);
 
   // La primera vez que se abre el 3D se enciende la ruptura de la falla (es lo que más se luce); luego manda lo que elija la persona.
@@ -1039,8 +1104,13 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           {detailReady && layers.rupture && (
             fault ? (
               <div>
-                <i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />
-                <span>Ruptura: más claro, más deslizamiento (máx. {fault.maxSlipM.toFixed(1)} m)</span>
+                <i className="slip-ramp" aria-hidden="true" style={{ background: SLIP_GRADIENT }} />
+                <span>Ruptura de la falla: cuánto se deslizó, de poco (amarillo) a {fault.maxSlipM.toFixed(1)} m (rojo oscuro). Las curvas van cada 2 m; la línea blanca gruesa es el borde superior de la falla.</span>
+                {fault.durationS && (
+                  <button type="button" className="legend-action" onClick={() => setRuptureRun(run => run + 1)}>
+                    ▶ Ver cómo se rompió ({Math.round(fault.durationS)} s)
+                  </button>
+                )}
               </div>
             ) : <div><span>El USGS no publica el modelo de ruptura de este sismo.</span></div>
           )}
@@ -1048,7 +1118,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
             felt ? (
               <div>
                 <span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>
-                <span>Lo que sintió la gente: el color es la intensidad que reportaron ({felt.responses.toLocaleString("es-PA")} respuestas al USGS)</span>
+                <span>Lo que sintió la gente: cada círculo es una zona de 10 km. El color es la intensidad que reportaron y el tamaño, cuántas personas respondieron ({felt.responses.toLocaleString("es-PA")} respuestas al USGS).</span>
               </div>
             ) : <div><span>El USGS no publica reportes de personas para este sismo.</span></div>
           )}
