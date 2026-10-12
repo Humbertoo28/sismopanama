@@ -152,9 +152,15 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       }
     }
   };
-  // Con el respaldo abierto, Escape lo cierra y la página de abajo no se desplaza.
+  // Con el respaldo abierto, Escape lo cierra y la página de abajo no se desplaza. Funciona como un cuadro de diálogo: los
+  // lectores de pantalla (VoiceOver en el iPad) no leen lo que queda debajo, y al cerrarlo el foco vuelve al botón que lo abrió.
   useEffect(() => {
     if (fullscreen !== "overlay") return;
+    const frame = mapDiv.current?.parentElement;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    frame?.setAttribute("role", "dialog");
+    frame?.setAttribute("aria-modal", "true");
+    frame?.setAttribute("aria-label", "Mapa en pantalla completa");
     const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && setFullscreen("off");
     const previous = document.documentElement.style.overflow;
     document.documentElement.style.overflow = "hidden";
@@ -162,6 +168,10 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     return () => {
       document.documentElement.style.overflow = previous;
       document.removeEventListener("keydown", onKeyDown);
+      frame?.removeAttribute("role");
+      frame?.removeAttribute("aria-modal");
+      frame?.removeAttribute("aria-label");
+      if ((document.activeElement === document.body || document.activeElement === null) && opener?.isConnected) opener.focus({ preventScroll: true });
     };
   }, [fullscreen]);
   const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false });

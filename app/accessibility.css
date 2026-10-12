@@ -9,9 +9,9 @@ main:focus{outline:none}
 :where(a,button,select,input,summary,textarea,[tabindex]):focus-visible{outline:2px solid #0b1f3b;outline-offset:2px;box-shadow:0 0 0 5px #ffbf47}
 
 /* Botón flotante y panel */
-.a11y-fab{position:fixed;right:18px;bottom:18px;z-index:1700;display:flex;align-items:center;gap:8px;min-height:48px;padding:0 18px 0 14px;border:2px solid #fff;border-radius:100px;background:#0a3a8c;color:#fff;font:700 calc(13px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer;box-shadow:0 8px 24px #072357aa}
+.a11y-fab{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:1700;display:flex;align-items:center;gap:8px;min-height:48px;padding:0 18px 0 14px;border:2px solid #fff;border-radius:100px;background:#0a3a8c;color:#fff;font:700 calc(13px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer;box-shadow:0 8px 24px #072357aa}
 .a11y-fab:hover{background:#0d4aae}
-.a11y-panel{position:fixed;right:18px;bottom:78px;z-index:1701;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;padding:16px;border:1px solid #cfd8e3;border-radius:16px;background:#fff;color:#17253c;box-shadow:0 18px 50px #0a1a3340;font-family:"DM Sans",sans-serif}
+.a11y-panel{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:calc(78px + env(safe-area-inset-bottom));z-index:1701;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 110px - env(safe-area-inset-bottom));overscroll-behavior:contain;overflow:auto;padding:16px;border:1px solid #cfd8e3;border-radius:16px;background:#fff;color:#17253c;box-shadow:0 18px 50px #0a1a3340;font-family:"DM Sans",sans-serif}
 .a11y-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .a11y-head strong{font:700 calc(16px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif}
 .a11y-close{width:40px;height:40px;border:0;border-radius:10px;background:#eef2f7;color:#17253c;font-size:calc(16px*var(--ts,1));cursor:pointer}
@@ -32,6 +32,7 @@ main:focus{outline:none}
 .a11y-action:disabled{background:#8a95a5;cursor:not-allowed}
 .a11y-note{margin:0 0 8px;font-size:calc(11.5px*var(--ts,1));color:#4a5568}
 .a11y-reset{width:100%;min-height:44px;border:1px solid #cfd8e3;border-radius:12px;background:#fff;color:#17253c;font:700 calc(13px*var(--ts,1)) "DM Sans",sans-serif;cursor:pointer}
+@media(pointer:coarse){.a11y-close{width:44px;height:44px}.a11y-reset{min-height:48px}}
 @media(max-width:700px){
   .a11y-fab{right:12px;bottom:calc(84px + env(safe-area-inset-bottom));width:52px;height:52px;padding:0;justify-content:center}
   .a11y-fab span{display:none}
@@ -72,3 +73,7 @@ html[data-a11y-contrast="high"] :is(.a11y-panel,.a11y-switch,.a11y-scales button
 .a11y-link{display:flex;align-items:center;justify-content:center;min-height:46px;margin:0 0 8px;border:2px solid #0a3a8c;border-radius:12px;color:#0a3a8c;font:700 calc(13.5px*var(--ts,1)) "DM Sans",sans-serif;text-decoration:none}
 .a11y-link:hover{background:#e8eefa}
 html[data-a11y-contrast="high"] .a11y-link{color:#10151c;border-color:#10151c}
+
+/* Con texto grande no se recorta información: los nombres de lugar y las líneas de detalle de la lista y de las tarjetas se
+   parten en varias líneas en vez de cortarse con puntos suspensivos. */
+html[data-a11y-scale="large"] :is(.event-text strong,.event-text small,.metric-card p){display:block;white-space:normal;overflow:visible;text-overflow:clip;-webkit-line-clamp:unset;overflow-wrap:anywhere}

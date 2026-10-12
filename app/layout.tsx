@@ -59,7 +59,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         {/* Aplica las opciones de accesibilidad guardadas antes de pintar la página (ver accessibility.tsx). Texto fijo. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var s=JSON.parse(localStorage.getItem("sismo_panama_a11y_v1")||"null");if(s){var r=document.documentElement;if(s.scale)r.style.setProperty("--ts",String(s.scale));if(s.contrast)r.dataset.a11yContrast="high";if(s.motion)r.dataset.a11yMotion="reduce";if(s.links)r.dataset.a11yLinks="underline";if(s.spacing)r.dataset.a11ySpacing="wide"}}catch(e){}`,
+            __html: `try{var s=JSON.parse(localStorage.getItem("sismo_panama_a11y_v1")||"null");if(s){var r=document.documentElement;if(s.scale)r.style.setProperty("--ts",String(s.scale));if(s.scale>1)r.dataset.a11yScale="large";if(s.contrast)r.dataset.a11yContrast="high";if(s.motion)r.dataset.a11yMotion="reduce";if(s.links)r.dataset.a11yLinks="underline";if(s.spacing)r.dataset.a11ySpacing="wide"}}catch(e){}`,
           }}
         />
       </head>

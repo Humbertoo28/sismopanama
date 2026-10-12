@@ -32,6 +32,7 @@ function readSaved(): Settings | null {
 function applySettings(settings: Settings) {
   const root = document.documentElement;
   root.style.setProperty("--ts", String(settings.scale));
+  root.dataset.a11yScale = settings.scale > 1 ? "large" : "normal";
   root.dataset.a11yContrast = settings.contrast ? "high" : "normal";
   root.dataset.a11yMotion = settings.motion ? "reduce" : "normal";
   root.dataset.a11yLinks = settings.links ? "underline" : "normal";
