@@ -614,3 +614,96 @@ footer { border-top: 4px solid var(--flag-red); border-image: linear-gradient(va
 .fe-source { margin: 4px 0 0; font-size: calc(14px*var(--ts,1)); color: var(--muted); }
 .fe-fault { margin-top: 10px; }
 .fe-fault h4 { margin: 0; font-size: calc(16px*var(--ts,1)); color: var(--ink); }
+
+/* =====================================================================
+   MODO OSCURO (<html data-theme="dark">, ver lib/theme.ts). Azul noche con la misma identidad, sin negro puro, y contraste
+   suficiente para leer de noche. Las variables cambian casi todo; abajo, los fondos blancos que el CSS viejo escribe a mano.
+   ===================================================================== */
+.theme-toggle { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--primary); }
+.theme-toggle:hover { background: var(--primary-soft); }
+.page-header .site-header-bar { justify-content: space-between; }
+.a11y-themes button { font-size: calc(14px*var(--ts,1)); }
+@media (max-width: 700px) {
+  /* En el celular el tema se elige en el panel de accesibilidad (el encabezado ya lleva Alertas y Accesibilidad). */
+  .site-header-tools .theme-toggle { display: none; }
+  .page-header .theme-toggle { margin-right: 52px; }
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --surface: #121b2c;
+  --surface-2: #172236;
+  --ink: #e8eef7;
+  --ink-2: #c3cfdf;
+  --muted: #95a5ba;
+  --line: #24314a;
+  --line-strong: #34445f;
+  --primary: #2f6fe0;
+  --primary-hover: #3c7cf0;
+  --primary-soft: #1a2a48;
+  --red: #e0324b;
+  --red-soft: #3a1620;
+  --orange: #f2a65a;
+  --orange-soft: #3a2914;
+  --focus: #7fb0ff;
+  --navy: #10234a;
+  --navy-2: #163063;
+  /* Nombres del CSS viejo. */
+  --white: #121b2c;
+  --canvas: #0b1220;
+  --border: #24314a;
+}
+/* Textos «azules» sobre fondo oscuro: un azul más claro para que se lean (los botones siguen con fondo azul y letra blanca). */
+html[data-theme="dark"] :is(.btn-secondary, .btn-quiet, .now-refresh, .now-more a, .alerts-button.on, .theme-toggle, .report-place, .emergency-links a, .now-facts a, .featured-link, .source-link a, .layer-chip:not(.on), .rp-usgs a, .legend-action, .map-layers-note button) { color: #8fb8ff; }
+html[data-theme="dark"] .now-mag.low { color: #8fb8ff; }
+html[data-theme="dark"] .magnitude-badge.low { color: #8fb8ff; }
+html[data-theme="dark"] .now-dot { background: #3ccf7a; }
+
+/* Fondos blancos escritos a mano en globals.css, usgs-layers.css y otros. */
+html[data-theme="dark"] :is(.map-card, .events-card, .guide-card, .check-card, .emergency-card, .sources-card, .sequence-card, .usgs-card, .metric-card,
+  .magnitude-filter, .aftershock-toggle, .replay-button, .refresh-button, .layer-chip, .qs, .qs-close, .qs-secondary, .legend-action,
+  .alert-modal-card, .mag-threshold-select, .btn-stop-alert, .check-box, .map-layers, .map-layers-legend, .map-layer-selector, .map-legend,
+  .map-aside, .event-row, .official-list a, .guide-list li, .report-matches button, .rp-list, .rp-detail, .rp-totals > div, .rp-stats > div) {
+  background-color: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+html[data-theme="dark"] :is(.guide-list li, .official-list a, .event-row:hover, .rp-items button:hover, .rp-day, .report-matches button:hover) { background-color: var(--surface-2); }
+html[data-theme="dark"] :is(.magnitude-filter select, .aftershock-toggle, .replay-button, .event-text strong, .guide-list strong, .check-text strong, .official-list strong, .sources-table tbody th, .popup-title) { color: var(--ink); }
+html[data-theme="dark"] :is(.event-text small, .event-time small, .check-text small, .guide-list p, .official-list span, .sources-table td, .popup-meta) { color: var(--ink-2); }
+html[data-theme="dark"] .magnitude-filter select option { background: var(--surface); color: var(--ink); }
+html[data-theme="dark"] :is(.layer-chip.on, .segmented button.selected, .guide-chips button.selected, .rp-sort button.on) { background: var(--primary); color: #fff; border-color: var(--primary); }
+html[data-theme="dark"] :is(.guide-chips button, .guide-tabs button) { background: transparent; color: var(--ink-2); }
+html[data-theme="dark"] .replica-tag { background: #3a1620; color: #ff9aa8; border-color: #5a2230; }
+html[data-theme="dark"] .source-tag { background: #1a2a48; color: #9cc0ff; }
+html[data-theme="dark"] .main-tag { background: #2a1640; color: #d8b4fe; }
+
+/* Mapa: globos, fichas al pasar el ratón y controles de Leaflet. */
+html[data-theme="dark"] .leaflet-popup-content-wrapper, html[data-theme="dark"] .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+html[data-theme="dark"] .leaflet-tooltip { background: var(--surface); color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .leaflet-tooltip.quake-tip:before { border-top-color: var(--surface); }
+html[data-theme="dark"] .quake-tip-meta { border-top-color: var(--line); color: var(--ink-2); }
+html[data-theme="dark"] .quake-tip-mag { background: var(--primary-soft); color: #8fb8ff; }
+html[data-theme="dark"] .leaflet-bar a { background: var(--surface); color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .leaflet-control-attribution { background: #121b2ccc !important; color: var(--muted); }
+html[data-theme="dark"] .reports-map { filter: brightness(.82) contrast(1.05); }
+
+/* Encabezado, franja y pie: siguen con la identidad (el blanco de la bandera, en gris claro para no deslumbrar). */
+html[data-theme="dark"] .site-header:before { background: linear-gradient(90deg, var(--flag-red) 0 33.4%, #dfe6f0 33.4% 66.6%, #2f6fe0 66.6%); }
+html[data-theme="dark"] footer { box-shadow: 0 0 0 100vmax #08101e; }
+html[data-theme="dark"] .now-sequence { background-color: var(--navy); }
+html[data-theme="dark"] .now-help { background: var(--navy); border: 1px solid #23417a; }
+html[data-theme="dark"] .emergency-call { background: #c4213b; }
+@media (max-width: 700px) { html[data-theme="dark"] .site-nav { background: #08101e; } }
+
+/* Panel de accesibilidad y aviso de navegador integrado. */
+html[data-theme="dark"] :is(.a11y-panel, .in-app-notice) { background: var(--surface); color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .a11y-switch, html[data-theme="dark"] .a11y-reset { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .a11y-scales button:not(.on) { background: var(--surface-2); color: var(--ink); }
+html[data-theme="dark"] .a11y-switch small, html[data-theme="dark"] .a11y-note { color: var(--ink-2); }
+html[data-theme="dark"] :is(.site-nav a.active, .page-nav a.active, .sources-table small.ok) { color: #8fb8ff; }
+html[data-theme="dark"] :is(.site-nav a.active, .page-nav a.active):after { background: #8fb8ff; }
+@media (max-width: 700px) { html[data-theme="dark"] .site-nav a.active:after { background: var(--flag-red); } }
+html[data-theme="dark"] .a11y-label { color: var(--muted); }
+html[data-theme="dark"] :is(.rp-totals dd.yes, .rp-stats dd.yes) { color: #8fb8ff; }

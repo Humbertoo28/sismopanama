@@ -11,6 +11,7 @@ import Checklists from "./checklists";
 import Sources from "./sources";
 import FlagMark from "./flag-mark";
 import StatusNow from "./status-now";
+import ThemeToggle from "./theme-toggle";
 import { placeTitle } from "../lib/quake-summary";
 import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
@@ -607,6 +608,7 @@ export default function Home() {
           <div className="site-header-tools">
             <span className="site-clock">Hora de Panamá: {clock}</span>
             <span className="site-install"><PwaInstall /></span>
+            <ThemeToggle />
             <button
               type="button"
               className={`alerts-button${permStatus === "granted" ? " on" : ""}`}

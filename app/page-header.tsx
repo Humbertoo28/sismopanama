@@ -1,5 +1,6 @@
 import Link from "next/link";
 import FlagMark from "./flag-mark";
+import ThemeToggle from "./theme-toggle";
 
 // Encabezado de las páginas secundarias, con la misma identidad que la página principal: marca a la izquierda y las demás
 // páginas a un toque. `current` marca la página en la que se está.
@@ -19,6 +20,7 @@ export default function PageHeader({ current }: { current: (typeof PAGES)[number
           <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
           <span>Sismo Panamá</span>
         </Link>
+        <ThemeToggle />
       </div>
       <nav className="page-nav" aria-label="Páginas">
         {PAGES.map(([href, label]) => (

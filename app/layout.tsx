@@ -57,10 +57,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <SiteStructuredData />
-        {/* Aplica las opciones de accesibilidad guardadas antes de pintar la página (ver accessibility.tsx). Texto fijo. */}
+        {/* Aplica el tema (claro u oscuro, ver lib/theme.ts) y las opciones de accesibilidad guardadas antes de pintar la página
+            (ver accessibility.tsx). Texto fijo. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var s=JSON.parse(localStorage.getItem("sismo_panama_a11y_v1")||"null");if(s){var r=document.documentElement;if(s.scale)r.style.setProperty("--ts",String(s.scale));if(s.scale>1)r.dataset.a11yScale="large";if(s.contrast)r.dataset.a11yContrast="high";if(s.motion)r.dataset.a11yMotion="reduce";if(s.links)r.dataset.a11yLinks="underline";if(s.spacing)r.dataset.a11ySpacing="wide"}}catch(e){}`,
+            __html: `try{var c=localStorage.getItem("sismo_panama_theme_v1");c=c==="light"||c==="dark"?c:"auto";var t=c==="auto"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):c;document.documentElement.dataset.theme=t;document.documentElement.dataset.themeChoice=c;document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",t==="dark"?"#0b1220":"#ffffff")})}catch(e){}try{var s=JSON.parse(localStorage.getItem("sismo_panama_a11y_v1")||"null");if(s){var r=document.documentElement;if(s.scale)r.style.setProperty("--ts",String(s.scale));if(s.scale>1)r.dataset.a11yScale="large";if(s.contrast)r.dataset.a11yContrast="high";if(s.motion)r.dataset.a11yMotion="reduce";if(s.links)r.dataset.a11yLinks="underline";if(s.spacing)r.dataset.a11ySpacing="wide"}}catch(e){}`,
           }}
         />
       </head>
