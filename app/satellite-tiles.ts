@@ -26,6 +26,10 @@ export function planTiles(b: { west: number; east: number; south: number; north:
 
 const images = new Map<string, HTMLImageElement>();
 const tileUrl = (z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+// Los mosaicos se piden primero con CORS: un lienzo con imágenes de otro sitio sin CORS no se puede pasar a WebGL, y con CORS la
+// superficie se dibuja en la tarjeta gráfica (ver surface-gl.ts). Si el servidor no lo permite (un mosaico que falla con CORS y
+// carga sin él), se pide como siempre y la superficie se dibuja en 2D. null = aún no se sabe.
+let cors: boolean | null = null;
 
 // Arma el lienzo con los mosaicos y avisa cada vez que llega uno (`ok` falso si no se pudo bajar).
 export function loadMosaic(plan: TilePlan, onTile: (ok: boolean) => void): { mosaic: Mosaic; cancel: () => void } {
@@ -44,16 +48,27 @@ export function loadMosaic(plan: TilePlan, onTile: (ok: boolean) => void): { mos
         queueMicrotask(() => !cancelled && onTile(true));
         continue;
       }
-      const img = new Image();
-      img.decoding = "async";
-      img.onload = () => {
-        images.set(key, img);
-        if (cancelled) return;
-        place(img);
-        onTile(true);
+      const url = tileUrl(plan.z, x, y);
+      const request = (withCors: boolean) => {
+        const img = new Image();
+        img.decoding = "async";
+        if (withCors) img.crossOrigin = "anonymous";
+        img.onload = () => {
+          if (withCors) cors = true;
+          else if (cors === null) cors = false;
+          images.set(key, img);
+          if (cancelled) return;
+          place(img);
+          onTile(true);
+        };
+        img.onerror = () => {
+          // Con CORS puede fallar porque el servidor no lo permite: se vuelve a pedir sin él antes de darlo por perdido.
+          if (withCors) request(false);
+          else if (!cancelled) onTile(false);
+        };
+        img.src = url;
       };
-      img.onerror = () => !cancelled && onTile(false);
-      img.src = tileUrl(plan.z, x, y);
+      request(cors !== false);
     }
   }
   return { mosaic: { canvas, plan }, cancel: () => { cancelled = true; } };

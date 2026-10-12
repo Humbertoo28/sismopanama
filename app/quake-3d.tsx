@@ -14,7 +14,9 @@ import { depthColor, isRoundDepth } from "../lib/depth";
 import { travelTime } from "../lib/travel-time";
 import { buildGroundModel, groundMotion } from "../lib/ground-motion";
 import { loadMosaic, paintMosaic, paintTexture, planTiles, type Mosaic } from "./satellite-tiles";
+import { createSurfaceGL, type SurfaceGL } from "./surface-gl";
 import { reducedMotion, shakeElement } from "./shake";
+import { clamp, exploring, homeFor, makeProjection, marginsFor, orbit, type Camera, type Point, type SceneInfo } from "./quake-3d-camera";
 // Inline SVG keeps these small controls independent of the icon library runtime.
 const ICON_PATHS = {
   Box: "m12 3 9 5v8l-9 5-9-5V8l9-5Zm0 9 9-4M12 12 3 8m9 4v9",
@@ -61,10 +63,6 @@ type Props = {
   onSelect: (id: string) => void;
 };
 
-// px y py: desplazamiento de la escena en píxeles (mover con dos dedos o Mayús + arrastrar).
-type Camera = { yaw: number; pitch: number; zoom: number; px: number; py: number };
-type Point = { x: number; y: number; z: number };
-
 const KM_PER_DEG = 111.32;
 const KM_PER_LAT = 110.57;
 const PRESETS = {
@@ -72,15 +70,8 @@ const PRESETS = {
   top: { yaw: 0, pitch: 90, zoom: 1, px: 0, py: 0 },
   side: { yaw: 0, pitch: 4, zoom: 1, px: 0, py: 0 },
 } as const;
-
-// Punto de vista inicial según la forma del lienzo: en uno alto o casi cuadrado (celular, tablet vertical) se mira a lo largo
-// de la caja, que es larga y angosta, así llena el alto en vez de quedar chica en el centro.
-const homeFor = (w: number, h: number): Camera => {
-  const aspect = w / h;
-  // Se mira desde el sur-suroeste, hacia donde buza la falla: así la ruptura se ve de frente y no de canto.
-  return aspect < 1 ? { yaw: 78, pitch: 48, zoom: 1, px: 0, py: 0 } : { yaw: 12, pitch: 46, zoom: 1, px: 0, py: 0 };
-};
 const EXAGGERATIONS = [1, 4, 8] as const;
+
 // Opacidad de la imagen satelital (algo translúcida para que se integre con el fondo).
 const SAT_ALPHA = 0.9;
 const SAT_KEY = "sismo_3d_satellite";
@@ -94,10 +85,7 @@ const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day
 
 const depthOf = (event: Earthquake) => event.geometry.coordinates[2];
 // Profundidad con un decimal como máximo (12.647 → 12.6).
-// Márgenes del encuadre (izquierda, derecha, vertical): a la izquierda van los kilómetros de profundidad.
-const marginsFor = (w: number) => (w < 480 ? ([44, 18, 52] as const) : ([56, 60, 42] as const));
 const km = (value: number) => `${Math.round(value * 10) / 10} km`;
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 type Item = {
   event: Earthquake;
@@ -116,46 +104,6 @@ const COUNTRY = (() => {
   const [lngs, lats] = [points.map(p => p[0]), points.map(p => p[1])];
   return { west: Math.min(...lngs), east: Math.max(...lngs), south: Math.min(...lats), north: Math.max(...lats) };
 })();
-
-type SceneInfo = {
-  south: number; north: number; west: number; east: number;
-  lat0: number; lng0: number;
-  toKm: (lng: number, lat: number) => { x: number; y: number };
-  floorKm: number; halfW: number; halfH: number;
-};
-
-// Cámara → pantalla. Km (este, norte, arriba) pasan a un plano con un poco de perspectiva, y la caja entera (superficie y
-// suelo de profundidad) se encuadra en el lienzo desde cualquier ángulo. `depth` crece hacia quien mira, para ordenar de
-// lejos a cerca.
-function makeProjection(scene: SceneInfo, camera: Camera, w: number, h: number, exaggeration: number) {
-  const yaw = (camera.yaw * Math.PI) / 180;
-  const pitch = (camera.pitch * Math.PI) / 180;
-  const [cy, sy, cp, sp] = [Math.cos(yaw), Math.sin(yaw), Math.cos(pitch), Math.sin(pitch)];
-  const radius = Math.hypot(scene.halfW, scene.halfH, (scene.floorKm * exaggeration) / 2);
-  const dist = radius * 3.2;
-  const midZ = -(scene.floorKm * exaggeration) / 2;
-  const at = (lng: number, lat: number, depthKm: number): Point => ({ ...scene.toKm(lng, lat), z: -depthKm * exaggeration });
-  const raw = (p: Point) => {
-    const x1 = p.x * cy - p.y * sy;
-    const y1 = p.x * sy + p.y * cy;
-    const z1 = p.z - midZ;
-    const toward = -y1 * cp + z1 * sp;
-    const k = dist / (dist - toward);
-    return { rx: x1 * k, ry: (y1 * sp + z1 * cp) * k, depth: toward, k };
-  };
-  const box8 = ([scene.south, scene.north] as const).flatMap(lat => ([scene.west, scene.east] as const).flatMap(lng => [at(lng, lat, 0), at(lng, lat, scene.floorKm)])).map(raw);
-  const [minX, maxX] = [Math.min(...box8.map(r => r.rx)), Math.max(...box8.map(r => r.rx))];
-  const [minY, maxY] = [Math.min(...box8.map(r => r.ry)), Math.max(...box8.map(r => r.ry))];
-  const [marginL, marginR, marginV] = marginsFor(w);
-  const fit = Math.min((w - marginL - marginR) / (maxX - minX), (h - 2 * marginV) / (maxY - minY));
-  const scale = fit * camera.zoom;
-  const originX = marginL + (w - marginL - marginR) / 2;
-  const project = (p: Point) => {
-    const r = raw(p);
-    return { sx: originX + (r.rx - (minX + maxX) / 2) * scale + camera.px, sy: h / 2 - (r.ry - (minY + maxY) / 2) * scale + camera.py, depth: r.depth, k: r.k };
-  };
-  return { at, project, sp, fit, originX };
-}
 
 // Las cuatro esquinas del rectángulo de la falla (arriba-izquierda, arriba-derecha, abajo-derecha, abajo-izquierda),
 // sacadas de las celdas del modelo: las más extremas a lo largo del rumbo y de la profundidad.
@@ -255,6 +203,11 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   const bufferKeyRef = useRef("");
   const waveTexRef = useRef<HTMLCanvasElement | null>(null);
   const waveBufRef = useRef<HTMLCanvasElement | null>(null);
+  // Píxeles de la onda (sin y con el alfa multiplicado) y de qué estado de la animación son; ver el dibujo de la onda.
+  const waveDataRef = useRef<{ data: Uint8ClampedArray; premultiplied: Uint8Array; field: unknown; clock: number } | null>(null);
+  const waveUploadRef = useRef<{ gl: SurfaceGL; field: unknown; clock: number } | null>(null);
+  // La superficie (satélite y onda) se pinta con WebGL cuando se puede (undefined = aún no se intentó; null = no hay).
+  const glRef = useRef<SurfaceGL | null | undefined>(undefined);
   const hits = useRef<{ id: string; x: number; y: number; r: number; depth: number }[]>([]);
   const frame = useRef(0);
 
@@ -272,6 +225,16 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       const { width, height } = entries[0].contentRect;
       setSize({ w: Math.max(240, Math.round(width)), h: Math.max(220, Math.round(height)) });
     });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  // Fuera de pantalla no se dibuja (por ejemplo, con la animación en marcha cuando la persona ya bajó a otra sección): ahorra
+  // batería. Al volver a verse se pinta de nuevo.
+  const [onScreen, setOnScreen] = useState(true);
+  useEffect(() => {
+    const element = box.current;
+    if (!element || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(entries => setOnScreen(entries[entries.length - 1].isIntersecting), { rootMargin: "120px" });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -358,6 +321,14 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     if (raw.length !== nx * ny) return null;
     const mmi = new Uint8Array(nx * ny);
     for (let i = 0; i < raw.length; i++) mmi[i] = raw.charCodeAt(i);
+    // El color de cada celda no cambia con la animación: se calcula una vez (con pocos valores distintos de intensidad).
+    const rgb = new Uint8Array(nx * ny * 3);
+    const palette = new Map<number, [number, number, number]>();
+    for (let i = 0; i < mmi.length; i++) {
+      let color = palette.get(mmi[i]);
+      if (!color) palette.set(mmi[i], (color = intensityRgb(mmi[i] / 10)));
+      [rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]] = color;
+    }
     const sources = fault.subfaults.map(sub => ({
       lng: sub.ring.reduce((sum, c) => sum + c[0], 0) / 4,
       lat: sub.ring.reduce((sum, c) => sum + c[1], 0) / 4,
@@ -391,7 +362,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         if (lng >= scene.west && lng <= scene.east && lat >= scene.south && lat <= scene.north) end = Math.max(end, bestS);
       }
     }
-    return { nx, ny, mmi, arrivalS, arrivalP, nearKm, end: Math.ceil(end) };
+    return { nx, ny, mmi, rgb, arrivalS, arrivalP, nearKm, end: Math.ceil(end) };
   }, [wave, shakeGrid, fault, mainshock, scene]);
   // Sentido del deslizamiento: del plano del mecanismo focal que coincide con la falla del modelo (mismo rumbo) se saca hacia
   // dónde se mueve el bloque que buza (el «techo») respecto al otro; el otro lado se mueve al contrario. Solo la dirección
@@ -502,6 +473,12 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       if (el) el.style.transform = "";
     };
   }, []);
+  useEffect(() => {
+    return () => {
+      glRef.current?.dispose();
+      glRef.current = undefined;
+    };
+  }, []);
   const startRupture = () => {
     clockRef.current = 0;
     setRuptureTime(0);
@@ -567,7 +544,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   // Cualquier cambio en la cámara, la escala vertical o los datos vuelve a pintar el lienzo.
   useEffect(() => {
     const el = canvas.current;
-    if (!el) return;
+    if (!el || !onScreen) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     el.width = Math.round(size.w * dpr);
     el.height = Math.round(size.h * dpr);
@@ -675,6 +652,13 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.fillText(`${km} km`, q.sx - 9, q.sy);
     }
 
+    // Superficie con WebGL si se puede (satélite y onda): una malla con perspectiva correcta en vez de cientos de triángulos 2D.
+    if (glRef.current === undefined) glRef.current = createSurfaceGL();
+    const surface = glRef.current?.usable() ? glRef.current : null;
+    const onSurface = (lng: number, lat: number) => project(at(lng, lat, 0));
+    const glCols = clamp(Math.round(w / 40), 12, 24);
+    const glRows = clamp(Math.round((glCols * scene.halfH) / scene.halfW), 6, 16);
+
     // Imagen satelital de la superficie. Va de fondo, antes que los sismos, para que estos se vean nítidos encima (la
     // profundidad la dan el hilo, la caja y las marcas de km). Se pinta opaca en un lienzo aparte, así no se notan las
     // uniones entre triángulos, y luego se mezcla.
@@ -695,13 +679,18 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           bufferKeyRef.current = key;
           bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           bctx.clearRect(0, 0, w, h);
-          bctx.imageSmoothingQuality = "high";
-          const cols = clamp(Math.round(w / 40), 12, 28);
-          const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 24);
-          paintMosaic(bctx, mosaic, scene, (lng, lat) => {
-            const q = project(at(lng, lat, 0));
-            return { sx: q.sx, sy: q.sy };
-          }, cols, rows);
+          if (surface?.setMosaic(mosaic, tiles.loaded)) {
+            surface.drawMosaic({ w, h, dpr }, scene, mosaic, onSurface, glCols, glRows);
+            bctx.drawImage(surface.canvas, 0, 0, w, h);
+          } else {
+            bctx.imageSmoothingQuality = "high";
+            const cols = clamp(Math.round(w / 40), 12, 28);
+            const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 24);
+            paintMosaic(bctx, mosaic, scene, (lng, lat) => {
+              const q = onSurface(lng, lat);
+              return { sx: q.sx, sy: q.sy };
+            }, cols, rows);
+          }
         }
         ctx.save();
         ctx.globalAlpha = SAT_ALPHA * surfaceOpacity / 100;
@@ -955,55 +944,69 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     // Onda de sacudida: cada celda del ShakeMap se descubre cuando llega la onda S (con su color de intensidad) y, antes, apenas
     // se insinúa la llegada de la P. El frente reciente va más claro. Sin animación se ve el campo completo.
     if (waveField && shakeGrid) {
-      const { nx, ny, mmi, arrivalS, arrivalP } = waveField;
-      const tex = (waveTexRef.current ??= document.createElement("canvas"));
-      if (tex.width !== nx || tex.height !== ny) {
-        tex.width = nx;
-        tex.height = ny;
-      }
-      const tctx = tex.getContext("2d");
-      const buf = (waveBufRef.current ??= document.createElement("canvas"));
-      if (buf.width !== w || buf.height !== h) {
-        buf.width = w;
-        buf.height = h;
-      }
-      const bctx = buf.getContext("2d");
-      if (tctx && bctx) {
-        const image = tctx.createImageData(nx, ny);
-        const clock = ruptureTime ?? Infinity;
+      const { nx, ny, rgb, arrivalS, arrivalP } = waveField;
+      const clock = ruptureTime ?? Infinity;
+      // Los píxeles solo se rehacen si cambió el instante de la animación (no al mover la cámara).
+      let pixels = waveDataRef.current;
+      if (!pixels || pixels.data.length !== nx * ny * 4) pixels = waveDataRef.current = { data: new Uint8ClampedArray(nx * ny * 4), premultiplied: new Uint8Array(nx * ny * 4), field: null, clock: NaN };
+      if (pixels.field !== waveField || pixels.clock !== clock) {
+        pixels.field = waveField;
+        pixels.clock = clock;
+        const { data, premultiplied } = pixels;
         for (let iy = 0; iy < ny; iy++) {
           for (let ix = 0; ix < nx; ix++) {
             const k = iy * nx + ix;
             const o = ((ny - 1 - iy) * nx + ix) * 4; // la fila 0 de la imagen es el norte
+            let [r, g, b, a] = [0, 0, 0, 0];
             if (clock >= arrivalS[k]) {
-              const [r, g, b] = intensityRgb(mmi[k] / 10);
               const front = clock === Infinity ? 0 : Math.max(0, 1 - (clock - arrivalS[k]) / 3.5);
-              image.data[o] = r + (255 - r) * front * 0.7;
-              image.data[o + 1] = g + (255 - g) * front * 0.7;
-              image.data[o + 2] = b + (255 - b) * front * 0.7;
-              image.data[o + 3] = 255 * (0.62 + front * 0.38);
+              [r, g, b, a] = [rgb[k * 3] + (255 - rgb[k * 3]) * front * 0.7, rgb[k * 3 + 1] + (255 - rgb[k * 3 + 1]) * front * 0.7, rgb[k * 3 + 2] + (255 - rgb[k * 3 + 2]) * front * 0.7, 255 * (0.62 + front * 0.38)];
             } else if (clock >= arrivalP[k]) {
-              image.data[o] = 150;
-              image.data[o + 1] = 195;
-              image.data[o + 2] = 255;
-              image.data[o + 3] = 50;
+              [r, g, b, a] = [150, 195, 255, 50];
             }
+            [data[o], data[o + 1], data[o + 2], data[o + 3]] = [r, g, b, a];
+            // Para la tarjeta gráfica, con el alfa ya multiplicado (así la mezcla de colores vecinos no deja bordes oscuros).
+            [premultiplied[o], premultiplied[o + 1], premultiplied[o + 2], premultiplied[o + 3]] = [data[o] * (data[o + 3] / 255), data[o + 1] * (data[o + 3] / 255), data[o + 2] * (data[o + 3] / 255), data[o + 3]];
           }
         }
-        tctx.putImageData(image, 0, 0);
-        const [hx, hy] = [(shakeGrid.east - shakeGrid.west) / (nx - 1) / 2, (shakeGrid.north - shakeGrid.south) / (ny - 1) / 2];
-        const tb = { west: shakeGrid.west - hx, east: shakeGrid.east + hx, south: shakeGrid.south - hy, north: shakeGrid.north + hy };
-        bctx.setTransform(1, 0, 0, 1, 0, 0);
-        bctx.clearRect(0, 0, w, h);
-        bctx.imageSmoothingEnabled = true;
-        bctx.imageSmoothingQuality = "high";
-        const cols = clamp(Math.round(w / 34), 10, 28);
-        const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 22);
-        paintTexture(bctx, tex, (lng, lat) => [((lng - tb.west) / (tb.east - tb.west)) * nx, ((tb.north - lat) / (tb.north - tb.south)) * ny], scene, (lng, lat) => {
-          const q = project(at(lng, lat, 0));
-          return { sx: q.sx, sy: q.sy };
-        }, cols, rows, true);
-        ctx.drawImage(buf, 0, 0, w, h);
+      }
+      const [hx, hy] = [(shakeGrid.east - shakeGrid.west) / (nx - 1) / 2, (shakeGrid.north - shakeGrid.south) / (ny - 1) / 2];
+      const tb = { west: shakeGrid.west - hx, east: shakeGrid.east + hx, south: shakeGrid.south - hy, north: shakeGrid.north + hy };
+      if (surface) {
+        const uploaded = waveUploadRef.current;
+        if (!uploaded || uploaded.gl !== surface || uploaded.field !== waveField || uploaded.clock !== clock) {
+          surface.setWave(pixels.premultiplied, nx, ny);
+          waveUploadRef.current = { gl: surface, field: waveField, clock };
+        }
+        surface.drawWave({ w, h, dpr }, scene, tb, onSurface, glCols, glRows);
+        ctx.drawImage(surface.canvas, 0, 0, w, h);
+      } else {
+        const tex = (waveTexRef.current ??= document.createElement("canvas"));
+        if (tex.width !== nx || tex.height !== ny) {
+          tex.width = nx;
+          tex.height = ny;
+        }
+        const tctx = tex.getContext("2d");
+        const buf = (waveBufRef.current ??= document.createElement("canvas"));
+        if (buf.width !== w || buf.height !== h) {
+          buf.width = w;
+          buf.height = h;
+        }
+        const bctx = buf.getContext("2d");
+        if (tctx && bctx) {
+          tctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), nx, ny), 0, 0);
+          bctx.setTransform(1, 0, 0, 1, 0, 0);
+          bctx.clearRect(0, 0, w, h);
+          bctx.imageSmoothingEnabled = true;
+          bctx.imageSmoothingQuality = "high";
+          const cols = clamp(Math.round(w / 34), 10, 28);
+          const rows = clamp(Math.round((cols * scene.halfH) / scene.halfW), 8, 22);
+          paintTexture(bctx, tex, (lng, lat) => [((lng - tb.west) / (tb.east - tb.west)) * nx, ((tb.north - lat) / (tb.north - tb.south)) * ny], scene, (lng, lat) => {
+            const q = onSurface(lng, lat);
+            return { sx: q.sx, sy: q.sy };
+          }, cols, rows, true);
+          ctx.drawImage(buf, 0, 0, w, h);
+        }
       }
     }
 
@@ -1326,25 +1329,49 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
+  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime, onScreen]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
-  const goTo = (target: Camera, ms = 650) => {
+  // `tween(e)` da la cámara en el avance e (0 a 1) de la transición.
+  const animate = (tween: (e: number) => Camera, ms: number) => {
     cancelAnimationFrame(frame.current);
     if (reducedMotion()) {
-      setCamera(target);
+      setCamera(tween(1));
       return;
     }
-    const from = cameraRef.current;
     let begin = -1;
     const step = (now: number) => {
       if (begin < 0) begin = now;
       const t = Math.min(1, (now - begin) / ms);
-      const e = 1 - Math.pow(1 - t, 3);
-      setCamera({ yaw: from.yaw + (target.yaw - from.yaw) * e, pitch: from.pitch + (target.pitch - from.pitch) * e, zoom: from.zoom + (target.zoom - from.zoom) * e, px: from.px + (target.px - from.px) * e, py: from.py + (target.py - from.py) * e });
+      setCamera(tween(1 - Math.pow(1 - t, 3)));
       if (t < 1) frame.current = requestAnimationFrame(step);
     };
     frame.current = requestAnimationFrame(step);
+  };
+  const goTo = (target: Camera, ms = 650) => {
+    const from = cameraRef.current;
+    const mix = (a: number, b: number, e: number) => a + (b - a) * e;
+    animate(e => ({ yaw: mix(from.yaw, target.yaw, e), pitch: mix(from.pitch, target.pitch, e), zoom: mix(from.zoom, target.zoom, e), px: mix(from.px, target.px, e), py: mix(from.py, target.py, e) }), ms);
+  };
+  // Cambia el ángulo (vista de arriba, de lado, giro de 45°…) sin perder lo que se mira ni acercar o alejar de golpe:
+  // - Con la vista general se vuelve a encuadrar la caja entera desde el nuevo ángulo (sin acercar más de lo que ya estaba).
+  // - Explorando (con zoom o movida), el zoom se conserva y el punto del centro de la vista es el eje: no se mueve en pantalla.
+  const rotateTo = (yaw: number, pitch: number, ms = 650) => {
+    const from = cameraRef.current;
+    const { w, h } = size;
+    const weight = exploring(from, w, h);
+    const now = makeProjection(scene, from, w, h, exaggeration);
+    const overview = now.framing(yaw, pitch, from.zoom);
+    const zoom = overview.zoom + (from.zoom - overview.zoom) * weight;
+    const pivot = weight > 0 ? now.surfacePoint(now.originX, h / 2) : null;
+    const anchor = pivot ? now.project(pivot) : null;
+    const mix = (a: number, b: number, e: number) => a + (b - a) * e;
+    animate(e => {
+      const step: Camera = { yaw: mix(from.yaw, yaw, e), pitch: mix(from.pitch, pitch, e), zoom: mix(from.zoom, zoom, e), px: mix(from.px, overview.px, e), py: mix(from.py, overview.py, e) };
+      if (!pivot || !anchor) return step;
+      const held = makeProjection(scene, { ...step, px: from.px, py: from.py }, w, h, exaggeration).project(pivot);
+      return { ...step, px: step.px + (from.px + anchor.sx - held.sx - step.px) * weight, py: step.py + (from.py + anchor.sy - held.sy - step.py) * weight };
+    }, ms);
   };
   // Punto de vista inicial según el tamaño real del escenario en este instante (el estado `size` puede ir un cuadro atrasado
   // justo al abrir).
@@ -1416,7 +1443,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       return;
     }
     if (state.pan) panBy(dx, dy);
-    else setCamera(c => ({ ...c, yaw: c.yaw + dx * 0.4, pitch: clamp(c.pitch - dy * 0.3, 3, 90) }));
+    else setCamera(c => orbit(scene, c, c.yaw + dx * 0.4, clamp(c.pitch - dy * 0.3, 3, 90), size.w, size.h, exaggeration));
   };
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const state = drag.current;
@@ -1461,10 +1488,10 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     const handled = event.altKey
       ? ({ ArrowLeft: () => panBy(40, 0), ArrowRight: () => panBy(-40, 0), ArrowUp: () => panBy(0, 40), ArrowDown: () => panBy(0, -40) } as Record<string, () => void>)[event.key]
       : ({
-          ArrowLeft: () => setCamera(c => ({ ...c, yaw: c.yaw - step })),
-          ArrowRight: () => setCamera(c => ({ ...c, yaw: c.yaw + step })),
-          ArrowUp: () => setCamera(c => ({ ...c, pitch: clamp(c.pitch + step, 3, 90) })),
-          ArrowDown: () => setCamera(c => ({ ...c, pitch: clamp(c.pitch - step, 3, 90) })),
+          ArrowLeft: () => setCamera(c => orbit(scene, c, c.yaw - step, c.pitch, size.w, size.h, exaggeration)),
+          ArrowRight: () => setCamera(c => orbit(scene, c, c.yaw + step, c.pitch, size.w, size.h, exaggeration)),
+          ArrowUp: () => setCamera(c => orbit(scene, c, c.yaw, clamp(c.pitch + step, 3, 90), size.w, size.h, exaggeration)),
+          ArrowDown: () => setCamera(c => orbit(scene, c, c.yaw, clamp(c.pitch - step, 3, 90), size.w, size.h, exaggeration)),
           "+": () => zoomAt(1.2, cx, cy),
           "=": () => zoomAt(1.2, cx, cy),
           "-": () => zoomAt(1 / 1.2, cx, cy),
@@ -1488,7 +1515,8 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   };
   const view = (name: "perspective" | "top" | "side") => {
     revealStage();
-    goTo({ ...(name === "perspective" ? home() : PRESETS[name]), zoom: cameraRef.current.zoom });
+    const angles = name === "perspective" ? home() : PRESETS[name];
+    rotateTo(angles.yaw, angles.pitch);
   };
   // Mira la falla de frente (perpendicular al plano) a escala real y centrada: así se ve el
   // reparto del deslizamiento como en las figuras de los sismólogos. Usa el rumbo y el buzamiento que publica el USGS.
@@ -1594,7 +1622,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
           <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label="Alejar" title="Alejar"><SceneIcon name="Minus" size={17} /></button>
           <button type="button" onClick={() => goTo(home())} aria-label="Restablecer vista 3D" title="Restablecer vista"><SceneIcon name="Focus" size={17} /></button>
-          <button type="button" onClick={() => goTo({ ...cameraRef.current, yaw: cameraRef.current.yaw + 45 })} aria-label="Girar 45 grados" title="Girar 45°"><SceneIcon name="RotateCcw" size={17} /></button>
+          <button type="button" onClick={() => rotateTo(cameraRef.current.yaw + 45, cameraRef.current.pitch)} aria-label="Girar 45 grados" title="Girar 45°"><SceneIcon name="RotateCcw" size={17} /></button>
         </div>
         <canvas
           ref={canvas}
