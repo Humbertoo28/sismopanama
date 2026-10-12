@@ -437,6 +437,11 @@ export default function Home() {
     } : null,
     [events, main],
   );
+  // Réplicas de toda la secuencia, sin filtros: el mismo criterio que /api/earthquakes/mainshock, para que las cifras coincidan.
+  const totalAftershocks = useMemo(
+    () => main ? allEvents.filter(event => isAftershock(event, main)).length : 0,
+    [allEvents, main],
+  );
   // La reproducción usa los sismos que el filtro deja ver (el principal y sus réplicas); hacen falta al menos dos.
   const replayCount = useMemo(
     () => main ? mapEvents.filter(event => event.id === main.id || isAftershock(event, main)).length : 0,
@@ -754,12 +759,12 @@ export default function Home() {
           )}
 
           <div className={`status-strip${status === "error" ? " error" : ""}`} role="status" aria-live="polite">
-            <div className="status-left"><span className="status-spark" /><strong>{status === "loading" ? "Consultando sismos recientes…" : status === "error" ? "No se pudo consultar el catálogo" : "Datos sísmicos actualizados"}</strong><span>{status === "loading" ? "Fuentes: USGS, IGC y EMSC" : status === "error" ? "Revisa tu conexión e intenta actualizar de nuevo." : main ? `1 sismo principal (M 7.7) y ${Math.max(0, allEvents.length - 1)} réplicas en Panamá desde el ${sinceLabel}${catalogs && !(catalogs.usgs && catalogs.igc && catalogs.emsc) ? ` · ${(Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]).join(" y ")} no responde: puede haber retraso` : ""}` : `${allEvents.length} ${allEvents.length === 1 ? "evento reportado" : "eventos reportados"} en Panamá desde el ${sinceLabel}${catalogs && !(catalogs.usgs && catalogs.igc && catalogs.emsc) ? ` · ${(Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]).join(" y ")} no responde: puede haber retraso` : ""}`}</span></div>
+            <div className="status-left"><span className="status-spark" /><strong>{status === "loading" ? "Consultando sismos recientes…" : status === "error" ? "No se pudo consultar el catálogo" : "Datos sísmicos actualizados"}</strong><span>{status === "loading" ? "Fuentes: USGS, IGC y EMSC" : status === "error" ? "Revisa tu conexión e intenta actualizar de nuevo." : main ? `1 sismo principal (M 7.7) y ${totalAftershocks} ${totalAftershocks === 1 ? "réplica" : "réplicas"} en Panamá desde el ${sinceLabel}${catalogs && !(catalogs.usgs && catalogs.igc && catalogs.emsc) ? ` · ${(Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]).join(" y ")} no responde: puede haber retraso` : ""}` : `${allEvents.length} ${allEvents.length === 1 ? "evento reportado" : "eventos reportados"} en Panamá desde el ${sinceLabel}${catalogs && !(catalogs.usgs && catalogs.igc && catalogs.emsc) ? ` · ${(Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]).join(" y ")} no responde: puede haber retraso` : ""}`}</span></div>
             <span>{lastUpdate ? `Última consulta: ${clockFormat.format(new Date(lastUpdate))}` : "Última consulta: --"}</span>
           </div>
 
           <section className="metric-grid" aria-label="Resumen de actividad sísmica">
-            <article className="metric-card"><div className="metric-top"><span>{main ? "RÉPLICAS REGISTRADAS" : "EVENTOS REGISTRADOS"}</span><span className="metric-icon">◎</span></div><div className="metric-main"><strong>{status === "error" && !lastUpdate ? "—" : <CountUp value={main ? Math.max(0, events.length - (events.some(e => e.id === main.id) ? 1 : 0)) : events.length} />}</strong><span>{main ? "+ 1 sismo principal M 7.7" : `desde el ${sinceLabel}`}</span></div><p>{main ? "Secuencia sísmica en Panamá" : "Solo Panamá"}</p></article>
+            <article className="metric-card"><div className="metric-top"><span>{main ? "RÉPLICAS REGISTRADAS" : "EVENTOS REGISTRADOS"}</span><span className="metric-icon">◎</span></div><div className="metric-main"><strong>{status === "error" && !lastUpdate ? "—" : <CountUp value={listCounts ? listCounts.after : events.length} />}</strong><span>{main ? "+ 1 sismo principal M 7.7" : `desde el ${sinceLabel}`}</span></div><p>{main ? "Secuencia sísmica en Panamá" : "Solo Panamá"}</p></article>
             <article className="metric-card"><div className="metric-top"><span>{main ? "MAYOR RÉPLICA" : "MAYOR MAGNITUD"}</span><span className="metric-icon coral" aria-hidden="true">⌁</span></div><div className="metric-main"><strong>{strongest && strongest.properties.mag !== null ? <CountUp value={strongest.properties.mag} decimals={1} /> : "—"}</strong><span>{main && strongest && strongest.id === main.id ? "sismo principal" : "magnitud"}</span></div><p>{strongest ? placeText(strongest) : "Sin eventos disponibles"}</p></article>
             <article className="metric-card"><div className="metric-top"><span>{main && latest && isAftershock(latest, main) ? "ÚLTIMA RÉPLICA" : "EVENTO MÁS RECIENTE"}</span><span className="metric-icon blue">◷</span></div><div className="metric-main"><strong>{recentValue}</strong><span>{recentUnit}</span></div><p>{latest ? dateTime.format(new Date(latest.properties.time)) : "Hora local de Panamá (UTC−5)"}</p></article>
           </section>
