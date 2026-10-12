@@ -4,11 +4,30 @@ import { fetchPanamaEvents } from "../../../lib/catalogs";
 import { rejectQuery } from "../../../lib/http";
 import { runQuakeCheckThrottled } from "../../../lib/push-check";
 
+import { isAutomatedBot } from "../../../lib/bot-defense";
+import { checkRateLimit, getClientIp } from "../../../lib/rate-limit";
+
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const rejected = rejectQuery(request);
   if (rejected) return rejected;
+
+  // Protección anti-bot / anti-scraper
+  const userAgent = request.headers.get("user-agent");
+  if (isAutomatedBot(userAgent)) {
+    return Response.json({ error: "Acceso no autorizado" }, { status: 403 });
+  }
+
+  // Rate limiting por IP (120 req/min para clientes en tiempo real)
+  const clientIp = getClientIp(request);
+  const limit = checkRateLimit(`quakes:${clientIp}`, 120, 60_000);
+  if (!limit.allowed) {
+    return Response.json(
+      { error: "Demasiadas peticiones. Por favor espera un momento." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
+  }
 
   try {
     const { events, catalogs } = await fetchPanamaEvents(SINCE);

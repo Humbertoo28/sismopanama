@@ -47,6 +47,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  productionBrowserSourceMaps: false,
   // El sitio no usa next/image: se desactiva el optimizador para no exponer ese endpoint.
   images: { unoptimized: true },
   async headers() {

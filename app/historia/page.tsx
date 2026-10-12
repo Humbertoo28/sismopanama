@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatMag, historyUrl, parseHistory, placeEs, type HistoricQuake, type HistorySummary } from "../../lib/history";
+import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatDateUTC, formatMag, historyUrl, parseHistory, placeEs, type HistoricQuake, type HistorySummary } from "../../lib/history";
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
-import HistoryMap from "./history-map";
+import HistoryMap, { eraOf } from "./history-map";
+import TopMap from "./top-map";
 import "./historia.css";
 
 const TITLE = "Historia sísmica de Panamá: sismos grandes desde 1900";
@@ -20,10 +21,7 @@ export const metadata: Metadata = {
 // Next exige un número escrito aquí (no una constante importada): 1800 s = HISTORY_REVALIDATE_SECONDS en lib/history.ts.
 export const revalidate = 1800;
 
-// Fechas en hora universal, como las publica el USGS: es la fecha que traen todas las referencias (en hora de Panamá, algunos
-// sismos ocurrieron la noche anterior).
-const date = new Intl.DateTimeFormat("es-PA", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
-const when = (time: number) => date.format(new Date(time));
+const when = formatDateUTC;
 const year = (time: number) => new Date(time).getUTCFullYear();
 const yearsBetween = (from: number, to: number) => {
   const a = new Date(from);
@@ -105,6 +103,41 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
         </ul>
       </section>
 
+      <section className="hs-card" aria-labelledby="hs-top-map-h">
+        <h2 id="hs-top-map-h">Los {s.top.length} más grandes en el mapa</h2>
+        <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo. Los del suroeste caen muy juntos: se ven también en el acercamiento.</p>
+        <TopMap top={s.top} />
+        <ul className="hs-legend" aria-label="Leyenda del mapa de los más grandes">
+          <li><i className="hs-sw hs-e1" /> 1900–1949</li>
+          <li><i className="hs-sw hs-e2" /> 1950–1999</li>
+          <li><i className="hs-sw hs-e3" /> 2000–2025</li>
+          <li><i className="hs-sw hs-now" /> Secuencia de 2026</li>
+        </ul>
+      </section>
+
+      <section className="hs-card" aria-labelledby="hs-top-h">
+        <h2 id="hs-top-h">Los {s.top.length} sismos más grandes</h2>
+        <div className="hs-scroll" role="region" aria-label="Tabla de los sismos más grandes" tabIndex={0}>
+          <table className="hs-table">
+            <caption className="sr-only">Sismos de Panamá ordenados de mayor a menor magnitud, según el catálogo del USGS</caption>
+            <thead>
+              <tr><th scope="col">Puesto</th><th scope="col">Magnitud</th><th scope="col">Fecha</th><th scope="col">Lugar</th><th scope="col">Profundidad</th></tr>
+            </thead>
+            <tbody>
+              {s.top.map((quake, index) => (
+                <tr key={quake.id} className={quake.current ? "hs-row-now" : undefined}>
+                  <td><span className={`hs-rank hs-${eraOf(quake)}`}>{index + 1}</span></td>
+                  <th scope="row"><strong>M {mag(quake.mag)}</strong>{kind(quake) && <small> {kind(quake)}</small>}</th>
+                  <td>{when(quake.time)}{quake.current && <span className="hs-badge">Secuencia actual</span>}</td>
+                  <td>{placeEs(quake.place)}</td>
+                  <td>{quake.depth === null ? "—" : `${Math.round(quake.depth)} km`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="hs-card" aria-labelledby="hs-facts-h">
         <h2 id="hs-facts-h">Lo que dicen los registros</h2>
         <ul className="hs-facts">
@@ -132,29 +165,6 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
             </li>
           )}
         </ul>
-      </section>
-
-      <section className="hs-card" aria-labelledby="hs-top-h">
-        <h2 id="hs-top-h">Los {s.top.length} sismos más grandes</h2>
-        <div className="hs-scroll" role="region" aria-label="Tabla de los sismos más grandes" tabIndex={0}>
-          <table className="hs-table">
-            <caption className="sr-only">Sismos de Panamá ordenados de mayor a menor magnitud, según el catálogo del USGS</caption>
-            <thead>
-              <tr><th scope="col">Puesto</th><th scope="col">Magnitud</th><th scope="col">Fecha</th><th scope="col">Lugar</th><th scope="col">Profundidad</th></tr>
-            </thead>
-            <tbody>
-              {s.top.map((quake, index) => (
-                <tr key={quake.id} className={quake.current ? "hs-row-now" : undefined}>
-                  <td>{index + 1}</td>
-                  <th scope="row"><strong>M {mag(quake.mag)}</strong>{kind(quake) && <small> {kind(quake)}</small>}</th>
-                  <td>{when(quake.time)}{quake.current && <span className="hs-badge">Secuencia actual</span>}</td>
-                  <td>{placeEs(quake.place)}</td>
-                  <td>{quake.depth === null ? "—" : `${Math.round(quake.depth)} km`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <section className="hs-card" aria-labelledby="hs-dec-h">

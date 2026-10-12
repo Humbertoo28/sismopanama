@@ -145,3 +145,10 @@ export function placeEs(place: string) {
 export function formatMag(mag: number) {
   return Math.abs(mag * 10 - Math.round(mag * 10)) < 1e-9 ? mag.toFixed(1) : mag.toFixed(2);
 }
+
+// Fechas en hora universal, como las publica el USGS: es la fecha que traen todas las referencias (en hora de Panamá, algunos
+// sismos ocurrieron la noche anterior).
+const dateUTC = new Intl.DateTimeFormat("es-PA", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
+export function formatDateUTC(time: number) {
+  return dateUTC.format(new Date(time));
+}
