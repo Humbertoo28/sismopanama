@@ -10,6 +10,7 @@ import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
 import { PROVINCE_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
 import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
+import { ACTIVE_FAULTS, ACTIVE_FAULTS_SOURCE } from "../lib/active-faults";
 import PlatesLegend from "./plates-legend";
 import { intensityColor } from "../lib/usgs-colors";
 import { SLIP_GRADIENT, buildSlipRaster, feltRadiusM, sideOf, teethAlong } from "./map-layers";
@@ -44,6 +45,8 @@ type Props = {
   replay: ReplayStep | null;
   onSelect: (id: string) => void;
   onReplay: (step: ReplayStep | null) => void;
+  // Sube cuando se pide ver las fallas activas (desde su ficha): se enciende la capa y el mapa las encuadra.
+  faultsKey: number;
 };
 
 // Escala de Mercalli en palabras, para los reportes de «¿Lo sentiste?».
@@ -123,7 +126,7 @@ const readMapMode = (): MapLayerMode => {
 };
 const noSubscribe = () => () => {};
 
-export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPropagationEnd, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPropagationEnd, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay, faultsKey }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
   // navegador, pasa al guardado sin el aviso de que el HTML no coincide.
@@ -187,10 +190,11 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       if ((document.activeElement === document.body || document.activeElement === null) && opener?.isConnected) opener.focus({ preventScroll: true });
     };
   }, [fullscreen]);
-  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false });
+  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false, faults: false });
   const usgs = useMainshockDetail();
   const usgsLayerRef = useRef<any>(null);
   const platesLayerRef = useRef<any>(null);
+  const faultsLayerRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
@@ -647,6 +651,46 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     return () => { map.off("zoomend", drawTeeth); };
   }, [layers.plates, ready]);
 
+  // Fallas activas en tierra (Pedro Miguel y Limón): trazo blanco con borde rojo, distinto de los límites de placas, y su nombre.
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (!ready || !map || !L) return;
+    if (faultsLayerRef.current) {
+      map.removeLayer(faultsLayerRef.current);
+      faultsLayerRef.current = null;
+    }
+    if (!layers.faults) return;
+    const group = L.layerGroup();
+    for (const fault of ACTIVE_FAULTS) {
+      const latlngs = fault.points.map(([lng, lat]) => [lat, lng]);
+      L.polyline(latlngs, { pane: "plates", interactive: false, color: "#b8102b", weight: 7, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(group);
+      L.polyline(latlngs, { pane: "plates", color: "#ffffff", weight: 3, opacity: 1, lineCap: "round", lineJoin: "round" })
+        .bindTooltip(`${fault.name}: falla activa, ${fault.kind}. ${fault.facts[0]}`, { sticky: true, className: "fault-tip" })
+        .addTo(group);
+      const [lng, lat] = fault.points[Math.floor(fault.points.length / 2)];
+      L.marker([lat, lng], {
+        pane: "plates", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "plate-label-wrap", html: `<span class="fault-label" aria-hidden="true">${fault.name}</span>`, iconSize: [0, 0] }),
+      }).addTo(group);
+    }
+    group.addTo(map);
+    faultsLayerRef.current = group;
+  }, [layers.faults, ready]);
+
+  // «Ver las fallas en el mapa» (desde su ficha): se enciende la capa, se vuelve al mapa plano y se encuadran las fallas.
+  const faultsSeen = useRef(faultsKey);
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (faultsSeen.current === faultsKey || !ready || !map || !L) return;
+    faultsSeen.current = faultsKey;
+    setLayers(current => ({ ...current, faults: true }));
+    setView3d(false);
+    const bounds = L.latLngBounds(ACTIVE_FAULTS.flatMap(fault => fault.points.map(([lng, lat]) => [lat, lng])));
+    map.flyToBounds(bounds.pad(0.35), { duration: reducedMotion() ? 0 : 1.2, maxZoom: 11 });
+  }, [faultsKey, ready]);
+
   // La primera vez que se abre el 3D se enciende la ruptura de la falla; la onda de sacudida queda como opción (tapaba medio país
   // al abrir). Luego manda lo que elija la persona.
   const autoRupture = useRef(true);
@@ -772,8 +816,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       if (group) map.removeLayer(group);
     };
   }, [propagation, ready]);
-  const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates" | "wave") => {
-    if (name !== "plates") loadMainshockDetail();
+  const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates" | "wave" | "faults") => {
+    if (name !== "plates" && name !== "faults") loadMainshockDetail();
     setLayers(current => ({ ...current, [name]: !current[name] }));
   };
   const detailReady = usgs.status === "ready" && usgsDetail !== null;
@@ -978,6 +1022,10 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         type="button" className={`layer-chip${layers.plates ? " on" : ""}`} aria-pressed={layers.plates} onClick={() => toggleLayer("plates")}
         title="Límites entre las placas tectónicas (modelo PB2002, P. Bird 2003): aproximados"
       ><span className="chip-long">Placas tectónicas</span><span className="chip-short" aria-hidden="true">Placas</span></button>
+      <button
+        type="button" className={`layer-chip${layers.faults ? " on" : ""}`} aria-pressed={layers.faults} onClick={() => toggleLayer("faults")}
+        title="Fallas activas en tierra junto al Canal y la capital: Pedro Miguel y Limón (Rockwell et al., 2010; CCAF-DB/GEM)"
+      ><span className="chip-long">Fallas activas</span><span className="chip-short" aria-hidden="true">Fallas</span></button>
     </>
   );
   // La onda de sacudida solo existe en la vista 3D.
@@ -1031,7 +1079,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
             events={events} filtersKey={filtersKey} fitKey={fitKey} restartKey={restart3d} expanded={fullscreen !== "off"} overlay={fullscreen === "overlay"} onToggleExpanded={toggleFullscreen} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
-            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
+            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} activeFaults={layers.faults} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
             layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />
         </Suspense>
@@ -1104,7 +1152,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           {layerNote}
         </div>
       )}
-      {((detailReady && anyLayer) || layers.plates) && (
+      {((detailReady && anyLayer) || layers.plates || layers.faults) && (
         <div className="map-layers-legend" role="group" aria-label="Leyenda de las capas del mapa">
           {detailReady && layers.rupture && (
             fault ? (
@@ -1136,6 +1184,12 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
             ) : <div><span>El USGS no publica el mapa de sacudida de este sismo.</span></div>
           )}
           {layers.plates && <div className="plates-legend"><PlatesLegend detailed /></div>}
+          {layers.faults && (
+            <div className="faults-legend">
+              <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel y Limón. Trazado aproximado (escala 1:100 000).</span>
+              <span className="plate-note">{ACTIVE_FAULTS_SOURCE}.</span>
+            </div>
+          )}
           {detailReady && anyLayer && <div className="map-layers-source"><span>Fuente de los datos sísmicos: USGS (earthquake.usgs.gov)</span></div>}
         </div>
       )}

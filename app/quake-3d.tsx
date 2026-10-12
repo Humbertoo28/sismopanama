@@ -8,6 +8,7 @@ import { PROVINCE_BY_ID } from "../lib/province-of";
 import { PROVINCE_LABELS, TOWN_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
 import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
+import { ACTIVE_FAULTS } from "../lib/active-faults";
 import PlatesLegend from "./plates-legend";
 import { intensityColor, intensityRgb } from "../lib/usgs-colors";
 import { SLIP_GRADIENT, slipRgb } from "./map-layers";
@@ -55,6 +56,8 @@ type Props = {
   shaking: Contour[] | null;
   // Límites de las placas tectónicas (datos estáticos).
   plates: boolean;
+  // Fallas activas en tierra junto al Canal (Pedro Miguel y Limón).
+  activeFaults: boolean;
   // Onda de sacudida: cómo se propagó por el país (intensidad del ShakeMap + llegada calculada con el modelo de velocidades ak135).
   wave: boolean;
   shakeGrid: ShakeGrid | null;
@@ -161,7 +164,7 @@ const moveText = (meters: number) => (meters >= 1 ? `${meters.toFixed(1)} m` : m
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, activeFaults, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -1126,6 +1129,22 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.lineCap = "butt";
     }
 
+    // Fallas activas en tierra: trazo blanco con borde rojo, como en el mapa plano, sobre el relieve.
+    if (activeFaults) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const item of ACTIVE_FAULTS) {
+        for (const [width, color] of [[6, "rgba(184,16,43,.95)"], [2.4, "#ffffff"]] as const) {
+          ctx.beginPath();
+          item.points.forEach(([lng, lat], i) => { const q = project(ground(lng, lat)); pathTo(i, q.sx, q.sy); });
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.stroke();
+        }
+      }
+      ctx.lineCap = "butt";
+    }
+
     ctx.restore();
 
     // Rótulo de la ruptura (bajo su borde inferior; arriba suele estar el enjambre de réplicas). Se calcula antes que los
@@ -1206,6 +1225,12 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           seen.add(key);
           const [lng, lat] = visible[Math.floor(visible.length / 2)];
           put(`${PLATE_SHORT[boundary.a]} | ${PLATE_SHORT[boundary.b]}`, lng, lat, 10.5 * boost, 700, 0.97, false, KIND_INFO[boundary.kind].color, -9);
+        }
+      }
+      if (activeFaults) {
+        for (const item of ACTIVE_FAULTS) {
+          const [lng, lat] = item.points[Math.floor(item.points.length / 2)];
+          put(item.name, lng, lat, 11.5 * boost, 700, 0.97, false, "#ffffff", -8);
         }
       }
       if (camera.zoom >= 1.5) {
@@ -1369,7 +1394,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, terrainTiles, colorBy, surfaceOpacity, ruptureTime, onScreen]);
+  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, activeFaults, waveField, shakeGrid, slipSense, satellite, tiles, terrainTiles, colorBy, surfaceOpacity, ruptureTime, onScreen]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   // `tween(e)` da la cámara en el avance e (0 a 1) de la transición.
@@ -1809,6 +1834,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           )}
           {slipSense && <span title="Hacia dónde se movió cada lado de la falla, según el mecanismo focal del USGS"><b aria-hidden="true">⇄</b>Flechas: sentido del deslizamiento ({slipSense.kind}), no a escala</span>}
           {plates && <PlatesLegend />}
+          {activeFaults && <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel y Limón (trazado aproximado)</span>}
         </div>
         <p className="q3-note">
           {exaggeration === 1 ? "Profundidad a escala real." : `Profundidad exagerada ×${exaggeration} (las marcas de km son reales).`}
