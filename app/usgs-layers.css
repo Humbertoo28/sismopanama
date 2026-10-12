@@ -246,7 +246,13 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
 
 /* Celular horizontal: la escena cabe en la pantalla (si no, mide más que el alto de la ventana y no se ve completa). */
 @media (orientation: landscape) and (max-height: 520px) {
-  .q3-stage { height: clamp(260px, 80svh, 440px); }
+  /* Encabezado compacto (sin la línea de arriba) y la escena ocupa el resto: título y escena caben juntos en la pantalla. */
+  .q3-heading { padding: 6px 14px; }
+  .q3-heading-title span { display: none; }
+  .q3-heading h3 { margin: 0; font-size: calc(15px*var(--ts,1)); }
+  .q3-stage { height: clamp(220px, calc(100svh - 76px), 440px); }
+  /* En pantalla completa (respaldo), la escena llena lo que queda debajo del encabezado. */
+  .map-frame:has(.q3-overlay) .q3-stage { height: max(220px, calc(100dvh - 64px)); }
 }
 
 /* Objetivos táctiles: botones, controles deslizantes y resúmenes con un tamaño cómodo para el dedo. */

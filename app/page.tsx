@@ -699,12 +699,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {hero.properties.tsunami === 1 && (
-                <p className="mainshock-warning" role="alert">
-                  El USGS marcó este sismo como posible generador de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.
-                </p>
-              )}
-
               {hasDistinctMain && main && mainshock && (
                 <div className="mainshock-principal" role="group" aria-label="Sismo principal de la secuencia">
                   <div className="principal-head">
@@ -738,16 +732,6 @@ export default function Home() {
                     {typeof mainFelt === "number" && <div><dt>LO SINTIERON</dt><dd><CountUp value={mainFelt} from={0} /><small>reportes al USGS{tellUsUrl && <> · <a href={tellUsUrl} target="_blank" rel="noopener noreferrer">¿Lo sentiste?</a></>}</small></dd></div>}
                     <div><dt>RÉPLICAS</dt><dd><CountUp value={mainshock.aftershocks.count} from={0} /><small>{mainshock.aftershocks.strongest ? `la mayor, M ${magText(mainshock.aftershocks.strongest)}` : "hasta ahora"}</small></dd></div>
                   </dl>
-                  {main.properties.tsunami === 1 && (
-                    <p className="mainshock-warning" role="alert">
-                      El USGS marcó el sismo principal como posible generador de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.
-                    </p>
-                  )}
-                  {mainshock.aftershocks.tsunami && (
-                    <p className="mainshock-warning" role="alert">
-                      El USGS marcó la réplica de M {magText(mainshock.aftershocks.tsunami)} ({placeText(mainshock.aftershocks.tsunami)}) como posible generadora de tsunami. Consulta los avisos oficiales en <a href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">tsunami.gov</a> y las indicaciones de SINAPROC.
-                    </p>
-                  )}
                 </div>
               )}
 
