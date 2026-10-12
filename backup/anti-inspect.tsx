@@ -1,3 +1,7 @@
+// RESPALDO, fuera de uso. Se retiró del sitio porque entorpecía el uso sin aportar protección real: bloqueaba el clic derecho
+// en todo el sitio (abrir enlaces en otra pestaña, copiar), Ctrl+S y algunos atajos, y borraba la consola cada 15 s. Las
+// herramientas de desarrollo igual se abren desde el menú del navegador y el código ya es público.
+// Para volver a activarlo: moverlo a app/ y poner <AntiInspect /> dentro de <body> en app/layout.tsx.
 "use client";
 
 import { useEffect } from "react";
