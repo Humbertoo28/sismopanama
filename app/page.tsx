@@ -23,7 +23,9 @@ import {
   earthquakeFromPush,
   getNotificationPermissionStatus,
   getWhatsAppShareUrl,
+  hasActivePush,
   isSeenQuake,
+  PUSH_CHANGE_EVENT,
   loadAlertPreferences,
   loadSeenQuakes,
   rememberQuakes,
@@ -109,6 +111,17 @@ const setIncludeNearby = (on: boolean) => {
   window.dispatchEvent(new Event(NEARBY_EVENT));
 };
 
+// Cambios en el permiso o la suscripción de alertas (los anuncia lib/alert-system.ts; también al volver a la pestaña, por si se
+// cambiaron en los ajustes del navegador).
+const subscribePushChange = (changed: () => void) => {
+  window.addEventListener(PUSH_CHANGE_EVENT, changed);
+  window.addEventListener("focus", changed);
+  return () => {
+    window.removeEventListener(PUSH_CHANGE_EVENT, changed);
+    window.removeEventListener("focus", changed);
+  };
+};
+
 export default function Home() {
   const [minimum, setMinimum] = useState(0);
   const [timeRange, setTimeRange] = useState<"all" | "24h" | "6h">("all");
@@ -142,9 +155,16 @@ export default function Home() {
   const [alert, setAlert] = useState<LiveAlert | null>(null);
   const [dismissedKey, setDismissedKey] = useState(0);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
-  const [permStatus, setPermStatus] = useState<NotificationPermission | "unsupported">(() =>
-    typeof window !== "undefined" ? getNotificationPermissionStatus() : "default",
-  );
+  // ¿Llegan las alertas con la app cerrada? (permiso + suscripción push). Es lo que dice el botón del encabezado.
+  const [pushActive, setPushActive] = useState(false);
+  useEffect(() => {
+    const update = () => { hasActivePush().then(setPushActive).catch(() => setPushActive(false)); };
+    window.addEventListener(PUSH_CHANGE_EVENT, update);
+    update();
+    return () => window.removeEventListener(PUSH_CHANGE_EVENT, update);
+  }, []);
+  // El permiso se lee con useSyncExternalStore: el servidor no lo conoce y leerlo al dibujar daba un error de hidratación.
+  const permStatus = useSyncExternalStore(subscribePushChange, getNotificationPermissionStatus, () => "default" as const);
   const seen = useRef<SeenQuake[] | null>(null);
   const previousEvents = useRef<Earthquake[]>([]);
   const introFocused = useRef(false);
@@ -611,11 +631,11 @@ export default function Home() {
             <ThemeToggle />
             <button
               type="button"
-              className={`alerts-button${permStatus === "granted" ? " on" : ""}`}
+              className={`alerts-button${pushActive ? " on" : ""}`}
               onClick={() => setAlertModalOpen(true)}
             >
-              {permStatus === "granted" ? <BellRing aria-hidden="true" size={20} /> : <Bell aria-hidden="true" size={20} />}
-              <span className="alerts-button-long">{permStatus === "granted" ? "Alertas activadas" : "Recibir alertas"}</span>
+              {pushActive ? <BellRing aria-hidden="true" size={20} /> : <Bell aria-hidden="true" size={20} />}
+              <span className="alerts-button-long">{pushActive ? "Alertas activadas" : permStatus === "granted" ? "Completar alertas" : "Recibir alertas"}</span>
               <span className="alerts-button-short">Alertas</span>
             </button>
           </div>
@@ -733,7 +753,7 @@ export default function Home() {
         isOpen={alertModalOpen}
         onClose={() => {
           setAlertModalOpen(false);
-          setPermStatus(getNotificationPermissionStatus());
+          window.dispatchEvent(new Event(PUSH_CHANGE_EVENT));
         }}
         latestEvent={latest ?? main}
       />

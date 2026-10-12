@@ -20,6 +20,7 @@ import {
   type AlertPreferences,
 } from "../lib/alert-system";
 import PwaInstall from "./pwa-install";
+import PushDiagnostics from "./push-diagnostics";
 
 type AlertModalProps = {
   isOpen: boolean;
@@ -279,6 +280,8 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
               <p><b>iPhone:</b> instala la app en la pantalla de inicio, y en Ajustes → Notificaciones → Sismo Panamá deja los sonidos activados. Sube el volumen del timbre, quita el modo silencio y permite la app en tu Modo de concentración.</p>
             </details>
           </div>
+
+          <PushDiagnostics minMagnitude={prefs.minMagnitude} onChanged={() => getExistingPushSubscription().then(sub => setIsPushSubscribed(Boolean(sub)))} />
 
           {/* Sección de Sonido de Emergencia */}
           <div className="alert-setting-row">

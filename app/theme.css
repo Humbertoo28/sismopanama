@@ -707,3 +707,23 @@ html[data-theme="dark"] :is(.site-nav a.active, .page-nav a.active):after { back
 @media (max-width: 700px) { html[data-theme="dark"] .site-nav a.active:after { background: var(--flag-red); } }
 html[data-theme="dark"] .a11y-label { color: var(--muted); }
 html[data-theme="dark"] :is(.rp-totals dd.yes, .rp-stats dd.yes) { color: #8fb8ff; }
+
+/* Diagnóstico de alertas con la app cerrada (ventana de Alertas). */
+.push-diagnostics { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--ink); }
+.push-diagnostics > summary { cursor: pointer; font-size: calc(16px*var(--ts,1)); font-weight: 700; color: var(--primary); }
+.pd-checks { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.pd-checks li { display: flex; gap: 10px; align-items: flex-start; font-size: calc(15px*var(--ts,1)); }
+.pd-checks li svg { flex: none; margin-top: 1px; }
+.pd-checks li.ok svg { color: #1e8a4c; }
+.pd-checks li.bad svg { color: var(--red); }
+.pd-checks li.warn svg { color: var(--orange); }
+.pd-checks small { display: block; margin-top: 2px; font-size: calc(14px*var(--ts,1)); color: var(--ink-2); }
+.pd-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.pd-actions .btn:disabled { opacity: .5; cursor: not-allowed; }
+.pd-message { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; font-size: calc(15px*var(--ts,1)); }
+.pd-message.ok { background: #e3f4ea; color: #155c34; }
+.pd-message.bad { background: var(--red-soft); color: var(--red); }
+.pd-note { margin: 10px 0 0; color: var(--muted); }
+.pd-tips { margin-top: 14px; font-size: calc(15px*var(--ts,1)); color: var(--ink-2); }
+.pd-tips ul { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+html[data-theme="dark"] .pd-message.ok { background: #12301f; color: #8ee0ad; }
