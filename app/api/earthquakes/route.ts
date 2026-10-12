@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { SINCE, type EarthquakeResponse } from "../../../lib/earthquakes";
 import { fetchPanamaEvents } from "../../../lib/catalogs";
 import { rejectQuery } from "../../../lib/http";
@@ -11,8 +12,15 @@ export async function GET(request: Request) {
 
   try {
     const { events, catalogs } = await fetchPanamaEvents(SINCE);
-    // Revisión oportunista: si entra una visita y hay un sismo nuevo en catálogos, se avisa de inmediato sin esperar al cron
-    runQuakeCheckThrottled(events).catch((e) => console.warn("[push] oportuno fallo:", e));
+    // Revisión oportunista: si entra una visita y hay un sismo nuevo en catálogos, se avisa de inmediato sin esperar al cron.
+    // Con after() de Next.js, Vercel no mata el proceso serverless hasta completar el despacho push.
+    after(async () => {
+      try {
+        await runQuakeCheckThrottled(events);
+      } catch (e) {
+        console.warn("[push] oportuno fallo:", e);
+      }
+    });
 
     const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
     // Caché corta: s-maxage hace que la red Edge de Vercel responda a casi todas las visitas

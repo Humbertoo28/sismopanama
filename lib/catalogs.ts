@@ -22,9 +22,9 @@ async function fetchUsgs(since: number): Promise<Earthquake[]> {
 }
 
 const IGC_URL = "https://sismosgeociencias.up.ac.pa/";
-const IGC_MIN_INTERVAL_MS = 8_000;
+const IGC_MIN_INTERVAL_MS = 4_000;
 // El IGC no tiene API: publica una tabla HTML de los últimos 7 días. Se lee con respeto: identificándonos,
-// con caché condicional (ETag) y sin consultar más de una vez cada 8 s por instancia del servidor.
+// con caché condicional (ETag) y sin consultar más de una vez cada 4 s por instancia del servidor.
 let igcCache: { at: number; etag: string | null; events: Earthquake[] } | null = null;
 
 const entities: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " " };
