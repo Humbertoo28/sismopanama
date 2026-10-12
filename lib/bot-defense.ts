@@ -26,8 +26,8 @@ const BLOCKED_BOT_AGENTS = [
 // Comprueba si la petición proviene de un bot o scraper automatizado conocido
 export function isAutomatedBot(userAgent: string | null): boolean {
   if (!userAgent || userAgent.trim().length === 0) return true; // Rechazar peticiones sin User-Agent
-  // Permitir agentes oficiales de buscadores para indexación (Google, Bing)
-  if (/googlebot|bingbot|duckduckbot/i.test(userAgent)) return false;
+  // Permitir agentes oficiales de buscadores y motores de IA para indexación y citas (Google, Bing, Perplexity, ChatGPT, Claude, Apple)
+  if (/googlebot|bingbot|duckduckbot|gptbot|chatgpt-user|perplexitybot|claudebot|applebot|yandexbot|facebookexternalhit|twitterbot/i.test(userAgent)) return false;
   return BLOCKED_BOT_AGENTS.some((pattern) => pattern.test(userAgent));
 }
 
