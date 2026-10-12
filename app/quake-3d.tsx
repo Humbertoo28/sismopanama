@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import type { Earthquake, ReplayStep } from "../lib/earthquakes";
+import { isAftershock, type Earthquake, type ReplayStep } from "../lib/earthquakes";
 import type { Contour, Fault, Felt, Mechanism, ShakeGrid } from "../lib/usgs-detail";
 import { PANAMA_RINGS } from "../lib/panama";
 import { PROVINCE_BY_ID } from "../lib/province-of";
@@ -188,6 +188,9 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const [surfaceOpacity, setSurfaceOpacity] = useState(90);
   // La pantalla tiembla cuando la onda de sacudida llega al centro de la vista (efecto visual; se puede apagar).
   const [screenShake, setScreenShake] = useState(true);
+  // Las réplicas están ocultas por defecto: la escena enseña el sismo principal, su ruptura y la onda. Con la secuencia en
+  // reproducción se muestran siempre (es justo lo que se está contando), y el sismo seleccionado nunca se oculta.
+  const [showAftershocks, setShowAftershocks] = useState(false);
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
   const [ruptureTime, setRuptureTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -274,8 +277,17 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     return () => observer.disconnect();
   }, []);
 
+  const baseEvents = useMemo(
+    () => (showAftershocks || replay !== null || !mainshock ? events : events.filter(event => !isAftershock(event, mainshock))),
+    [events, mainshock, showAftershocks, replay],
+  );
+  const visibleEvents = useMemo(() => {
+    const picked = events.find(event => event.id === selectedId);
+    return picked && !baseEvents.includes(picked) ? [...baseEvents, picked] : baseEvents;
+  }, [events, baseEvents, selectedId]);
+
   const scene = useMemo(() => {
-    const coords = events.map(event => event.geometry.coordinates);
+    const coords = baseEvents.map(event => event.geometry.coordinates);
     // Siempre Panamá completo; si algún sismo o la falla caen fuera del país (réplicas mar adentro), la caja crece para incluirlos.
     const lats = [COUNTRY.south, COUNTRY.north, ...coords.map(c => c[1])];
     const lngs = [COUNTRY.west, COUNTRY.east, ...coords.map(c => c[0])];
@@ -292,7 +304,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     const maxDepth = Math.max(10, ...coords.map(c => c[2] ?? 0), ...(fault ? fault.subfaults.flatMap(s => s.ring.map(r => r[2])) : []));
     const floorKm = Math.ceil(maxDepth / 10) * 10;
     return { south, north, west, east, lat0, lng0, kmLng, toKm, floorKm, halfW: ((east - west) / 2) * kmLng, halfH: ((north - south) / 2) * KM_PER_LAT };
-  }, [events, fault]);
+  }, [baseEvents, fault]);
 
   // Imagen satelital de la superficie: se piden los mosaicos de la zona que se está viendo (el navegador los guarda un día).
   const [south, north, west, east] = [scene.south, scene.north, scene.west, scene.east].map(value => Math.round(value * 100) / 100);
@@ -499,10 +511,10 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   }, [ruptureDuration]);
 
   const facts = useMemo(() => {
-    const depths = events.map(depthOf).filter((d): d is number => typeof d === "number");
+    const depths = visibleEvents.map(depthOf).filter((d): d is number => typeof d === "number");
     const fixed = depths.filter(isRoundDepth).length;
-    return { count: events.length, withDepth: depths.length, fixed, deepest: depths.length ? Math.max(...depths) : null };
-  }, [events]);
+    return { count: visibleEvents.length, withDepth: depths.length, fixed, deepest: depths.length ? Math.max(...depths) : null };
+  }, [visibleEvents]);
 
   // Cualquier cambio en la cámara, la escala vertical o los datos vuelve a pintar el lienzo.
   useEffect(() => {
@@ -659,7 +671,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     // Todo lo que está bajo tierra se ordena de lejos a cerca.
     type Drawable = { depth: number; draw: () => void };
     const drawables: Drawable[] = [];
-    const items: Item[] = events.map(event => {
+    const items: Item[] = visibleEvents.map(event => {
       const [lng, lat, depthRaw] = event.geometry.coordinates;
       const depth = depthRaw ?? 0;
       const mag = event.properties.mag;
@@ -1252,7 +1264,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
+  }, [camera, size, scene, visibleEvents, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, waveField, shakeGrid, slipSense, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -1568,6 +1580,13 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             <button type="button" aria-pressed={colorBy === "depth"} className={colorBy === "depth" ? "on" : ""} onClick={() => setColorBy("depth")}>Profundidad</button>
             <button type="button" aria-pressed={colorBy === "mag"} className={colorBy === "mag" ? "on" : ""} onClick={() => setColorBy("mag")}>Magnitud</button>
           </div>
+          {mainshock && (
+            <div className="q3-seg" role="group" aria-label="Réplicas del sismo principal">
+              <span className="q3-cap" aria-hidden="true">Réplicas</span>
+              <button type="button" aria-pressed={showAftershocks} className={showAftershocks ? "on" : ""} onClick={() => setShowAftershocks(true)}>Sí</button>
+              <button type="button" aria-pressed={!showAftershocks} className={!showAftershocks ? "on" : ""} onClick={() => setShowAftershocks(false)}>No</button>
+            </div>
+          )}
           {waveField && (
             <div className="q3-seg" role="group" aria-label="Temblor de la pantalla con la onda de sacudida">
               <span className="q3-cap" aria-hidden="true">Temblor</span>
@@ -1597,6 +1616,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
           )}
           <span><i className="q3-dot" style={{ background: COLORS.latest }} />Último</span>
           {mainshock && <span><i className="q3-dot" style={{ background: COLORS.main }} />Principal</span>}
+          {mainshock && !showAftershocks && replay === null && <span>Réplicas ocultas (se activan en «Ajustes y capas»)</span>}
           <span title="Profundidad de exactamente 10 o 5 km: el catálogo suele asignarla cuando no logra calcularla"><i className="q3-dot hollow" />Profundidad fijada{facts.fixed > 0 ? ` (${facts.fixed})` : ""}</span>
           {fault && (
             <span><i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />Ruptura: de poco (violeta) a mucho deslizamiento (amarillo)</span>
