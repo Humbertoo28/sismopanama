@@ -208,3 +208,17 @@ html[data-a11y-motion="reduce"] .q3-canvas.quake-shake { animation: none; }
 .plate-kinds i { display: block; height: 5px; margin-top: 8px; border-radius: 3px; box-shadow: 0 0 0 1px #0a1a3340; }
 .plate-kinds i.dashed { background: repeating-linear-gradient(90deg, currentColor 0 7px, transparent 7px 11px) !important; box-shadow: none; }
 .plates-explainer .usgs-body p + p { margin-top: 8px; }
+
+/* Animación de la ruptura. */
+.q3-anim { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; padding: 10px 12px; border: 1px solid #ffe9a844; border-radius: 10px; background: #1a1230aa; }
+.q3-play { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 14px; border: 0; border-radius: 8px; background: #ffd23f; color: #2a1a00; font: inherit; font-size: calc(12px*var(--ts,1)); font-weight: 800; cursor: pointer; white-space: nowrap; }
+.q3-play:hover { background: #ffe07a; }
+.q3-play:focus-visible, .q3-scrub:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.q3-scrub { width: 100%; accent-color: #ffd23f; cursor: pointer; }
+.q3-anim-readout { grid-column: 1 / -1; color: #fff4be; font-size: calc(12px*var(--ts,1)); font-weight: 700; }
+.q3-anim-note { grid-column: 1 / -1; color: #b9c9de; font-size: calc(10.5px*var(--ts,1)); line-height: 1.4; }
+.q3-live i { background: #ffd23f !important; box-shadow: 0 0 9px #ffd23f99 !important; animation: q3-blink 1s ease-in-out infinite; }
+@keyframes q3-blink { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .q3-live i { animation: none; } }
+html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
+@media (max-width: 700px) { .q3-anim { grid-template-columns: 1fr; } .q3-play { justify-content: center; } }

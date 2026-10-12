@@ -17,11 +17,15 @@ export type Mechanism = {
 };
 
 // Una celda de la falla: cuatro esquinas [lng, lat, profundidad km] y cuánto se deslizó (m).
-export type Subfault = { slip: number; ring: [number, number, number][] };
+// `t`: segundo en que esa celda empieza a deslizarse (contado desde el inicio de la ruptura) y `rise`: cuántos segundos tarda
+// en llegar a su deslizamiento final. Ambos son salidas del modelo del USGS.
+export type Subfault = { slip: number; ring: [number, number, number][]; t: number | null; rise: number | null };
 
 export type Fault = {
   subfaults: Subfault[];
   maxSlipM: number;
+  // Duración de la ruptura del modelo (segundos), si trae los tiempos de cada celda.
+  durationS: number | null;
   lengthKm: number | null;
   widthKm: number | null;
   strike: number | null;
@@ -86,7 +90,7 @@ function mechanismOf(product: Product | undefined): Mechanism | null {
   };
 }
 
-type Ffm = { features?: { geometry?: { type?: string; coordinates?: number[][][] }; properties?: { slip?: number } }[] };
+type Ffm = { features?: { geometry?: { type?: string; coordinates?: number[][][] }; properties?: { slip?: number; trup?: number; rise?: number } }[] };
 
 async function faultOf(product: Product | undefined): Promise<Fault | null> {
   const url = product?.contents["FFM.geojson"]?.url;
@@ -99,13 +103,17 @@ async function faultOf(product: Product | undefined): Promise<Fault | null> {
     if (feature.geometry?.type !== "Polygon" || !ring || typeof slip !== "number") continue;
     // El archivo repite la primera esquina al final y da la profundidad en metros.
     const corners = ring.slice(0, 4).map(([lng, lat, depthM]) => [round(lng, 4), round(lat, 4), round((depthM ?? 0) / 1000, 1)] as [number, number, number]);
-    if (corners.length === 4 && corners.every(c => c.every(Number.isFinite))) subfaults.push({ slip: round(slip, 2), ring: corners });
+    const { trup, rise } = feature.properties ?? {};
+    if (corners.length === 4 && corners.every(c => c.every(Number.isFinite))) {
+      subfaults.push({ slip: round(slip, 2), ring: corners, t: typeof trup === "number" ? round(trup, 1) : null, rise: typeof rise === "number" ? round(rise, 1) : null });
+    }
   }
   if (!subfaults.length) return null;
   const p = product.properties;
   return {
     subfaults,
     maxSlipM: Math.max(...subfaults.map(s => s.slip)),
+    durationS: subfaults.every(s => s.t !== null && s.rise !== null) ? Math.max(...subfaults.map(s => (s.t ?? 0) + (s.rise ?? 0))) : null,
     lengthKm: num(p["model-length"]),
     widthKm: num(p["model-width"]),
     strike: num(p["model-strike"]),

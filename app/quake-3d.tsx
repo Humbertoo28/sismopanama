@@ -67,6 +67,8 @@ const EXAGGERATIONS = [1, 4, 8] as const;
 // Opacidad de la imagen satelital (algo translúcida para que se integre con el fondo).
 const SAT_ALPHA = 0.9;
 const SAT_KEY = "sismo_3d_satellite";
+// Velocidad de la animación de la ruptura respecto al tiempo real del modelo (la ruptura dura unos 43 s).
+const RUPTURE_SPEED = 3;
 const COLORS = { low: "#f5c542", mid: "#f08a24", high: "#da121a", latest: "#1d6bff", main: "#a21caf" };
 const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
 
@@ -174,6 +176,11 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   const [overlay, setOverlay] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [surfaceOpacity, setSurfaceOpacity] = useState(90);
+  // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
+  const [ruptureTime, setRuptureTime] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const clockRef = useRef(0);
+  const autoPlayed = useRef(false);
   // Al abrir, la cámara baja desde una vista casi cenital hasta el punto de vista inicial (salvo que se pidan menos animaciones).
   const [camera, setCamera] = useState<Camera>(() => {
     if (typeof window === "undefined") return PRESETS.perspective;
@@ -315,6 +322,45 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
   }, [replay]);
 
   const selectedEvent = useMemo(() => events.find(event => event.id === selectedId) ?? null, [events, selectedId]);
+
+  // La ruptura se puede animar si el modelo trae el tiempo de cada celda.
+  const ruptureDuration = fault?.durationS ?? null;
+  const isPlaying = playing && ruptureDuration !== null;
+  const startRupture = () => {
+    clockRef.current = 0;
+    setRuptureTime(0);
+    setPlaying(true);
+  };
+  useEffect(() => {
+    if (!playing || ruptureDuration === null) return;
+    let raf = 0;
+    let previous = -1;
+    const tick = (now: number) => {
+      if (previous < 0) previous = now;
+      clockRef.current += ((now - previous) / 1000) * RUPTURE_SPEED;
+      previous = now;
+      if (clockRef.current >= ruptureDuration) {
+        setRuptureTime(null);
+        setPlaying(false);
+        return;
+      }
+      setRuptureTime(clockRef.current);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, ruptureDuration]);
+  // Al abrir el 3D con la falla cargada, la ruptura se reproduce una vez (salvo que se pidan menos animaciones).
+  useEffect(() => {
+    if (ruptureDuration === null || autoPlayed.current || reducedMotion()) return;
+    const timer = window.setTimeout(() => {
+      autoPlayed.current = true;
+      clockRef.current = 0;
+      setRuptureTime(0);
+      setPlaying(true);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [ruptureDuration]);
 
   const facts = useMemo(() => {
     const depths = events.map(depthOf).filter((d): d is number => typeof d === "number");
@@ -493,16 +539,28 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     if (fault) {
       for (const sub of fault.subfaults) {
         const projected = sub.ring.map(([lng, lat, d]) => project(at(lng, lat, d)));
+        // Con la animación en marcha, cada celda se desliza desde su segundo de inicio hasta su deslizamiento final.
+        const progress = ruptureTime === null || sub.t === null ? 1 : clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1);
         faultCells.push({
           depth: projected.reduce((sum, q) => sum + q.depth, 0) / 4,
           draw: () => {
             ctx.beginPath();
             projected.forEach((q, i) => pathTo(i, q.sx, q.sy));
             ctx.closePath();
-            ctx.fillStyle = slipColor(sub.slip, fault.maxSlipM, 0.78);
+            if (progress === 0) {
+              ctx.fillStyle = "rgba(120,140,190,.10)";
+              ctx.fill();
+              ctx.strokeStyle = "rgba(190,205,240,.22)";
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+              return;
+            }
+            ctx.fillStyle = slipColor(sub.slip * progress, fault.maxSlipM, 0.8);
             ctx.fill();
-            ctx.strokeStyle = "rgba(20,8,40,.3)";
-            ctx.lineWidth = 0.5;
+            // El frente de la ruptura (celdas que se están moviendo ahora) se marca con un borde claro.
+            const moving = ruptureTime !== null && progress < 1;
+            ctx.strokeStyle = moving ? "rgba(255,255,255,.95)" : "rgba(20,8,40,.3)";
+            ctx.lineWidth = moving ? 1.4 : 0.5;
             ctx.stroke();
           },
         });
@@ -594,6 +652,25 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
     drawables.sort((a, b) => a.depth - b.depth);
     drawables.forEach(d => d.draw());
     faultCells.sort((a, b) => a.depth - b.depth).forEach(d => d.draw());
+    // Mientras se anima, el punto donde empezó la ruptura (el hipocentro) late con anillos que se abren.
+    if (ruptureTime !== null && mainshock) {
+      const [hLng, hLat, hDepth] = mainshock.geometry.coordinates;
+      const hq = project(at(hLng, hLat, hDepth ?? 0));
+      ctx.save();
+      for (let ring = 0; ring < 2; ring++) {
+        const phase = ((ruptureTime * 0.8 + ring * 0.5) % 1);
+        ctx.beginPath();
+        ctx.arc(hq.sx, hq.sy, 6 + phase * 26, 0, Math.PI * 2);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = `rgba(255,244,190,${(1 - phase) * 0.9})`;
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(hq.sx, hq.sy, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff4be";
+      ctx.fill();
+      ctx.restore();
+    }
 
     // Contorno de la ruptura: el rectángulo de la falla, su huella en la superficie (punteada) y los postes que los unen.
     const faultCorners = fault ? faultOutline(fault, fault.strike ?? 288) : null;
@@ -930,7 +1007,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
       ctx.strokeText(credit, cx, cy);
       ctx.fillText(credit, cx, cy);
     }
-  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, satellite, tiles, colorBy, surfaceOpacity]);
+  }, [camera, size, scene, events, exaggeration, mainshock, latest, selectedId, replay, region, fault, felt, shaking, plates, satellite, tiles, colorBy, surfaceOpacity, ruptureTime]);
 
   // Cambia de cámara con una transición corta (o de golpe si la persona pidió menos movimiento).
   const goTo = (target: Camera, ms = 650) => {
@@ -1126,7 +1203,7 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
         </button>
       </div>
       <div className="q3-stage" ref={box}>
-        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span></div>
+        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span>Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ruptureTime !== null && <span className="q3-live"><i />Ruptura <strong>{ruptureTime.toFixed(0)} s</strong></span>}</div>
         <div className="q3-navigation" role="group" aria-label="Navegación de la escena">
           <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar" title="Acercar"><SceneIcon name="Plus" size={17} /></button>
           <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
@@ -1163,6 +1240,31 @@ export default function Quake3D({ events, mainshock, selectedId, replay, region,
             {selectedEvent.properties.place ?? "lugar no especificado"} · {clock.format(new Date(selectedEvent.properties.time))} ·{" "}
             {depthOf(selectedEvent) === undefined ? "profundidad no disponible" : `${km(depthOf(selectedEvent) as number)} de profundidad${isRoundDepth(depthOf(selectedEvent)) ? " (asignada)" : ""}`}
           </p>
+        )}
+        {fault && ruptureDuration !== null && (
+          <div className="q3-anim" role="group" aria-label="Animación de la ruptura">
+            <button type="button" className="q3-play" onClick={() => (isPlaying ? setPlaying(false) : ruptureTime === null ? startRupture() : setPlaying(true))}>
+              <span aria-hidden="true">{isPlaying ? "❚❚" : "▶"}</span>
+              {isPlaying ? "Pausar" : ruptureTime === null ? "Ver cómo se rompió" : "Continuar"}
+            </button>
+            <input
+              type="range" min={0} max={ruptureDuration} step={0.1} value={ruptureTime ?? ruptureDuration} className="q3-scrub"
+              aria-label="Instante de la ruptura, en segundos"
+              aria-valuetext={`Segundo ${(ruptureTime ?? ruptureDuration).toFixed(0)} de ${ruptureDuration.toFixed(0)}`}
+              onChange={event => {
+                const value = Number(event.target.value);
+                setPlaying(false);
+                clockRef.current = value;
+                setRuptureTime(value >= ruptureDuration ? null : value);
+              }}
+            />
+            <span className="q3-anim-readout">
+              {ruptureTime === null
+                ? `Ruptura completa: ${ruptureDuration.toFixed(0)} s, deslizamiento máx. ${fault.maxSlipM.toFixed(1)} m`
+                : `Segundo ${ruptureTime.toFixed(0)} de ${ruptureDuration.toFixed(0)} · hasta ahora, deslizamiento máx. ${fault.subfaults.reduce((m, sub) => Math.max(m, sub.t === null ? 0 : sub.slip * clamp((ruptureTime - sub.t) / Math.max(sub.rise ?? 1, 1), 0, 1)), 0).toFixed(1)} m`}
+            </span>
+            <span className="q3-anim-note">Cada celda se mueve en el segundo y durante el tiempo que calcula el modelo del USGS. La animación va {RUPTURE_SPEED} veces más rápida que la realidad.</span>
+          </div>
         )}
         <div className="q3-bar" role="group" aria-label="Controles de la vista 3D">
           <div className="q3-seg" role="group" aria-label="Punto de vista">

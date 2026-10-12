@@ -3,7 +3,7 @@
 > **Observatorio cívico y sistema de alerta temprana ante réplicas y eventos sísmicos en la República de Panamá.**  
 > Desarrollado por **Humberto Antonio** ([@humbertiex](https://www.instagram.com/humbertiex_)).
 
-🌐 **Sitio Web Oficial en Producción:** [sismopanama.vercel.app](https://sismopanama.vercel.app)
+🌐 **Sitio Web Oficial en Producción:** [ojopanama.com](https://www.ojopanama.com)
 
 ---
 

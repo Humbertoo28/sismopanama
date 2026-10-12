@@ -98,7 +98,7 @@ export async function fetchIgc(since: number): Promise<Earthquake[]> {
   if (igcCache && now - igcCache.at < IGC_MIN_INTERVAL_MS) return igcCache.events.filter(e => e.properties.time >= since);
   const headers: Record<string, string> = {
     Accept: "text/html",
-    "User-Agent": "SismoPanama/1.0 (+https://sismopanama.vercel.app)",
+    "User-Agent": "OjoPanama/1.0 (+https://www.ojopanama.com)",
   };
   if (igcCache?.etag) headers["If-None-Match"] = igcCache.etag;
   const response = await fetch(IGC_URL, { headers, signal: AbortSignal.timeout(15_000), cache: "no-store" });

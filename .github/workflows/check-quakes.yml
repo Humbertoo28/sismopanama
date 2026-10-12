@@ -17,4 +17,4 @@ jobs:
         run: |
           curl -s -f --max-time 60 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "https://sismopanama.vercel.app/api/cron/check-quakes" || true
+            "https://www.ojopanama.com/api/cron/check-quakes" || true

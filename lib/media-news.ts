@@ -98,7 +98,7 @@ export function parseTelemetro(xml: string, now = Date.now()): MediaItem[] {
 
 async function getFeed(source: MediaSource): Promise<string> {
   const response = await fetch(source.feed, {
-    headers: { Accept: "application/xml, text/xml", "User-Agent": "SismoPanama/1.0 (+https://sismopanama.vercel.app)" },
+    headers: { Accept: "application/xml, text/xml", "User-Agent": "OjoPanama/1.0 (+https://www.ojopanama.com)" },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     next: { revalidate: 300 },
   });

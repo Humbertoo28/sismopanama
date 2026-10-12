@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 // Datos del sitio para buscadores y vistas previas al compartir. Una sola fuente para que la portada, /analisis,
 // el sitemap y los datos estructurados digan lo mismo. Si algún día el sitio tiene dominio propio, basta con definir
 // NEXT_PUBLIC_SITE_URL en Vercel.
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://sismopanama.vercel.app").replace(/\/$/, "");
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.ojopanama.com").replace(/\/$/, "");
 export const SITE_NAME = "Sismo Panamá";
 export const SITE_TITLE = "Sismo Panamá | Sismos y réplicas en vivo, mapa y alertas";
 export const SITE_DESCRIPTION =

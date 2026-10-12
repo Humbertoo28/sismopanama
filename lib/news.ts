@@ -182,7 +182,7 @@ function getText(url: URL, source: NewsSource): Promise<string> {
     const request = https.get(
       url,
       {
-        headers: { Accept: "application/json", "User-Agent": "SismoPanama/1.0 (+https://sismopanama.vercel.app)" },
+        headers: { Accept: "application/json", "User-Agent": "OjoPanama/1.0 (+https://www.ojopanama.com)" },
         signal: AbortSignal.timeout(TIMEOUT_MS),
         agent: false,
         ...(source.extraCa && { ca: [...rootCertificates, source.extraCa] }),
