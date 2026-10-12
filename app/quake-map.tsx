@@ -13,7 +13,9 @@ import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES } from "../lib/p
 import PlatesLegend from "./plates-legend";
 import { intensityColor, slipColor } from "../lib/usgs-colors";
 import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
-import { arrivals, VP_KM_S, VS_KM_S } from "../lib/quake-facts";
+import { arrivals } from "../lib/quake-facts";
+import { frontRadiusKm } from "../lib/travel-time";
+import { loadEventPhases } from "./event-phases";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
 
 // La vista 3D solo se descarga cuando alguien la abre.
@@ -461,9 +463,13 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     }
   };
   // «Ver cómo se propagó»: para el sismo principal se reinicia la animación de la vista 3D (ruptura y onda); para cualquier otro,
-  // en el mapa plano se abren dos anillos desde el epicentro (onda P y onda S) y se ve cuándo llega la sacudida a las capitales.
+  // en el mapa plano se abren dos anillos desde el epicentro (onda P y onda S, con el modelo ak135) y se ve cuándo llega la
+  // sacudida a las capitales (modelo) y cuándo la registró cada estación (llegadas reales que publica el USGS).
   const [restart3d, setRestart3d] = useState(0);
-  const [waveHud, setWaveHud] = useState<{ t: number; total: number; reached: { name: string; seconds: number }[]; done: boolean } | null>(null);
+  const [waveHud, setWaveHud] = useState<{
+    t: number; done: boolean; cities: { name: string; seconds: number }[]; citiesTotal: number;
+    stations: { code: string; p: number | null; s: number | null }[]; stationsTotal: number; real: boolean;
+  } | null>(null);
   const view3dNow = useRef(view3d);
   useEffect(() => {
     view3dNow.current = view3d;
@@ -482,59 +488,88 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     if (!map || !L) return;
     const wasIn3d = view3dNow.current;
     setView3d(false);
+    let cancelled = false;
     let raf = 0;
     let group: any = null;
-    const timer = window.setTimeout(() => {
-      map.invalidateSize({ animate: false });
-      map.closePopup();
-      const [lng, lat, depthRaw] = event.geometry.coordinates;
-      const depth = Number.isFinite(depthRaw) ? depthRaw! : 10;
-      const { list } = arrivals(event);
-      const end = Math.max(...list.map(city => city.seconds), 5) + 4;
-      group = L.layerGroup().addTo(map);
-      const ring = (color: string, dash: string | undefined, fill: number) =>
-        L.circle([lat, lng], { radius: 1, color, weight: 2.5, dashArray: dash, fillColor: color, fillOpacity: fill, interactive: false }).addTo(group);
-      const pRing = ring("#5aa9ff", "6 6", 0.05);
-      const sRing = ring("#ff8a24", undefined, 0.12);
-      L.circleMarker([lat, lng], { radius: 7, color: "#ffffff", weight: 2.5, fillColor: "#da121a", fillOpacity: 1, interactive: false })
-        .bindTooltip("Epicentro", { permanent: true, direction: "left", offset: [-9, 0], className: "place-label" }).addTo(group);
-      const dots = list.map(city =>
-        L.circleMarker([city.lat, city.lng], { radius: 6, color: "#ffffff", weight: 2, fillColor: "#6b7685", fillOpacity: 1, interactive: false })
-          .bindTooltip(city.name, { permanent: true, direction: "right", offset: [9, 0], className: "place-label" }).addTo(group),
-      );
-      map.flyToBounds(L.latLngBounds([[lat, lng], ...list.map(city => [city.lat, city.lng])]), { padding: [60, 60], maxZoom: 9, duration: reducedMotion() ? 0 : 1 });
-      // Radio sobre el suelo de un frente que ya recorrió `seconds` a `speed` km/s desde el hipocentro (a `depth` km de profundidad).
-      const radiusKm = (seconds: number, speed: number) => Math.sqrt(Math.max(0, (seconds * speed) ** 2 - depth ** 2));
-      let lastHud = -1;
-      const paint = (t: number, hud: boolean) => {
-        pRing.setRadius(radiusKm(t, VP_KM_S) * 1000);
-        sRing.setRadius(radiusKm(t, VS_KM_S) * 1000);
-        const reached = list.flatMap((city, index) => {
-          const hit = city.seconds <= t;
-          dots[index].setStyle({ fillColor: hit ? "#ff8a24" : "#6b7685" });
-          dots[index].setTooltipContent(hit ? `${city.name} · ${Math.max(1, Math.round(city.seconds))} s` : city.name);
-          return hit ? [{ name: city.name, seconds: Math.max(1, Math.round(city.seconds)) }] : [];
+    const timers: number[] = [];
+    const [lng, lat, depthRaw] = event.geometry.coordinates;
+    const depth = Number.isFinite(depthRaw) ? depthRaw! : 10;
+    // Las llegadas a estaciones llegan del servidor; si tardan más de 3 s se anima solo con el modelo.
+    const phasesReady = Promise.race([loadEventPhases(event.id), new Promise<null>(resolve => timers.push(window.setTimeout(() => resolve(null), 3000)))]);
+    phasesReady.then(phases => {
+      if (cancelled) return;
+      timers.push(window.setTimeout(() => {
+        if (cancelled) return;
+        map.invalidateSize({ animate: false });
+        map.closePopup();
+        const { list } = arrivals(event);
+        // Estaciones reales: las más cercanas (hasta 900 km), con su posición calculada con la distancia y el rumbo que publica el USGS.
+        const stations = (phases?.stations ?? []).filter(station => station.distanceKm <= 900).slice(0, 5).map(station => {
+          const [from, bearing, arc] = [(lat * Math.PI) / 180, (station.azimuth * Math.PI) / 180, station.distanceKm / 6371];
+          const toLat = Math.asin(Math.sin(from) * Math.cos(arc) + Math.cos(from) * Math.sin(arc) * Math.cos(bearing));
+          const toLng = (lng * Math.PI) / 180 + Math.atan2(Math.sin(bearing) * Math.sin(arc) * Math.cos(from), Math.cos(arc) - Math.sin(from) * Math.sin(toLat));
+          return { ...station, lat: (toLat * 180) / Math.PI, lng: (toLng * 180) / Math.PI };
         });
-        if (hud) setWaveHud({ t, total: list.length, reached, done: t >= end });
-      };
-      if (reducedMotion()) {
-        paint(end, true);
-        return;
-      }
-      // El recorrido real dura menos de un minuto; se acelera para que dure unos 20 s.
-      const speed = Math.max(1, end / 20);
-      const begin = performance.now() + 1100;
-      const tick = (now: number) => {
-        const t = Math.min(end, Math.max(0, ((now - begin) / 1000) * speed));
-        const hud = now - lastHud > 120 || t >= end;
-        if (hud) lastHud = now;
-        paint(t, hud);
-        if (t < end) raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    }, wasIn3d ? 300 : 0);
+        const lastObserved = Math.max(0, ...stations.flatMap(station => [station.p ?? 0, station.s ?? 0]));
+        const end = Math.max(...list.map(city => city.seconds), lastObserved, 5) + 4;
+        group = L.layerGroup().addTo(map);
+        const ring = (color: string, dash: string | undefined, fill: number) =>
+          L.circle([lat, lng], { radius: 1, color, weight: 2.5, dashArray: dash, fillColor: color, fillOpacity: fill, interactive: false }).addTo(group);
+        const pRing = ring("#5aa9ff", "6 6", 0.05);
+        const sRing = ring("#ff8a24", undefined, 0.12);
+        L.circleMarker([lat, lng], { radius: 7, color: "#ffffff", weight: 2.5, fillColor: "#da121a", fillOpacity: 1, interactive: false })
+          .bindTooltip("Epicentro", { permanent: true, direction: "left", offset: [-9, 0], className: "place-label" }).addTo(group);
+        const dots = list.map(city =>
+          L.circleMarker([city.lat, city.lng], { radius: 6, color: "#ffffff", weight: 2, fillColor: "#6b7685", fillOpacity: 1, interactive: false })
+            .bindTooltip(city.name, { permanent: true, direction: "right", offset: [9, 0], className: "place-label" }).addTo(group),
+        );
+        const posts = stations.map(station =>
+          L.circleMarker([station.lat, station.lng], { radius: 5, color: "#ffffff", weight: 2, fillColor: "#6b7685", fillOpacity: 1, interactive: false })
+            .bindTooltip(`Estación ${station.code.split(".")[1]}`, { permanent: true, direction: "top", offset: [0, -7], className: "place-label" }).addTo(group),
+        );
+        map.flyToBounds(L.latLngBounds([[lat, lng], ...list.map(city => [city.lat, city.lng]), ...stations.slice(0, 3).map(station => [station.lat, station.lng])]), {
+          padding: [60, 60], maxZoom: 9, duration: reducedMotion() ? 0 : 1,
+        });
+        let lastHud = -1;
+        const paint = (t: number, hud: boolean) => {
+          pRing.setRadius(frontRadiusKm(t, depth, "p") * 1000);
+          sRing.setRadius(frontRadiusKm(t, depth, "s") * 1000);
+          const cities = list.flatMap((city, index) => {
+            const hit = city.seconds <= t;
+            dots[index].setStyle({ fillColor: hit ? "#ff8a24" : "#6b7685" });
+            dots[index].setTooltipContent(hit ? `${city.name} · ${Math.max(1, Math.round(city.seconds))} s` : city.name);
+            return hit ? [{ name: city.name, seconds: Math.max(1, Math.round(city.seconds)) }] : [];
+          });
+          const seen = stations.flatMap((station, index) => {
+            const [gotP, gotS] = [station.p !== null && station.p <= t, station.s !== null && station.s <= t];
+            posts[index].setStyle({ fillColor: gotS ? "#ff8a24" : gotP ? "#5aa9ff" : "#6b7685" });
+            const name = station.code.split(".")[1];
+            posts[index].setTooltipContent(gotP || gotS ? `Estación ${name} · ${gotP ? `P ${Math.round(station.p!)} s` : ""}${gotP && gotS ? " · " : ""}${gotS ? `S ${Math.round(station.s!)} s` : ""}` : `Estación ${name}`);
+            return gotP || gotS ? [{ code: station.code, p: gotP ? station.p : null, s: gotS ? station.s : null }] : [];
+          });
+          if (hud) setWaveHud({ t, done: t >= end, cities, citiesTotal: list.length, stations: seen, stationsTotal: stations.length, real: stations.length > 0 });
+        };
+        if (reducedMotion()) {
+          paint(end, true);
+          return;
+        }
+        // El recorrido real dura un par de minutos; se acelera para que dure unos 20 s.
+        const speed = Math.max(1, end / 20);
+        const begin = performance.now() + 1100;
+        const tick = (now: number) => {
+          if (cancelled) return;
+          const t = Math.min(end, Math.max(0, ((now - begin) / 1000) * speed));
+          const hud = now - lastHud > 120 || t >= end;
+          if (hud) lastHud = now;
+          paint(t, hud);
+          if (t < end) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      }, wasIn3d ? 300 : 0));
+    });
     return () => {
-      window.clearTimeout(timer);
+      cancelled = true;
+      timers.forEach(timer => window.clearTimeout(timer));
       cancelAnimationFrame(raf);
       if (group) map.removeLayer(group);
     };
@@ -751,7 +786,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   const waveChip = (
     <button
       type="button" className={`layer-chip${layers.wave ? " on" : ""}`} aria-pressed={layers.wave} onClick={() => toggleLayer("wave")}
-      title="Cómo se propagó la sacudida por el país: color = intensidad estimada por el USGS; el frente avanza a velocidades típicas de las ondas"
+      title="Cómo se propagó la sacudida por el país: color = intensidad estimada por el USGS; el frente avanza con el modelo de velocidades ak135"
     ><span className="chip-long">Onda de sacudida</span><span className="chip-short" aria-hidden="true">Onda</span></button>
   );
   const layerNote = usgs.status === "loading" && (anyLayer || layers.wave)
@@ -777,9 +812,17 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           </div>
           <p>
             {waveHud.done ? "La sacudida ya pasó por todas las ciudades." : `Segundo ${Math.floor(waveHud.t)}`}
-            {waveHud.reached.length > 0 && ` · Llegó a ${waveHud.reached.map(city => `${city.name} (${city.seconds} s)`).join(", ")}`}
+            {waveHud.cities.length > 0 && ` · Llegó a ${waveHud.cities.map(city => `${city.name} (${city.seconds} s)`).join(", ")}`}
           </p>
-          <small>Ilustración con velocidades típicas: onda P 6 km/s (azul), onda S 3.5 km/s (naranja). No son registros.</small>
+          {waveHud.real && (
+            <p>
+              {waveHud.stations.length === 0 ? "Aún ninguna estación lo ha registrado." : `Registrado por ${waveHud.stations.map(station => `${station.code.split(".")[1]}${station.p !== null ? ` (P ${Math.round(station.p)} s${station.s !== null ? `, S ${Math.round(station.s)} s` : ""})` : ""}`).join(", ")}`}
+            </p>
+          )}
+          <small>
+            Anillos y ciudades: modelo ak135 (IASPEI), onda P en azul y onda S en naranja.
+            {waveHud.real ? " Estaciones: llegadas medidas y publicadas por el USGS." : " Este sismo no tiene llegadas a estaciones publicadas por el USGS: solo modelo."}
+          </small>
         </div>
       )}
       {view3d && (

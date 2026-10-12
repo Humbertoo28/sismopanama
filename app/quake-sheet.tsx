@@ -5,6 +5,7 @@ import { isAftershock, type Earthquake } from "../lib/earthquakes";
 import { isRoundDepth } from "../lib/depth";
 import { agoLabel, arrivals, depthClass, energyTnt, reportUrl, SOURCE_NAMES } from "../lib/quake-facts";
 import { placeLabel } from "../lib/place-of";
+import { useEventPhases } from "./event-phases";
 import { provinceLabel } from "../lib/province-of";
 
 const dateTime = new Intl.DateTimeFormat("es-PA", {
@@ -25,6 +26,7 @@ export default function QuakeSheet({
   const isMain = event.id === mainshock?.id;
   const after = !!mainshock && isAftershock(event, mainshock);
   const facts = useMemo(() => arrivals(event), [event]);
+  const { status: phaseStatus, phases } = useEventPhases(event.id);
   const agencies = properties.agencies ?? [{ source: properties.source ?? "usgs", mag: properties.mag, magType: properties.magType ?? null }];
   const primary = SOURCE_NAMES[properties.source ?? "usgs"];
   const reviewed = properties.status === "reviewed";
@@ -124,7 +126,26 @@ export default function QuakeSheet({
               <li key={city.name}><span>{city.name} <small>a {Math.round(city.km)} km</small></span><strong>{Math.max(1, Math.round(city.seconds))} s</strong></li>
             ))}
           </ul>
-          <p className="qs-note">Tiempo calculado para la sacudida fuerte (onda S) con una velocidad típica de 3.5 km/s: no son registros de sismógrafos.</p>
+          <p className="qs-note">Tiempo calculado para la sacudida fuerte (onda S) con el modelo de velocidades ak135, la referencia de la sismología internacional (IASPEI). Se contrastó con las llegadas medidas por el USGS en réplicas de esta secuencia: la diferencia máxima fue de unos 3 s. No son registros en esas ciudades.</p>
+        </section>
+
+        <section className="qs-arrival" aria-labelledby="qs-stations-title">
+          <h4 id="qs-stations-title">Llegada registrada por estaciones (USGS)</h4>
+          {phaseStatus === "loading" && <p className="qs-note">Consultando las estaciones que lo registraron…</p>}
+          {phaseStatus === "ready" && phases && (
+            <>
+              <ul>
+                {phases.stations.slice(0, 4).map(station => (
+                  <li key={station.code}>
+                    <span>{station.code} <small>a {station.distanceKm} km</small></span>
+                    <strong>{station.p !== null && `P ${Math.round(station.p)} s`}{station.p !== null && station.s !== null && " · "}{station.s !== null && `S ${Math.round(station.s)} s`}</strong>
+                  </li>
+                ))}
+              </ul>
+              <p className="qs-note">Segundos desde el origen del sismo hasta que cada estación registró la onda P y la onda S, tal como los publica el USGS. {phases.total} {phases.total === 1 ? "estación lo registró" : "estaciones lo registraron"}; las más cercanas están a unos {phases.stations[0].distanceKm} km.</p>
+            </>
+          )}
+          {phaseStatus === "none" && <p className="qs-note">El USGS no publica llegadas a estaciones de este sismo (solo las tienen los sismos que registra el USGS); los tiempos de arriba son los del modelo.</p>}
         </section>
 
         <div className="qs-actions">

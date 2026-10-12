@@ -11,6 +11,7 @@ import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } f
 import PlatesLegend from "./plates-legend";
 import { intensityColor, intensityRgb, slipColor } from "../lib/usgs-colors";
 import { depthColor, isRoundDepth } from "../lib/depth";
+import { travelTime } from "../lib/travel-time";
 import { buildGroundModel, groundMotion } from "../lib/ground-motion";
 import { loadMosaic, paintMosaic, paintTexture, planTiles, type Mosaic } from "./satellite-tiles";
 import { reducedMotion, shakeElement } from "./shake";
@@ -46,7 +47,7 @@ type Props = {
   shaking: Contour[] | null;
   // Límites de las placas tectónicas (datos estáticos).
   plates: boolean;
-  // Onda de sacudida: cómo se propagó por el país (intensidad del ShakeMap + llegada calculada con velocidades típicas).
+  // Onda de sacudida: cómo se propagó por el país (intensidad del ShakeMap + llegada calculada con el modelo de velocidades ak135).
   wave: boolean;
   shakeGrid: ShakeGrid | null;
   // Mecanismo focal del USGS: de su plano de falla sale el sentido del deslizamiento que muestran las flechas.
@@ -81,9 +82,6 @@ const SAT_ALPHA = 0.9;
 const SAT_KEY = "sismo_3d_satellite";
 // Velocidad de la animación de la ruptura respecto al tiempo real del modelo (la ruptura dura unos 43 s).
 const RUPTURE_SPEED = 3;
-// Velocidades típicas de las ondas sísmicas en la corteza (km/s). Con ellas se calcula cuándo llega cada onda a cada punto.
-const VP = 6.0;
-const VS = 3.5;
 // Con la onda de sacudida el recorrido dura más (llega a todo el país), así que la animación va más rápida.
 const WAVE_SPEED = 6;
 const COLORS = { low: "#f5c542", mid: "#f08a24", high: "#da121a", latest: "#1d6bff", main: "#a21caf" };
@@ -391,7 +389,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
 
   // La ruptura se puede animar si el modelo trae el tiempo de cada celda.
   // Llegada de las ondas a cada celda del ShakeMap: cada celda de la falla emite desde el segundo en que se rompe, y a cada
-  // punto la onda le llega desde la celda más cercana en tiempo. Es un cálculo con velocidades típicas, no un registro.
+  // punto la onda le llega desde la celda más cercana en tiempo. Es un cálculo con el modelo ak135 (lib/travel-time.ts), no un registro.
   const waveField = useMemo(() => {
     if (!wave || !shakeGrid || !fault || fault.durationS === null) return null;
     const { nx, ny, west, east, south, north } = shakeGrid;
@@ -406,6 +404,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
       t: sub.t ?? 0,
     }));
     const [arrivalS, arrivalP] = [new Float32Array(nx * ny), new Float32Array(nx * ny)];
+    const [timeS, timeP] = [travelTime("s"), travelTime("p")];
     let end = 0;
     let originLng = 0;
     let originLat = 0;
@@ -418,9 +417,10 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
         const lng = west + ((east - west) * ix) / (nx - 1);
         let [bestS, bestP] = [Infinity, Infinity];
         for (const source of sources) {
-          const d = Math.hypot((lng - source.lng) * kx, (lat - source.lat) * ky, source.depth);
-          bestS = Math.min(bestS, source.t + d / VS);
-          bestP = Math.min(bestP, source.t + d / VP);
+          const x = Math.hypot((lng - source.lng) * kx, (lat - source.lat) * ky);
+          // Ninguna onda viaja más rápido que la del manto (P 8.04 km/s, S 4.48 km/s): con esa cota se descartan las celdas lejanas sin consultar la tabla.
+          if (source.t + x / 4.6 < bestS) bestS = Math.min(bestS, source.t + timeS(x, source.depth));
+          if (source.t + x / 8.1 < bestP) bestP = Math.min(bestP, source.t + timeP(x, source.depth));
         }
         const k = iy * nx + ix;
         arrivalS[k] = bestS;
@@ -1693,7 +1693,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
                 <summary>Qué es real y qué es calculado</summary>
                 <p>
                   Cada celda de la falla se mueve en el segundo y durante el tiempo que calcula el modelo del USGS.
-                  {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con velocidades típicas de las ondas (P: 6 km/s, S: 3.5 km/s) desde cada celda de la falla cuando se rompe. No son registros de sismógrafos. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
+                  {waveField && " Onda de sacudida: el color de cada lugar es la intensidad que estima el USGS (ShakeMap); el momento en que llega se calcula con el modelo de velocidades ak135 (la referencia de la sismología internacional, IASPEI) desde cada celda de la falla cuando se rompe; ese modelo coincide con las llegadas que midieron las estaciones del USGS con unos 3 s de diferencia como máximo. No son registros en cada lugar. La pantalla tiembla como efecto visual: su fuerza sigue la intensidad que estima el USGS en el centro de la vista."}
                   {ground && ` «Terreno» es cuánto se mueve el suelo en horizontal en el centro de la vista${ground.town ? ` (cerca de ${ground.town})` : ""}: ${moveText(ground.meters)}${ground.meters >= 0.01 ? ` hacia el ${ground.long}` : ""}. Se calcula con las ecuaciones de Okada (1985) y el deslizamiento que modela el USGS en cada celda (con el ángulo de deslizamiento de su mecanismo); no es una medición y está en metros reales, sin exagerar: a esta escala no se vería moverse.`}
                   {slipSense && ` Flechas: hacia dónde se movió cada lado de la falla según el mecanismo focal del USGS (rumbo ${slipSense.strike}°, buzamiento ${slipSense.dip}°, ángulo de deslizamiento ${slipSense.rake}°: ${slipSense.kind}); su largo no es cuánto se movió.`}
                 </p>
@@ -1798,7 +1798,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, mainsh
             {fault && " La ruptura es el modelo de falla que publica el USGS para el sismo principal."}
             {felt && " Los cuadros de color sobre la superficie son la intensidad que reportó la gente."}
             {shaking && " Las curvas de colores sobre la superficie son la intensidad de la sacudida que estima el USGS."}
-            {waveField && " La onda de sacudida colorea el país a medida que la onda S llega a cada lugar: el color es la intensidad que estima el USGS y el frente reciente se ve más claro; un tinte azul tenue anticipa la llegada de la onda P. Los tiempos se calculan con velocidades típicas, no con registros."}
+            {waveField && " La onda de sacudida colorea el país a medida que la onda S llega a cada lugar: el color es la intensidad que estima el USGS y el frente reciente se ve más claro; un tinte azul tenue anticipa la llegada de la onda P. Los tiempos se calculan con el modelo de velocidades ak135 (IASPEI), no con registros en cada lugar."}
             {ground && " «Terreno»: movimiento horizontal del suelo en el centro de la vista, calculado con el modelo de deslizamiento del USGS (Okada, 1985), en metros reales y sin exagerar; no es una medición."}
             {plates && " Las líneas gruesas de colores son los límites entre placas tectónicas: rojo discontinuo, subducción (una placa se hunde bajo otra); amarillo, falla transformante (se deslizan de lado); celeste, extensión (se separan); morado, convergencia (chocan). Salen del modelo PB2002 de P. Bird (2003), que no es de una agencia de gobierno; son límites aproximados y en Panamá el contacto entre placas es una zona ancha."}
             {(fault || felt || shaking) && " Fuente de estas capas: USGS."}

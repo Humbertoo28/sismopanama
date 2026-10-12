@@ -1,5 +1,6 @@
 import { kmBetween, type Earthquake } from "./earthquakes";
 import { DISTRICTS, PLACES } from "./places";
+import { firstArrival } from "./travel-time";
 
 export const SOURCE_NAMES = { usgs: "USGS", igc: "IGC", emsc: "EMSC" } as const;
 
@@ -12,10 +13,6 @@ export function reportUrl(event: Earthquake | null | undefined) {
 
 // Datos que la ficha de un sismo calcula a partir de su ubicación, profundidad y magnitud. Todo lo calculado se rotula como
 // tal en la pantalla: no son mediciones.
-
-// Velocidades típicas de las ondas sísmicas en la corteza (km/s), las mismas que usa la vista 3D.
-export const VP_KM_S = 6.0;
-export const VS_KM_S = 3.5;
 
 // Superficial: hasta 70 km; intermedio: 70 a 300 km; profundo: más de 300 km (clasificación habitual).
 export function depthClass(km: number) {
@@ -56,15 +53,15 @@ const CITIES = (() => {
   return { provincial: list, capital: capital ? { name: "Ciudad de Panamá", lat: capital.lat, lng: capital.lng } : null };
 })();
 
-export type ArrivalCity = { name: string; lat: number; lng: number; km: number; seconds: number };
+// `seconds`: llegada de la onda S (la sacudida fuerte); `pSeconds`: llegada de la onda P. Ambas con el modelo ak135.
+export type ArrivalCity = { name: string; lat: number; lng: number; km: number; seconds: number; pSeconds: number };
 
 function arrivalOf(city: { name: string; lat: number; lng: number }, lat: number, lng: number, depth: number): ArrivalCity {
   const km = kmBetween(lat, lng, city.lat, city.lng);
-  // La distancia real recorrida por la onda es la hipocentral (la profundidad también cuenta).
-  return { ...city, km, seconds: Math.hypot(km, depth) / VS_KM_S };
+  return { ...city, km, seconds: firstArrival(km, depth, "s"), pSeconds: firstArrival(km, depth, "p") };
 }
 
-/** Distancia a la capital y a qué hora llega la sacudida fuerte (onda S) a las tres capitales de provincia más cercanas y a la capital. */
+/** Distancia a la capital y cuánto tarda en llegar la sacudida fuerte (onda S, modelo ak135) a las tres capitales de provincia más cercanas y a la capital. */
 export function arrivals(event: Earthquake) {
   const [lng, lat, depthRaw] = event.geometry.coordinates;
   const depth = Number.isFinite(depthRaw) ? depthRaw! : 10;
