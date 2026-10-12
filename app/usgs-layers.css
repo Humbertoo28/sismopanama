@@ -363,3 +363,24 @@ html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdro
 @media (max-width: 700px) {
   .map-layers-dock { display: contents; }
 }
+
+/* Aviso de Ctrl/⌘ + rueda sobre el mapa plano. */
+.map-wheel-hint { position: absolute; inset: 0; z-index: 650; display: grid; place-items: center; padding: 24px; background: #0b1a3366; color: #fff; font-size: calc(18px*var(--ts,1)); font-weight: 600; text-align: center; text-shadow: 0 1px 4px #0006; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.map-wheel-hint.show { opacity: 1; }
+.map-wheel-hint kbd { display: inline-block; margin: 0 4px; padding: 2px 8px; border-radius: 6px; border: 1px solid #ffffff80; background: #ffffff26; font: inherit; }
+@media (hover: none) and (pointer: coarse) { .map-wheel-hint { display: none; } }
+@media (prefers-reduced-motion: reduce) { .map-wheel-hint { transition: none; } }
+
+/* Ficha corta al pasar el ratón por un sismo del mapa. */
+.leaflet-tooltip.quake-tip { width: 270px; padding: 12px 14px; border: 1px solid #dce2e9; border-radius: 12px; background: #fff; color: #121a2a; box-shadow: 0 10px 28px #121a2a33; white-space: normal; font: 400 calc(14px*var(--ts,1))/1.4 "DM Sans", Arial, sans-serif; animation: quake-tip-in .16s ease-out; }
+.leaflet-tooltip.quake-tip:before { border-top-color: #fff; }
+.quake-tip-head { display: flex; align-items: center; gap: 12px; }
+.quake-tip-mag { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 10px; background: #e8eef8; color: #0b2a5b; font-size: calc(20px*var(--ts,1)); font-weight: 700; font-variant-numeric: tabular-nums; }
+.quake-tip-mag.mid { background: #fdf1e4; color: #a34a05; }
+.quake-tip-mag.high { background: #b8102b; color: #fff; }
+.quake-tip-head strong { display: block; font-size: calc(15px*var(--ts,1)); font-weight: 700; line-height: 1.25; }
+.quake-tip-head small { display: block; margin-top: 2px; font-size: calc(13px*var(--ts,1)); color: #566275; }
+.quake-tip-meta { margin-top: 10px; padding-top: 8px; border-top: 1px solid #dce2e9; font-size: calc(13px*var(--ts,1)); color: #364357; }
+.quake-tip-hint { margin-top: 6px; font-size: calc(12px*var(--ts,1)); font-weight: 600; color: #0b2a5b; }
+@keyframes quake-tip-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .leaflet-tooltip.quake-tip { animation: none; } }

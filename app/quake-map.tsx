@@ -13,7 +13,8 @@ import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES } from "../lib/p
 import PlatesLegend from "./plates-legend";
 import { intensityColor, slipColor } from "../lib/usgs-colors";
 import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
-import { arrivals } from "../lib/quake-facts";
+import { agoLabel, arrivals } from "../lib/quake-facts";
+import { placeTitle } from "../lib/quake-summary";
 import { frontRadiusKm } from "../lib/travel-time";
 import { loadEventPhases } from "./event-phases";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
@@ -115,6 +116,8 @@ const readMapMode = (): MapLayerMode => {
     return "satellite";
   }
 };
+const noSubscribe = () => () => {};
+
 export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPropagationEnd, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
@@ -122,6 +125,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   const mapMode = useSyncExternalStore(subscribeMapMode, readMapMode, () => "satellite" as MapLayerMode);
   // Vista 3D y capas con datos del USGS (ruptura de la falla y «lo que se sintió»), compartidas por el mapa y el 3D.
   const [view3d, setView3d] = useState(false);
+  // Aviso que aparece un momento si se usa la rueda sobre el mapa sin Ctrl/⌘ (la página sigue desplazándose).
+  const [wheelHint, setWheelHint] = useState(false);
+  const modKey = useSyncExternalStore(noSubscribe, () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"), () => "Ctrl");
   // Pantalla completa del mapa (el plano y el 3D comparten el mismo marco): la del navegador si la permite y, si no (iPhone y
   // navegadores integrados), el marco se amplía sobre toda la página.
   const mapDiv = useRef<HTMLDivElement>(null);
@@ -275,10 +281,37 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const markDetail = () => container.classList.toggle("map-detail", map.getZoom() >= 9);
     map.on("zoomend", markDetail);
 
+    // Ctrl/⌘ + rueda (y el pellizco del trackpad, que el navegador entrega igual) acerca o aleja el mapa alrededor del puntero en
+    // vez de agrandar la página. Sin esas teclas la rueda sigue desplazando la página, como en el 3D. Un clic de la rueda mueve
+    // ~100 px y el trackpad unos pocos por evento: se acumula y se cambia de nivel cada ~100 px para que ambos se sientan igual.
+    let wheelPx = 0;
+    let hintTimer = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+          setWheelHint(true);
+          window.clearTimeout(hintTimer);
+          hintTimer = window.setTimeout(() => setWheelHint(false), 1400);
+        }
+        return;
+      }
+      event.preventDefault();
+      setWheelHint(false);
+      wheelPx += event.deltaMode === 1 ? event.deltaY * 33 : event.deltaY;
+      if (Math.abs(wheelPx) < 100) return;
+      const step = wheelPx > 0 ? -1 : 1;
+      wheelPx = 0;
+      const zoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + step));
+      if (zoom !== map.getZoom()) map.setZoomAround(map.mouseEventToContainerPoint(event), zoom);
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
     const markers = markersRef.current;
     return () => {
+      container.removeEventListener("wheel", onWheel);
+      window.clearTimeout(hintTimer);
       map.off("zoomend", markDetail);
       map.off("zoomend", syncProvinces);
       map.remove();
@@ -338,12 +371,16 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     builtKey.current = key;
     layer.clearLayers();
     markersRef.current.clear();
+    // Al cargar, los puntos entran en orden cronológico pero todos en medio segundo. Antes cada uno esperaba 80 ms más que el
+    // anterior: con 400 sismos tardaban más de 30 s en aparecer y parecía una reproducción que nadie había pedido.
     const chronological = [...events].sort((a, b) => a.properties.time - b.properties.time).map(event => event.id);
+    const popDelay = new Map(chronological.map((id, index) => [id, Math.round((index / Math.max(1, chronological.length - 1)) * 500)]));
     const latestEvent = events.reduce<Earthquake | null>(
       (newest, e) => (!newest || e.properties.time > newest.properties.time ? e : newest),
       null,
     );
     const pop = popIn.current && !reducedMotion();
+    const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     for (const event of events) {
       const [lng, lat, depth] = event.geometry.coordinates;
       const mag = event.properties.mag;
@@ -391,14 +428,47 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
 
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${m >= 5 ? " high" : m >= 3 ? " m-mid" : " m-low"}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
+        html: `<span class="quake-marker${m >= 5 ? " high" : m >= 3 ? " m-mid" : " m-low"}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--d:${popDelay.get(event.id) ?? 0}ms">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
-      const marker = L.marker([lat, lng], {
-        icon,
-        zIndexOffset: zIndex,
-        title: `${isLatest ? (mainshock && isAftershock(event, mainshock) ? "Última réplica - " : "Último sismo - ") : isMain ? "Sismo principal - " : ""}M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
-      }).addTo(layer);
+      const role = isMain ? "Sismo principal" : isLatest
+        ? (mainshock && isAftershock(event, mainshock) ? "Última réplica" : "Último sismo")
+        : mainshock && isAftershock(event, mainshock) ? "Réplica" : "Sismo";
+      const magLabel = mag === null ? "—" : mag.toFixed(1);
+      const marker = L.marker([lat, lng], { icon, zIndexOffset: zIndex }).addTo(layer);
+      // Nombre para lectores de pantalla (antes era un `title`, que además mostraba un recuadro nativo lento y en inglés).
+      marker.getElement()?.setAttribute("aria-label", `${role}, magnitud ${magLabel}: ${placeTitle(event)}`);
+      // Con ratón: ficha corta al pasar por encima, sin tener que hacer clic. Se arma al abrirse para que «hace…» esté al día.
+      // En pantallas táctiles no hace falta: tocar abre la ficha completa.
+      if (canHover) {
+        marker.bindTooltip(() => {
+          const tip = document.createElement("div");
+          const head = document.createElement("div");
+          head.className = "quake-tip-head";
+          const badge = document.createElement("span");
+          badge.className = `quake-tip-mag${m >= 6 ? " high" : m >= 4 ? " mid" : ""}`;
+          badge.textContent = magLabel;
+          const text = document.createElement("div");
+          const place = document.createElement("strong");
+          place.textContent = placeTitle(event);
+          const when = document.createElement("small");
+          when.textContent = `${role} · ${agoLabel(event.properties.time)}`;
+          text.appendChild(place);
+          text.appendChild(when);
+          head.appendChild(badge);
+          head.appendChild(text);
+          const meta = document.createElement("div");
+          meta.className = "quake-tip-meta";
+          meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km de profundidad` : "profundidad no disponible"} · ${provinceLabel(event)}`;
+          const hint = document.createElement("div");
+          hint.className = "quake-tip-hint";
+          hint.textContent = "Clic para ver la ficha completa";
+          tip.appendChild(head);
+          tip.appendChild(meta);
+          tip.appendChild(hint);
+          return tip;
+        }, { direction: "top", offset: [0, -size / 2 - 4], className: "quake-tip", opacity: 1 });
+      }
       const popup = document.createElement("div");
       if (isLatest) {
         const badge = document.createElement("div");
@@ -862,6 +932,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         onReady={() => setReady(true)}
       />
       <div id="leaflet-map" ref={mapDiv} role="group" aria-label="Mapa interactivo de sismos en Panamá" data-filtered={filtersKey !== "" ? "true" : undefined} />
+      <div className={`map-wheel-hint${wheelHint && !view3d ? " show" : ""}`} aria-hidden="true">
+        Mantén <kbd>{modKey}</kbd> y usa la rueda para acercar el mapa
+      </div>
       {fullscreen === "overlay" && <span className="map-overlay-flag" hidden />}
       {propagation && waveHud && !view3d && (
         <div className="wave-hud" role="status">
