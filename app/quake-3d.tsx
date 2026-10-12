@@ -9,7 +9,8 @@ import { PROVINCE_LABELS, TOWN_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
 import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
 import PlatesLegend from "./plates-legend";
-import { intensityColor, intensityRgb, slipColor } from "../lib/usgs-colors";
+import { intensityColor, intensityRgb } from "../lib/usgs-colors";
+import { SLIP_GRADIENT, slipRgb } from "./map-layers";
 import { depthColor, isRoundDepth } from "../lib/depth";
 import { travelTime } from "../lib/travel-time";
 import { buildGroundModel, groundMotion } from "../lib/ground-motion";
@@ -169,16 +170,14 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   const [surfaceOpacity, setSurfaceOpacity] = useState(90);
   // La pantalla tiembla cuando la onda de sacudida llega al centro de la vista (efecto visual; se puede apagar).
   const [screenShake, setScreenShake] = useState(true);
-  // Las réplicas están ocultas por defecto: la escena enseña el sismo principal, su ruptura y la onda. Con algún filtro
-  // puesto, o con la secuencia en reproducción, se muestran (es justo lo que se está pidiendo ver), y el sismo seleccionado
-  // nunca se oculta. Lo que la persona elige con el interruptor vale mientras no cambie ningún filtro.
+  // Las réplicas se ven desde el principio: la secuencia completa a su profundidad es lo que esta vista enseña mejor. Se pueden
+  // ocultar en «Ajustes y capas» para mirar solo el sismo principal y su ruptura; esa elección vale mientras no cambie ningún filtro.
   const [aftershockChoice, setAftershockChoice] = useState<{ key: string; show: boolean } | null>(null);
-  const showAftershocks = aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : filtersKey !== "";
+  const showAftershocks = aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : true;
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
   const [ruptureTime, setRuptureTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const clockRef = useRef(0);
-  const autoPlayed = useRef(false);
   // Al abrir, la cámara baja desde una vista casi cenital hasta el punto de vista inicial (salvo que se pidan menos animaciones).
   const [camera, setCamera] = useState<Camera>(() => {
     if (typeof window === "undefined") return PRESETS.perspective;
@@ -523,17 +522,6 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, ruptureDuration, playSpeed]);
-  // Al abrir el 3D con la falla cargada, la ruptura se reproduce una vez (salvo que se pidan menos animaciones).
-  useEffect(() => {
-    if (ruptureDuration === null || autoPlayed.current || reducedMotion()) return;
-    const timer = window.setTimeout(() => {
-      autoPlayed.current = true;
-      clockRef.current = 0;
-      setRuptureTime(0);
-      setPlaying(true);
-    }, 2200);
-    return () => window.clearTimeout(timer);
-  }, [ruptureDuration]);
 
   const facts = useMemo(() => {
     const depths = visibleEvents.map(depthOf).filter((d): d is number => typeof d === "number");
@@ -553,7 +541,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // En tabletas táctiles (iPad) los rótulos del lienzo se ven desde más lejos: un poco más grandes.
     const ts = (parseFloat(getComputedStyle(el).getPropertyValue("--ts")) || 1) * (size.w >= 700 && window.matchMedia("(pointer: coarse)").matches ? 1.12 : 1);
-    const font = (px: number, weight = 600) => `${weight} ${Math.round(px * ts * 10) / 10}px "Space Grotesk", system-ui, sans-serif`;
+    const font = (px: number, weight = 600) => `${weight} ${Math.round(px * ts * 10) / 10}px "DM Sans", system-ui, sans-serif`;
 
     const { w, h } = size;
     const { at, project, sp } = makeProjection(scene, camera, w, h, exaggeration);
@@ -739,21 +727,25 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
             ctx.beginPath();
             projected.forEach((q, i) => pathTo(i, q.sx, q.sy));
             ctx.closePath();
-            if (progress === 0) {
-              ctx.fillStyle = "rgba(120,140,190,.10)";
+            // Misma escala que el mapa plano: lo que casi no se deslizó queda transparente (se ve la mancha de la ruptura, no
+            // una rejilla) y lo que más se movió va en rojo oscuro. Sin bordes entre celdas.
+            const t = Math.min(1, (sub.slip * progress) / fault.maxSlipM);
+            const alpha = 0.92 * (t * 1.6 >= 1 ? 1 : (t * 1.6) ** 2 * (3 - 2 * t * 1.6));
+            if (alpha > 0.01) {
+              const [r, g, b] = slipRgb(t);
+              ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
               ctx.fill();
-              ctx.strokeStyle = "rgba(190,205,240,.22)";
-              ctx.lineWidth = 0.5;
+              // Un trazo del mismo color tapa la rendija que deja el suavizado entre celdas vecinas.
+              ctx.strokeStyle = ctx.fillStyle;
+              ctx.lineWidth = 0.6;
               ctx.stroke();
-              return;
             }
-            ctx.fillStyle = slipColor(sub.slip * progress, fault.maxSlipM, 0.8);
-            ctx.fill();
             // El frente de la ruptura (celdas que se están moviendo ahora) se marca con un borde claro.
-            const moving = ruptureTime !== null && progress < 1;
-            ctx.strokeStyle = moving ? "rgba(255,255,255,.95)" : "rgba(20,8,40,.3)";
-            ctx.lineWidth = moving ? 1.4 : 0.5;
-            ctx.stroke();
+            if (ruptureTime !== null && progress > 0 && progress < 1) {
+              ctx.strokeStyle = "rgba(255,255,255,.85)";
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+            }
           },
         });
       }
@@ -800,11 +792,15 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           }
           ctx.beginPath();
           ctx.arc(q.sx, q.sy, r, 0, Math.PI * 2);
+          // Con profundidad asignada por el catálogo (10 o 5 km) la esfera va más tenue y sin brillo: sigue viéndose la
+          // secuencia completa (antes eran anillos huecos, la mayoría de los puntos) y se distingue de una profundidad medida.
           if (item.fixed && !isMain) {
-            ctx.fillStyle = `${color}2e`;
+            ctx.globalAlpha = 0.72;
+            ctx.fillStyle = color;
             ctx.fill();
-            ctx.lineWidth = item.tier === "high" ? 1.8 : 1.2;
-            ctx.strokeStyle = color;
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = item.tier === "high" ? 1.4 : 0.8;
+            ctx.strokeStyle = "rgba(7,21,43,.7)";
             ctx.stroke();
           } else {
             const sphere = ctx.createRadialGradient(q.sx - r * 0.32, q.sy - r * 0.38, r * 0.05, q.sx, q.sy, r);
@@ -1159,10 +1155,10 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
       };
       const boost = Math.min(1.5, Math.max(0.95, Math.sqrt(camera.zoom)));
       for (const label of PROVINCE_LABELS) {
-        put(label.name.toUpperCase(), label.lng, label.lat, 10.5 * boost, 800, region === null || region === label.id ? 0.95 : 0.6, false);
+        put(label.name, label.lng, label.lat, 12 * boost, 700, region === null || region === label.id ? 0.95 : 0.6, false);
       }
       if (plates) {
-        for (const label of PLATE_LABELS) put(PLATE_NAMES[label.code].toUpperCase(), label.lng, label.lat, 10 * boost, 800, 0.95, false, "#8de8ff");
+        for (const label of PLATE_LABELS) put(PLATE_NAMES[label.code], label.lng, label.lat, 11.5 * boost, 700, 0.95, false, "#ffffff");
         // Cada límite se rotula con las dos placas que separa («Nazca | Panamá»), junto a su tramo visible, así el
         // nombre no depende de que el centro de la placa caiga dentro de la escena.
         const seen = new Set<string>();
@@ -1172,7 +1168,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           if (seen.has(key) || visible.length < 2) continue;
           seen.add(key);
           const [lng, lat] = visible[Math.floor(visible.length / 2)];
-          put(`${PLATE_SHORT[boundary.a]} | ${PLATE_SHORT[boundary.b]}`.toUpperCase(), lng, lat, 9 * boost, 800, 0.97, false, KIND_INFO[boundary.kind].color, -9);
+          put(`${PLATE_SHORT[boundary.a]} | ${PLATE_SHORT[boundary.b]}`, lng, lat, 10.5 * boost, 700, 0.97, false, KIND_INFO[boundary.kind].color, -9);
         }
       }
       if (camera.zoom >= 1.5) {
@@ -1616,20 +1612,19 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
 
   return (
     <div ref={root} className={`q3${isExpanded ? " q3-expanded" : ""}${overlay ? " q3-overlay" : ""}`}>
-      <div className="q3-heading">
-        <div className="q3-heading-title"><SceneIcon name="Box" size={24} /><div><span>EXPLORADOR SÍSMICO / PANAMÁ</span><h3>La actividad sísmica, en profundidad.</h3></div></div>
-        <button className="q3-expand" type="button" aria-label={isExpanded ? "Salir de vista ampliada" : "Pantalla completa del mapa 3D"} aria-pressed={isExpanded} onClick={onToggleExpanded}>
-          {isExpanded ? <SceneIcon name="Minimize2" size={16} /> : <SceneIcon name="Maximize2" size={16} />}<span>{isExpanded ? "Salir" : "Pantalla completa"}</span>
-        </button>
-      </div>
       <div className="q3-stage" ref={box}>
-        <div className="q3-scene-meta"><span><i />{facts.count} {facts.count === 1 ? "evento" : "eventos"}</span><span className="q3-meta-depth">Profundidad máx. <strong>{facts.deepest === null ? "—" : km(facts.deepest)}</strong></span><span>Escala vertical <strong>×{exaggeration}</strong></span>{ground && <span title={`Movimiento horizontal del terreno en el centro de la vista${ground.town ? `, cerca de ${ground.town}` : ""}, calculado con el modelo de deslizamiento del USGS (Okada, 1985). No es una medición y no está exagerado.`}>Terreno <strong>{moveText(ground.meters)}</strong>{ground.meters >= 0.01 && ` al ${ground.short}`}</span>}{ruptureTime !== null && <span className="q3-live"><i />Segundo <strong>{ruptureTime.toFixed(0)}</strong></span>}</div>
+        <p className="q3-scene-meta">
+          <span>{facts.count} {facts.count === 1 ? "sismo" : "sismos"}{facts.deepest !== null && <> · el más profundo a {km(facts.deepest)}</>} · profundidad ×{exaggeration}</span>
+          {ruptureTime !== null && <span className="q3-live"><i />Segundo {ruptureTime.toFixed(0)}</span>}
+          {ruptureTime !== null && ground && <span title={`Movimiento horizontal del terreno en el centro de la vista${ground.town ? `, cerca de ${ground.town}` : ""}, calculado con el modelo de deslizamiento del USGS (Okada, 1985). No es una medición y no está exagerado.`}>Terreno: {moveText(ground.meters)}{ground.meters >= 0.01 && ` al ${ground.short}`}</span>}
+        </p>
         <div className="q3-navigation" role="group" aria-label="Navegación de la escena">
           <button type="button" onClick={() => zoomBy(1.3)} aria-label="Acercar" title="Acercar"><SceneIcon name="Plus" size={17} /></button>
           <span aria-label={`Zoom ${Math.round(camera.zoom * 100)} por ciento`}>{camera.zoom.toFixed(1)}×</span>
           <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label="Alejar" title="Alejar"><SceneIcon name="Minus" size={17} /></button>
           <button type="button" onClick={() => goTo(home())} aria-label="Restablecer vista 3D" title="Restablecer vista"><SceneIcon name="Focus" size={17} /></button>
           <button type="button" onClick={() => rotateTo(cameraRef.current.yaw + 45, cameraRef.current.pitch)} aria-label="Girar 45 grados" title="Girar 45°"><SceneIcon name="RotateCcw" size={17} /></button>
+          <button type="button" onClick={onToggleExpanded} aria-pressed={isExpanded} aria-label={isExpanded ? "Salir de la vista ampliada" : "Pantalla completa del mapa 3D"} title={isExpanded ? "Salir" : "Pantalla completa"}>{isExpanded ? <SceneIcon name="Minimize2" size={17} /> : <SceneIcon name="Maximize2" size={17} />}</button>
         </div>
         <canvas
           ref={canvas}
@@ -1762,9 +1757,9 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           <span><i className="q3-dot" style={{ background: COLORS.latest }} />Último</span>
           {mainshock && <span><i className="q3-dot" style={{ background: COLORS.main }} />Principal</span>}
           {mainshock && !showAftershocks && replay === null && <span>Réplicas ocultas (se activan en «Ajustes y capas»)</span>}
-          <span title="Profundidad de exactamente 10 o 5 km: el catálogo suele asignarla cuando no logra calcularla"><i className="q3-dot hollow" />Profundidad fijada{facts.fixed > 0 ? ` (${facts.fixed})` : ""}</span>
+          <span title="Profundidad de exactamente 10 o 5 km: el catálogo suele asignarla cuando no logra calcularla"><i className="q3-dot faint" />Profundidad asignada{facts.fixed > 0 ? ` (${facts.fixed})` : ""}</span>
           {fault && (
-            <span><i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />Ruptura: de poco (violeta) a mucho deslizamiento (amarillo)</span>
+            <span><i className="slip-ramp" aria-hidden="true" style={{ background: SLIP_GRADIENT }} />Ruptura: de poco (amarillo) a mucho deslizamiento (rojo oscuro)</span>
           )}
           {shaking && (
             <span><span className="felt-scale" aria-hidden="true">{shaking.map(c => <i key={c.value} style={{ background: intensityColor(c.value) }} />)}</span>Sacudida estimada (USGS)</span>
@@ -1780,7 +1775,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         </div>
         <p className="q3-note">
           {exaggeration === 1 ? "Profundidad a escala real." : `Profundidad exagerada ×${exaggeration} (las marcas de km son reales).`}
-          {" "}<span className="q3-hollow">Hueco: profundidad de 10 o 5 km asignada por el catálogo, aproximada.</span>
+          {" "}<span className="q3-hollow">Esferas tenues: profundidad de 10 o 5 km asignada por el catálogo, aproximada.</span>
         </p>
         {satellite && tiles.total > 0 && (tiles.failed === tiles.total || tiles.loaded + tiles.failed < tiles.total) && (
           <p className="q3-note" role="status">
@@ -1790,7 +1785,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         <details className="q3-more">
           <summary>Cómo leer esta vista</summary>
           <p>
-            Arrastra para girar; con dos dedos (o Mayús y arrastrar) mueves la escena, y pellizcando (o Ctrl y rueda) acercas hacia donde miras: al acercar aparecen los nombres de las cabeceras de distrito. La superficie es el plano con la costa de Panamá; cada sismo está a la profundidad que reporta su catálogo, y el hilo punteado lo une con su epicentro en la superficie. Los puntos huecos tienen una profundidad de exactamente 10 o 5 km: cuando el catálogo no logra calcularla, la asigna (el USGS lo marca como «operator assigned»), así que no es una medida precisa.
+            Arrastra para girar; con dos dedos (o Mayús y arrastrar) mueves la escena, y pellizcando (o Ctrl y rueda) acercas hacia donde miras: al acercar aparecen los nombres de las cabeceras de distrito. La superficie es el plano con la costa de Panamá; cada sismo está a la profundidad que reporta su catálogo, y el hilo punteado lo une con su epicentro en la superficie. Las esferas tenues tienen una profundidad de exactamente 10 o 5 km: cuando el catálogo no logra calcularla, la asigna (el USGS lo marca como «operator assigned»), así que no es una medida precisa.
             {fault && " La ruptura es el modelo de falla que publica el USGS para el sismo principal."}
             {felt && " Los cuadros de color sobre la superficie son la intensidad que reportó la gente."}
             {shaking && " Las curvas de colores sobre la superficie son la intensidad de la sacudida que estima el USGS."}

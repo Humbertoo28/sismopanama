@@ -645,14 +645,15 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     return () => { map.off("zoomend", drawTeeth); };
   }, [layers.plates, ready]);
 
-  // La primera vez que se abre el 3D se enciende la ruptura de la falla (es lo que más se luce); luego manda lo que elija la persona.
+  // La primera vez que se abre el 3D se enciende la ruptura de la falla; la onda de sacudida queda como opción (tapaba medio país
+  // al abrir). Luego manda lo que elija la persona.
   const autoRupture = useRef(true);
   const openView3d = () => {
     setView3d(true);
     if (autoRupture.current) {
       autoRupture.current = false;
       loadMainshockDetail();
-      setLayers(current => ({ ...current, rupture: true, wave: true }));
+      setLayers(current => ({ ...current, rupture: true }));
     }
   };
   // «Ver cómo se propagó»: para el sismo principal se reinicia la animación de la vista 3D (ruptura y onda); para cualquier otro,
@@ -672,6 +673,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const { event } = propagation;
     if (latest.current.mainshock && event.id === latest.current.mainshock.id) {
       if (!view3dNow.current) openView3d();
+      // Aquí sí se pidió ver la propagación: ruptura y onda de sacudida.
+      setLayers(current => ({ ...current, rupture: true, wave: true }));
       setRestart3d(count => count + 1);
       latest.current.onPropagationEnd();
       return;
