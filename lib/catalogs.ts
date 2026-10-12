@@ -153,6 +153,7 @@ async function fetchEmsc(since: number): Promise<Earthquake[]> {
 // Si el mismo sismo está en los dos catálogos se conserva el del USGS (trae profundidad revisada, alerta
 // PAGER, reportes de "lo sentí"...) y se anota el id del otro en `aliases`, para que una alerta que ya
 // se dio con el registro de EMSC no se repita cuando el USGS publique el suyo.
+const reportOf = (event: Earthquake) => ({ source: event.properties.source ?? "usgs", mag: event.properties.mag, magType: event.properties.magType ?? null });
 function merge(primary: Earthquake[], secondary: Earthquake[]) {
   const used = new Set<number>();
   const merged = primary.map(event => {
@@ -167,7 +168,14 @@ function merge(primary: Earthquake[], secondary: Earthquake[]) {
     });
     if (best < 0) return event;
     used.add(best);
-    return { ...event, properties: { ...event.properties, aliases: [...(event.properties.aliases ?? []), secondary[best].id] } };
+    return {
+      ...event,
+      properties: {
+        ...event.properties,
+        aliases: [...(event.properties.aliases ?? []), secondary[best].id],
+        agencies: [...(event.properties.agencies ?? [reportOf(event)]), reportOf(secondary[best])],
+      },
+    };
   });
   const onlySecondary = secondary.filter((_, index) => !used.has(index));
   return [...merged, ...onlySecondary].sort((a, b) => b.properties.time - a.properties.time);

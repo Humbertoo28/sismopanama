@@ -14,6 +14,8 @@ export type Earthquake = {
     // Catálogo del que viene el registro (por omisión, el USGS) y los id de la misma ocurrencia en otros.
     source?: "usgs" | "igc" | "emsc";
     aliases?: string[];
+    // Qué catálogos publicaron este sismo y qué magnitud puso cada uno (solo si hay más de uno; si no, vale `source`).
+    agencies?: { source: "usgs" | "igc" | "emsc"; mag: number | null; magType?: string | null }[];
   };
   geometry: { coordinates: [number, number, number?] };
 };

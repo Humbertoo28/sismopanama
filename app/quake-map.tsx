@@ -13,6 +13,7 @@ import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES } from "../lib/p
 import PlatesLegend from "./plates-legend";
 import { intensityColor, slipColor } from "../lib/usgs-colors";
 import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
+import { arrivals, VP_KM_S, VS_KM_S } from "../lib/quake-facts";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
 
 // La vista 3D solo se descarga cuando alguien la abre.
@@ -23,6 +24,9 @@ type Props = {
   filtersKey: string;
   // Sube cada vez que la persona pide volver a encuadrar los sismos del filtro.
   fitKey: number;
+  // Petición de «ver cómo se propagó» un sismo (la ficha la envía) y aviso de que ya terminó o se cerró.
+  propagation: { event: Earthquake; key: number } | null;
+  onPropagationEnd: () => void;
   events: Earthquake[];
   mainshock: Earthquake | null;
   focus: FocusRequest | null;
@@ -109,7 +113,7 @@ const readMapMode = (): MapLayerMode => {
     return "satellite";
   }
 };
-export default function QuakeMap({ events, filtersKey, fitKey, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
+export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPropagationEnd, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
   // navegador, pasa al guardado sin el aviso de que el HTML no coincide.
@@ -135,9 +139,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, mainshock, focus,
   // Durante una reproducción: sismos que aún no les toca aparecer. Sobrevive si el mapa rehace los marcadores.
   const replayHidden = useRef<Set<string> | null>(null);
   const fresh = useRef<{ id: string; until: number } | null>(null);
-  const latest = useRef({ events, mainshock, onSelect, onReplay });
+  const latest = useRef({ events, mainshock, onSelect, onReplay, onPropagationEnd });
   useEffect(() => {
-    latest.current = { events, mainshock, onSelect, onReplay };
+    latest.current = { events, mainshock, onSelect, onReplay, onPropagationEnd };
   });
 
   // Respaldo de detección de Leaflet si onReady ya ocurrió antes
@@ -367,7 +371,14 @@ export default function QuakeMap({ events, filtersKey, fitKey, mainshock, focus,
       // cubren (marca y selector de capas arriba, leyenda y atribución abajo) para que no lo tapen.
       const narrow = window.innerWidth <= 700;
       marker.bindPopup(popup, { autoPanPaddingTopLeft: [12, narrow ? 100 : 64], autoPanPaddingBottomRight: [56, 16] });
+      // Al tocar un sismo se abre su ficha completa, no el globo: el globo solo se abre cuando la página lleva el mapa a un sismo
+      // (por ejemplo desde «Ver en el mapa»). Enter, con el teclado, hace lo mismo que tocar.
+      marker.off("click", (marker as any)._openPopup, marker);
+      marker.off("keypress", (marker as any)._onKeyPress, marker);
       marker.on("click", () => latest.current.onSelect(event.id));
+      marker.on("keypress", (key: any) => {
+        if (key.originalEvent?.keyCode === 13) latest.current.onSelect(event.id);
+      });
       markersRef.current.set(event.id, marker);
     }
     if (events.length) popIn.current = false;
@@ -449,6 +460,85 @@ export default function QuakeMap({ events, filtersKey, fitKey, mainshock, focus,
       setLayers(current => ({ ...current, rupture: true, wave: true }));
     }
   };
+  // «Ver cómo se propagó»: para el sismo principal se reinicia la animación de la vista 3D (ruptura y onda); para cualquier otro,
+  // en el mapa plano se abren dos anillos desde el epicentro (onda P y onda S) y se ve cuándo llega la sacudida a las capitales.
+  const [restart3d, setRestart3d] = useState(0);
+  const [waveHud, setWaveHud] = useState<{ t: number; total: number; reached: { name: string; seconds: number }[]; done: boolean } | null>(null);
+  const view3dNow = useRef(view3d);
+  useEffect(() => {
+    view3dNow.current = view3d;
+  });
+  useEffect(() => {
+    if (!propagation || !ready) return;
+    const { event } = propagation;
+    if (latest.current.mainshock && event.id === latest.current.mainshock.id) {
+      if (!view3dNow.current) openView3d();
+      setRestart3d(count => count + 1);
+      latest.current.onPropagationEnd();
+      return;
+    }
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (!map || !L) return;
+    const wasIn3d = view3dNow.current;
+    setView3d(false);
+    let raf = 0;
+    let group: any = null;
+    const timer = window.setTimeout(() => {
+      map.invalidateSize({ animate: false });
+      map.closePopup();
+      const [lng, lat, depthRaw] = event.geometry.coordinates;
+      const depth = Number.isFinite(depthRaw) ? depthRaw! : 10;
+      const { list } = arrivals(event);
+      const end = Math.max(...list.map(city => city.seconds), 5) + 4;
+      group = L.layerGroup().addTo(map);
+      const ring = (color: string, dash: string | undefined, fill: number) =>
+        L.circle([lat, lng], { radius: 1, color, weight: 2.5, dashArray: dash, fillColor: color, fillOpacity: fill, interactive: false }).addTo(group);
+      const pRing = ring("#5aa9ff", "6 6", 0.05);
+      const sRing = ring("#ff8a24", undefined, 0.12);
+      L.circleMarker([lat, lng], { radius: 7, color: "#ffffff", weight: 2.5, fillColor: "#da121a", fillOpacity: 1, interactive: false })
+        .bindTooltip("Epicentro", { permanent: true, direction: "left", offset: [-9, 0], className: "place-label" }).addTo(group);
+      const dots = list.map(city =>
+        L.circleMarker([city.lat, city.lng], { radius: 6, color: "#ffffff", weight: 2, fillColor: "#6b7685", fillOpacity: 1, interactive: false })
+          .bindTooltip(city.name, { permanent: true, direction: "right", offset: [9, 0], className: "place-label" }).addTo(group),
+      );
+      map.flyToBounds(L.latLngBounds([[lat, lng], ...list.map(city => [city.lat, city.lng])]), { padding: [60, 60], maxZoom: 9, duration: reducedMotion() ? 0 : 1 });
+      // Radio sobre el suelo de un frente que ya recorrió `seconds` a `speed` km/s desde el hipocentro (a `depth` km de profundidad).
+      const radiusKm = (seconds: number, speed: number) => Math.sqrt(Math.max(0, (seconds * speed) ** 2 - depth ** 2));
+      let lastHud = -1;
+      const paint = (t: number, hud: boolean) => {
+        pRing.setRadius(radiusKm(t, VP_KM_S) * 1000);
+        sRing.setRadius(radiusKm(t, VS_KM_S) * 1000);
+        const reached = list.flatMap((city, index) => {
+          const hit = city.seconds <= t;
+          dots[index].setStyle({ fillColor: hit ? "#ff8a24" : "#6b7685" });
+          dots[index].setTooltipContent(hit ? `${city.name} · ${Math.max(1, Math.round(city.seconds))} s` : city.name);
+          return hit ? [{ name: city.name, seconds: Math.max(1, Math.round(city.seconds)) }] : [];
+        });
+        if (hud) setWaveHud({ t, total: list.length, reached, done: t >= end });
+      };
+      if (reducedMotion()) {
+        paint(end, true);
+        return;
+      }
+      // El recorrido real dura menos de un minuto; se acelera para que dure unos 20 s.
+      const speed = Math.max(1, end / 20);
+      const begin = performance.now() + 1100;
+      const tick = (now: number) => {
+        const t = Math.min(end, Math.max(0, ((now - begin) / 1000) * speed));
+        const hud = now - lastHud > 120 || t >= end;
+        if (hud) lastHud = now;
+        paint(t, hud);
+        if (t < end) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, wasIn3d ? 300 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(raf);
+      if (group) map.removeLayer(group);
+    };
+  }, [propagation, ready]);
   const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates" | "wave") => {
     if (name !== "plates") loadMainshockDetail();
     setLayers(current => ({ ...current, [name]: !current[name] }));
@@ -679,10 +769,23 @@ export default function QuakeMap({ events, filtersKey, fitKey, mainshock, focus,
         onReady={() => setReady(true)}
       />
       <div id="leaflet-map" role="group" aria-label="Mapa interactivo de sismos en Panamá" data-filtered={filtersKey !== "" ? "true" : undefined} />
+      {propagation && waveHud && !view3d && (
+        <div className="wave-hud" role="status">
+          <div className="wave-hud-top">
+            <strong>Así se propagó el temblor</strong>
+            <button type="button" onClick={() => { setWaveHud(null); onPropagationEnd(); }} aria-label="Cerrar la animación de propagación">Cerrar</button>
+          </div>
+          <p>
+            {waveHud.done ? "La sacudida ya pasó por todas las ciudades." : `Segundo ${Math.floor(waveHud.t)}`}
+            {waveHud.reached.length > 0 && ` · Llegó a ${waveHud.reached.map(city => `${city.name} (${city.seconds} s)`).join(", ")}`}
+          </p>
+          <small>Ilustración con velocidades típicas: onda P 6 km/s (azul), onda S 3.5 km/s (naranja). No son registros.</small>
+        </div>
+      )}
       {view3d && (
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
-            events={events} filtersKey={filtersKey} fitKey={fitKey} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
+            events={events} filtersKey={filtersKey} fitKey={fitKey} restartKey={restart3d} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
             fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
             layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />

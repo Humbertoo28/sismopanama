@@ -271,3 +271,59 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
 #leaflet-map[data-filtered] .quake-marker.aged,
 #leaflet-map[data-filtered] .quake-marker.recent-12h,
 #leaflet-map[data-filtered] .quake-marker.high.aged { opacity: 1; background: rgba(var(--c), .85); border: 1.2px solid #fff; }
+
+/* Ficha completa de un sismo (se abre al tocarlo): cajón a la derecha en pantallas grandes, hoja desde abajo en el celular. */
+.qs-backdrop { position: fixed; inset: 0; z-index: 4000; display: flex; justify-content: flex-end; background: #04101f8c; animation: qs-fade .18s ease-out; }
+.qs { position: relative; width: min(440px, 100%); height: 100%; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 22px 22px 28px; background: #fff; color: #1d2b3f; box-shadow: -10px 0 40px #0000004d; animation: qs-in .22s ease-out; outline: none; }
+.qs-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid #c4cdd9; border-radius: 50%; background: #fff; color: #1d2b3f; font: inherit; font-size: 16px; cursor: pointer; }
+.qs-close:hover { background: #eef2f7; }
+.qs-close:focus-visible, .qs-primary:focus-visible, .qs-link:focus-visible { outline: 3px solid #1d6bff; outline-offset: 2px; }
+.qs-head { padding-right: 44px; }
+.qs-badge { display: inline-block; margin-bottom: 8px; padding: 3px 9px; border-radius: 999px; background: #eef2f7; color: #4a5568; font-size: calc(10.5px*var(--ts,1)); font-weight: 800; letter-spacing: .08em; }
+.qs-badge.main { background: #f3e1f7; color: #7a1590; }
+.qs-mag-row { display: flex; gap: 14px; align-items: center; }
+.qs-mag { display: grid; place-items: center; flex: none; width: 74px; height: 74px; border-radius: 14px; background: #da121a; color: #fff; font-size: calc(32px*var(--ts,1)); letter-spacing: -.03em; }
+.qs-mag-row h3 { margin: 0; font-size: calc(17px*var(--ts,1)); line-height: 1.25; letter-spacing: -.02em; }
+.qs-mag-row p { margin: 3px 0 0; color: #4a5568; font-size: calc(13px*var(--ts,1)); }
+.qs-facts { margin: 18px 0 0; display: grid; gap: 0; border-top: 1px solid var(--border, #dde3ec); }
+.qs-facts > div { padding: 11px 0; border-bottom: 1px solid var(--border, #dde3ec); }
+.qs-facts dt { color: #5b6572; font-size: calc(12px*var(--ts,1)); font-weight: 700; }
+.qs-facts dd { margin: 3px 0 0; font-size: calc(15.5px*var(--ts,1)); font-weight: 600; line-height: 1.35; }
+.qs-facts dd > span { color: #5b6572; font-weight: 500; font-size: .88em; }
+.qs-facts small, .qs-note { display: block; margin-top: 4px; color: #5b6572; font-size: calc(12px*var(--ts,1)); font-weight: 500; line-height: 1.4; }
+.qs-arrival { margin-top: 18px; }
+.qs-arrival h4 { margin: 0 0 6px; font-size: calc(14px*var(--ts,1)); }
+.qs-arrival ul { list-style: none; margin: 0; padding: 0; }
+.qs-arrival li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border, #dde3ec); font-size: calc(15px*var(--ts,1)); }
+.qs-arrival li small { color: #5b6572; font-size: .82em; }
+.qs-arrival li strong { font-variant-numeric: tabular-nums; }
+.qs-note { margin-top: 8px; }
+.qs-actions { margin-top: 20px; display: grid; gap: 12px; justify-items: start; }
+.qs-primary { min-height: 46px; padding: 0 22px; border: 0; border-radius: 11px; background: #072357; color: #fff; font: inherit; font-size: calc(15px*var(--ts,1)); font-weight: 800; cursor: pointer; }
+.qs-primary:hover { background: #0b2f73; }
+.qs-secondary { min-height: 44px; padding: 0 18px; border: 1px solid #072357; border-radius: 11px; background: #fff; color: #072357; font: inherit; font-size: calc(14.5px*var(--ts,1)); font-weight: 800; cursor: pointer; }
+.qs-secondary:hover { background: #eef2f7; }
+.qs-secondary:focus-visible { outline: 3px solid #1d6bff; outline-offset: 2px; }
+.qs-link { color: #0b4fc7; font-weight: 700; font-size: calc(14px*var(--ts,1)); }
+@keyframes qs-fade { from { opacity: 0; } }
+@keyframes qs-in { from { transform: translateX(28px); opacity: .6; } }
+@media (max-width: 700px) {
+  .qs-backdrop { align-items: flex-end; }
+  .qs { width: 100%; height: auto; max-height: 88dvh; border-radius: 18px 18px 0 0; padding: 20px 18px 26px; box-shadow: 0 -10px 40px #0000004d; animation-name: qs-up; }
+  @keyframes qs-up { from { transform: translateY(40px); opacity: .6; } }
+}
+@media (prefers-reduced-motion: reduce) { .qs, .qs-backdrop { animation: none; } }
+html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdrop { animation: none; }
+
+/* Animación de propagación del temblor en el mapa plano. */
+.wave-hud { position: absolute; z-index: 1100; top: 64px; left: 14px; max-width: min(400px, calc(100% - 210px)); padding: 10px 12px; border-radius: 10px; background: #072357ec; color: #fff; box-shadow: 0 4px 18px #0000004d; font-size: calc(12.5px*var(--ts,1)); line-height: 1.4; }
+.wave-hud-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wave-hud-top strong { font-size: calc(13px*var(--ts,1)); }
+.wave-hud-top button { min-height: 32px; padding: 0 10px; border: 1px solid #ffffffa6; border-radius: 8px; background: transparent; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.wave-hud-top button:hover { background: #ffffff1f; }
+.wave-hud-top button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.wave-hud p { margin: 4px 0 2px; font-weight: 600; }
+.wave-hud small { display: block; color: #b9c9de; font-size: calc(11px*var(--ts,1)); }
+@media (max-width: 700px) { .wave-hud { top: 98px; left: 12px; right: 12px; max-width: none; } }
+@media (pointer: coarse) { .wave-hud-top button { min-height: 40px; } }
+
