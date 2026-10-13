@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { SINCE, kmBetween, type Earthquake } from "../../../lib/earthquakes";
 import { recentPanamaEvents } from "../../../lib/catalogs";
-import { REPORT_WINDOW_MS, flagFor, parseReport, summarize, summarizeEvent, type EventSummary, type ReportRow } from "../../../lib/felt-reports";
+import { REPORT_WINDOW_MS, parseReport, summarize, summarizeEvent, type EventSummary, type ReportRow } from "../../../lib/felt-reports";
 import { insertReport, listReports, reportsAvailable } from "../../../lib/felt-store";
 import { readJsonObject } from "../../../lib/push-validation";
 import { getClientIp } from "../../../lib/rate-limit";
@@ -156,9 +156,6 @@ export async function POST(request: NextRequest) {
     const agent = (request.headers.get("user-agent") ?? "").slice(0, 200);
     const day = new Date().toISOString().slice(0, 10);
     const [lng, lat] = event.geometry.coordinates;
-    // Lo que no es creíble se guarda apartado y no se cuenta. A quien lo envía se le responde igual que siempre: así no sabe
-    // qué filtro lo apartó ni cómo esquivarlo.
-    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng });
     const result = await insertReport({
       event_id: event.id,
       event_time: event.properties.time,
@@ -172,7 +169,7 @@ export async function POST(request: NextRequest) {
       created_at: new Date().toISOString(),
       reporter: hmac(key, `dispositivo|${ip}|${agent}`),
       ip_key: hmac(key, `conexion|${ip}|${day}`),
-      flagged,
+      flagged: null,
     });
     if (result === "duplicate") return NextResponse.json({ error: "Ya enviaste un reporte de este sismo. ¡Gracias!", duplicate: true }, { status: 409, headers: NO_STORE });
     if (result === "limited") return NextResponse.json({ error: "Se enviaron muchos reportes desde tu conexión. Inténtalo más tarde." }, { status: 429, headers: NO_STORE });
