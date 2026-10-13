@@ -496,13 +496,89 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+// ---------- Pasos de la suscripción, cada uno con tiempo máximo ----------
+// Crear la suscripción depende de pasos que el teléfono puede no contestar nunca: el service worker (`ready` espera para siempre si
+// no hay ninguno registrado) y el servicio de notificaciones de Apple o Google (`subscribe`). Sin un tiempo máximo, el botón se
+// quedaba en «Conectando…» sin fin y sin decir qué fallaba. Ahora cada paso se corta y el mensaje dice cuál fue.
+type PushStep = "worker" | "key" | "subscribe" | "save";
+class PushStepTimeout extends Error {
+  constructor(readonly step: PushStep) {
+    super(`Tiempo agotado en el paso «${step}»`);
+  }
+}
+const WORKER_MS = 8_000;
+const KEY_MS = 8_000;
+const SUBSCRIBE_MS = 20_000;
+const SAVE_MS = 15_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number, step: PushStep): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new PushStepTimeout(step)), ms);
+    work.then(
+      value => { window.clearTimeout(timer); resolve(value); },
+      error => { window.clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+// Service worker listo para usarse, sin esperar de más. Para lecturas que no deben bloquear nada (revisar si hay suscripción).
+const workerReady = () => withTimeout(navigator.serviceWorker.ready, WORKER_MS, "worker");
+
+// Para crear o reparar la suscripción: si no hay service worker registrado se registra aquí, y si aun así no arranca se borra el
+// registro atascado y se crea de nuevo una vez. `ready` por sí solo no hace ninguna de las dos cosas.
+async function startWorker(): Promise<ServiceWorkerRegistration> {
+  const attempt = async () => {
+    if (!(await navigator.serviceWorker.getRegistration())) await navigator.serviceWorker.register("/sw.js");
+    return navigator.serviceWorker.ready;
+  };
+  try {
+    return await withTimeout(attempt(), WORKER_MS, "worker");
+  } catch (error) {
+    if (!(error instanceof PushStepTimeout)) throw error;
+  }
+  try {
+    const stuck = await withTimeout(navigator.serviceWorker.getRegistration(), 3_000, "worker");
+    await stuck?.unregister();
+  } catch {
+    // Si no se pudo borrar, igual se intenta registrar de nuevo.
+  }
+  return withTimeout(
+    (async () => {
+      await navigator.serviceWorker.register("/sw.js");
+      return navigator.serviceWorker.ready;
+    })(),
+    WORKER_MS,
+    "worker",
+  );
+}
+
+// Estado del service worker de este equipo, para el diagnóstico: sin él no llega ninguna alerta con la app cerrada.
+export async function getServiceWorkerStatus(): Promise<"active" | "starting" | "missing"> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return "missing";
+  try {
+    const reg = await withTimeout(navigator.serviceWorker.getRegistration(), 3_000, "worker");
+    if (!reg) return "missing";
+    return reg.active ? "active" : "starting";
+  } catch {
+    return "missing";
+  }
+}
+
+const RESTART_APP = "Cierra la app por completo (desliza hacia arriba en el selector de apps), ábrela de nuevo y vuelve a pulsar Activar 24/7.";
+const STEP_MESSAGES: Record<PushStep, string> = {
+  worker: `El servicio de alertas de la app no arrancó en este equipo. ${RESTART_APP}`,
+  key: "No se pudo pedir al servidor la clave de las alertas. Revisa tu conexión e inténtalo de nuevo.",
+  subscribe: `Tu teléfono no terminó de crear la suscripción (el servicio de notificaciones de Apple o Google no respondió). ${RESTART_APP} Si sigue igual, usa «Reparar».`,
+  save: "El servidor no respondió a tiempo al guardar tus alertas. Inténtalo de nuevo en un momento.",
+};
+
 export async function getExistingPushSubscription(): Promise<PushSubscription | null> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
     return null;
   }
   try {
-    const reg = await navigator.serviceWorker.ready;
-    return await reg.pushManager.getSubscription();
+    const reg = await workerReady();
+    return await withTimeout(reg.pushManager.getSubscription(), SUBSCRIBE_MS, "subscribe");
   } catch {
     return null;
   }
@@ -542,12 +618,16 @@ async function serverError(res: Response, fallback: string): Promise<{ error: st
 const SERVER_KEY_STORE = "sismo_panama_push_server_key";
 
 async function currentServerKey(): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), KEY_MS);
   try {
-    const res = await fetch("/api/push/vapid-public-key");
+    const res = await fetch("/api/push/vapid-public-key", { signal: controller.signal });
     const { publicKey } = (await res.json()) as { publicKey?: unknown };
     return typeof publicKey === "string" && publicKey ? publicKey.replace(/=+$/, "") : null;
   } catch {
     return null;
+  } finally {
+    window.clearTimeout(timer);
   }
 }
 
@@ -570,38 +650,37 @@ function serverKeyOf(sub: PushSubscription): string | null {
 // con cuál, en suscripciones de antes de este cambio), se reemplaza y se devuelve también la dirección anterior para que el
 // servidor traspase el umbral y la borre.
 async function ensureCurrentSubscription(reg: ServiceWorkerRegistration): Promise<{ sub: PushSubscription; oldEndpoint?: string; created: boolean }> {
-  const existing = await reg.pushManager.getSubscription();
+  const existing = await withTimeout(reg.pushManager.getSubscription(), SUBSCRIBE_MS, "subscribe");
   if (!existing) return { sub: await createPushSubscription(reg), created: true };
   const current = await currentServerKey();
   if (!current || serverKeyOf(existing) === current) return { sub: existing, created: false };
   const oldEndpoint = existing.endpoint;
-  await existing.unsubscribe().catch(() => false);
+  await withTimeout(existing.unsubscribe(), SUBSCRIBE_MS, "subscribe").catch(error => {
+    if (error instanceof PushStepTimeout) throw error;
+    return false;
+  });
   return { sub: await createPushSubscription(reg), oldEndpoint, created: true };
 }
 
 async function createPushSubscription(reg: ServiceWorkerRegistration) {
   const publicKey = await currentServerKey();
-  if (!publicKey) throw new Error("No se pudo obtener la clave VAPID pública");
+  if (!publicKey) throw new PushStepTimeout("key");
   const keyBuffer = urlBase64ToUint8Array(publicKey);
   try {
     localStorage.setItem(SERVER_KEY_STORE, publicKey);
   } catch {}
 
   try {
-    return await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: keyBuffer,
-    });
+    return await withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBuffer }), SUBSCRIBE_MS, "subscribe");
   } catch (initialErr) {
+    // Si el servicio de notificaciones no contesta, reintentar enseguida solo lo vuelve a dejar esperando.
+    if (initialErr instanceof PushStepTimeout) throw initialErr;
     // Si el registro falló por una suscripción previa corrupta o desfasada, desuscribir y reintentar una vez
     try {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         await existing.unsubscribe();
-        return await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: keyBuffer,
-        });
+        return await withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBuffer }), SUBSCRIBE_MS, "subscribe");
       }
     } catch {
       // Si el reintento falla, propagar el error inicial
@@ -651,7 +730,7 @@ export async function syncPushSubscription(minMagnitude: number, force = false):
   if (Notification.permission !== "granted") return false;
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await workerReady();
     const { sub, oldEndpoint, created } = await ensureCurrentSubscription(reg);
     if (created) {
       force = true;
@@ -706,26 +785,39 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
   }
 
   try {
-    const perm = await Notification.requestPermission();
+    // Si el permiso ya está decidido no se vuelve a pedir: pedirlo otra vez, fuera del toque de la persona, es justo lo que en
+    // iPhone a veces no contesta nunca.
+    const perm = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
     if (perm !== "granted") {
       return { ok: false, error: "Permiso de notificaciones denegado en tu navegador." };
     }
 
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await startWorker();
     const { sub, oldEndpoint } = await ensureCurrentSubscription(reg);
 
     const subJson = sub.toJSON();
-    const saveRes = await fetch("/api/push/subscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        endpoint: subJson.endpoint,
-        keys: subJson.keys,
-        minMagnitude,
-        serverKey: serverKeyOf(sub) ?? undefined,
-        oldEndpoint,
-      }),
-    });
+    const controller = new AbortController();
+    const saveTimer = window.setTimeout(() => controller.abort(), SAVE_MS);
+    let saveRes: Response;
+    try {
+      saveRes = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+          minMagnitude,
+          serverKey: serverKeyOf(sub) ?? undefined,
+          oldEndpoint,
+        }),
+      });
+    } catch (saveError) {
+      if (saveError instanceof DOMException && saveError.name === "AbortError") throw new PushStepTimeout("save");
+      throw saveError;
+    } finally {
+      window.clearTimeout(saveTimer);
+    }
 
     if (!saveRes.ok) {
       const { error } = await serverError(saveRes, "No se pudo registrar la suscripción en el servidor.");
@@ -740,6 +832,7 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
     announcePush();
     return { ok: true };
   } catch (err: unknown) {
+    if (err instanceof PushStepTimeout) return { ok: false, error: STEP_MESSAGES[err.step] };
     const raw = err instanceof Error ? err.message : String(err);
     let friendly = raw;
 
@@ -762,7 +855,7 @@ export async function sendTestWebPush(delayed = false): Promise<{ ok: boolean; e
     return { ok: false, error: "Web Push no disponible en este entorno" };
   }
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await workerReady();
     const sub = await reg.pushManager.getSubscription();
     if (!sub) {
       return { ok: false, code: "missing", error: "Este equipo todavía no tiene la suscripción para alertas con la app cerrada. Toca «Reparar»." };
@@ -778,6 +871,7 @@ export async function sendTestWebPush(delayed = false): Promise<{ ok: boolean; e
     }
     return { ok: true };
   } catch (err: unknown) {
+    if (err instanceof PushStepTimeout) return { ok: false, code: "missing", error: STEP_MESSAGES[err.step] };
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
@@ -786,11 +880,11 @@ export async function sendTestWebPush(delayed = false): Promise<{ ok: boolean; e
 // «Reparar»: borra la suscripción de este equipo (puede estar caducada o hecha con otra clave) y crea una nueva.
 export async function repairPushSubscription(minMagnitude: number): Promise<{ ok: boolean; error?: string }> {
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await startWorker();
     const old = await reg.pushManager.getSubscription();
     if (old) {
       const endpoint = old.endpoint;
-      await old.unsubscribe().catch(() => false);
+      await withTimeout(old.unsubscribe(), SUBSCRIBE_MS, "subscribe").catch(() => false);
       fetch("/api/push/subscribe", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint }) }).catch(() => {});
     }
   } catch {

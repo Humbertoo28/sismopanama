@@ -1,8 +1,8 @@
 "use client";
 
 import { CheckCircle2, CircleAlert, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getExistingPushSubscription, repairPushSubscription, sendTestWebPush, syncPushSubscription } from "../lib/alert-system";
+import { useEffect, useRef, useState } from "react";
+import { getExistingPushSubscription, getServiceWorkerStatus, repairPushSubscription, sendTestWebPush, syncPushSubscription } from "../lib/alert-system";
 
 // «¿No te llegan las alertas con la app cerrada?»: revisa paso a paso este equipo (navegador, permiso, suscripción, registro en
 // el servidor) y ofrece una prueba real con la app cerrada. Con la página abierta ella misma avisa aunque el push no funcione, así
@@ -27,24 +27,48 @@ export default function PushDiagnostics({ minMagnitude, onChanged }: { minMagnit
   const [platform, setPlatform] = useState<Platform>("other");
   const [run, setRun] = useState(0);
 
+  // El permiso se puede conceder mientras esta revisión está abierta (al tocar «Activar» arriba): sin volver a revisar, seguía
+  // diciendo «Falta dar el permiso» con el permiso ya dado. Se compara cada poco y, si cambió, se revisa de nuevo.
+  const checkedPermission = useRef<string | null>(null);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = "Notification" in window ? Notification.permission : "denied";
+      if (checkedPermission.current !== null && checkedPermission.current !== now) setRun(value => value + 1);
+    }, 1_500);
+    return () => window.clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     let live = true;
     (async () => {
       const os = platformOf();
       const list: Check[] = [];
       const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+      let workerActive = true;
       if (os === "ios" && !installed()) {
         list.push({ label: "App instalada en la pantalla de inicio", state: "bad", detail: "En iPhone y iPad las alertas con la app cerrada solo funcionan con la app instalada: toca Compartir → «Agregar a pantalla de inicio», ábrela desde el ícono y actívalas ahí." });
       } else {
         list.push({ label: "Navegador compatible", state: supported ? "ok" : "bad", detail: supported ? undefined : "Este navegador no permite alertas con la app cerrada. Prueba con Chrome (Android) o Safari con la app instalada (iPhone)." });
+        if (supported) {
+          // Sin service worker no hay suscripción posible: «Conectando…» sin fin suele venir de aquí.
+          const worker = await getServiceWorkerStatus();
+          workerActive = worker === "active";
+          list.push({
+            label: "Servicio de alertas de la app",
+            state: worker === "active" ? "ok" : "bad",
+            detail: worker === "active" ? undefined : worker === "starting" ? "Todavía está arrancando. Cierra la app por completo (desliza hacia arriba en el selector de apps) y ábrela de nuevo." : "No está activo en este equipo. Cierra la app por completo (desliza hacia arriba en el selector de apps) y ábrela de nuevo.",
+          });
+        }
       }
       const permission = "Notification" in window ? Notification.permission : "denied";
+      checkedPermission.current = permission;
       list.push({
         label: "Permiso de notificaciones",
         state: permission === "granted" ? "ok" : "bad",
         detail: permission === "granted" ? undefined : permission === "denied" ? "Está bloqueado. Ábrelo en los ajustes del sitio (el candado junto a la dirección) → Notificaciones → Permitir." : "Falta dar el permiso: toca «Activar» arriba.",
       });
-      if (supported && permission === "granted") {
+      // Sin servicio de alertas activo no se puede ni preguntar por la suscripción (esperaría en vano): ya lo dice la fila de arriba.
+      if (supported && permission === "granted" && workerActive) {
         const sub = await getExistingPushSubscription();
         list.push({ label: "Suscripción en este equipo", state: sub ? "ok" : "bad", detail: sub ? undefined : "No existe: sin ella no llega nada con la app cerrada. Toca «Reparar»." });
         if (sub) {

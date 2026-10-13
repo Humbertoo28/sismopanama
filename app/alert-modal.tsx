@@ -102,29 +102,37 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
     }
   };
 
+  // try/finally: pase lo que pase, el botón no se queda en «Conectando…».
   const handleTogglePush = async () => {
     setPushLoading(true);
     setPushMsg(null);
-    const res = await subscribeToWebPush(prefs.minMagnitude);
-    if (res.ok) {
-      setIsPushSubscribed(true);
-      setPushMsg("✓ ¡Suscrito con éxito a alertas en segundo plano!");
-    } else {
-      setPushMsg(`✕ ${res.error}`);
+    try {
+      const res = await subscribeToWebPush(prefs.minMagnitude);
+      if (res.ok) {
+        setIsPushSubscribed(true);
+        setPushMsg("✓ ¡Suscrito con éxito a alertas en segundo plano!");
+      } else {
+        setPushMsg(`✕ ${res.error}`);
+      }
+    } catch (error) {
+      setPushMsg(`✕ ${error instanceof Error ? error.message : "No se pudo activar. Inténtalo de nuevo."}`);
+    } finally {
+      setPermStatus(getNotificationPermissionStatus());
+      setPushLoading(false);
     }
-    setPushLoading(false);
   };
 
   const handleTestPush = async () => {
     setPushLoading(true);
     setPushMsg(null);
-    const res = await sendTestWebPush();
-    if (res.ok) {
-      setPushMsg("✓ Notificación push enviada. Revisa la barra de tu dispositivo.");
-    } else {
-      setPushMsg(`✕ ${res.error}`);
+    try {
+      const res = await sendTestWebPush();
+      setPushMsg(res.ok ? "✓ Notificación push enviada. Revisa la barra de tu dispositivo." : `✕ ${res.error}`);
+    } catch (error) {
+      setPushMsg(`✕ ${error instanceof Error ? error.message : "No se pudo enviar la prueba."}`);
+    } finally {
+      setPushLoading(false);
     }
-    setPushLoading(false);
   };
 
   const handleTestAlert = async () => {
@@ -234,7 +242,19 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
                 )}
               </div>
               {pushMsg && (
-                <div style={{ marginTop: "6px", fontSize: "11px", color: pushMsg.startsWith("✓") ? "#34d399" : "#f87171" }}>
+                // Fondo propio: el mensaje se lee igual con el tema claro y el oscuro.
+                <div
+                  role="status"
+                  style={{
+                    marginTop: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    fontSize: "13px",
+                    lineHeight: 1.45,
+                    background: pushMsg.startsWith("✓") ? "#d1fae5" : "#fee2e2",
+                    color: pushMsg.startsWith("✓") ? "#065f46" : "#7f1d1d",
+                  }}
+                >
                   {pushMsg}
                 </div>
               )}
