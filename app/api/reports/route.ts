@@ -36,7 +36,13 @@ async function lookup(maxAgeMs?: number): Promise<Lookup | null> {
 function canonical(rows: ReportRow[], events: Lookup | null): ReportRow[] {
   if (!events) return rows;
   return rows.map(row => {
-    const event = events.byId.get(row.event_id);
+    // Si el id ya no existe (el IGC lo cambia al revisar el sismo), se busca el mismo sismo por hora y epicentro.
+    const event =
+      events.byId.get(row.event_id) ??
+      events.list.find(item => {
+        const [itemLng, itemLat] = item.geometry.coordinates;
+        return Math.abs(item.properties.time - Number(row.event_time)) <= 60_000 && kmBetween(Number(row.event_lat), Number(row.event_lng), itemLat, itemLng) <= 120;
+      });
     if (!event) return row;
     const [lng, lat] = event.geometry.coordinates;
     return { ...row, event_id: event.id, event_time: event.properties.time, event_mag: event.properties.mag, event_place: event.properties.place, event_lat: lat, event_lng: lng };
