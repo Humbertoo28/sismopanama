@@ -2,7 +2,8 @@ name: Quake Monitor Cron 24/7
 
 on:
   schedule:
-    # Corre cada 5 minutos
+    # Pedido cada 5 minutos. GitHub no garantiza la frecuencia (en la práctica puede pasar horas sin correr): es solo un
+    # respaldo. El disparador principal es el pg_cron de Supabase, cada 30 s (ver supabase/schema.sql).
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
@@ -12,9 +13,26 @@ permissions: {}
 jobs:
   check-quakes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Trigger quake check
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        # Falla (y GitHub avisa) si la respuesta no es 200: así un secreto que no coincide (401) o Supabase sin configurar
+        # (503) se ven en vez de quedar ocultos. Solo se muestra el código HTTP: los registros de este repo son públicos.
         run: |
-          curl -s -f --max-time 60 \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "https://www.ojopanama.com/api/cron/check-quakes" || true
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Falta el secreto CRON_SECRET en Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 130 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://www.ojopanama.com/api/cron/check-quakes") || {
+            echo "::error::No se pudo conectar con el sitio"
+            exit 1
+          }
+          echo "Respuesta: HTTP $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::check-quakes respondió HTTP $status (401 = CRON_SECRET no coincide con el de Vercel; 503 = falta Supabase)"
+            exit 1
+          fi
