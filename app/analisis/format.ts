@@ -8,7 +8,8 @@ export const fmtFull = new Intl.DateTimeFormat("es-PA", { timeZone, day: "numeri
 export const fmtInt = new Intl.NumberFormat("es-PA");
 
 const PANAMA_OFFSET = 5 * HOUR;
-const STEPS = [10 * MINUTE, 30 * MINUTE, HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 7 * DAY];
+// Los pasos de 1, 2 y 5 minutos sirven cuando se acerca la línea de tiempo a un tramo corto.
+const STEPS = [MINUTE, 2 * MINUTE, 5 * MINUTE, 10 * MINUTE, 30 * MINUTE, HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 7 * DAY];
 
 // Marcas del eje de tiempo en horas redondas de Panamá (los ejes numéricos de recharts pondrían valores arbitrarios).
 export function timeTicks(from: number, to: number) {

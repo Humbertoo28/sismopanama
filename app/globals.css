@@ -224,3 +224,7 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .replay-button:disabled:not(.stop){cursor:not-allowed}
 .live-toast-where{margin-top:3px;font-size:calc(11.5px*var(--ts,1));font-weight:700;color:#ff8a92}
 .mainshock-stats dd small{font-family:"DM Sans",sans-serif;font-weight:400;letter-spacing:0}
+/* Vista «Por horas» de la secuencia: las barras crecen desde la izquierda, una fila tras otra. */
+.seq-hour-track i{transform-origin:left center;animation:seq-grow .7s cubic-bezier(.2,.9,.3,1) calc(var(--n,0)*55ms) backwards}
+@keyframes seq-grow{from{transform:scaleX(0)}}
+@media(prefers-reduced-motion:reduce){.seq-hour-track i{animation:none}}

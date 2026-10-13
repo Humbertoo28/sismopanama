@@ -106,7 +106,9 @@ export function median(values: number[]) {
 
 // ---------- distribuciones ----------
 
-export type Band = { label: string; count: number };
+// `min` incluido y `max` excluido: un sismo de exactamente 5.0 cae en «5 a 5.9». Sirven para resaltar en las otras gráficas
+// los sismos que cuenta cada barra.
+export type Band = { label: string; count: number; min: number; max: number };
 
 export const DEPTH_BANDS = [
   { label: "0–10 km", max: 10 },
@@ -122,7 +124,7 @@ export function depthHistogram(quakes: Quake[]): { bands: Band[]; unknown: numbe
     if (quake.depth === null) { unknown += 1; continue; }
     counts[DEPTH_BANDS.findIndex((band) => quake.depth! < band.max)] += 1;
   }
-  return { bands: DEPTH_BANDS.map((band, index) => ({ label: band.label, count: counts[index] })), unknown };
+  return { bands: DEPTH_BANDS.map((band, index) => ({ label: band.label, count: counts[index], min: index === 0 ? -Infinity : DEPTH_BANDS[index - 1].max, max: band.max })), unknown };
 }
 
 export const MAG_BANDS = [
@@ -136,7 +138,7 @@ export const MAG_BANDS = [
 export function magnitudeHistogram(quakes: Quake[]): Band[] {
   const counts: number[] = MAG_BANDS.map(() => 0);
   for (const quake of quakes) counts[MAG_BANDS.findIndex((band) => quake.mag < band.max)] += 1;
-  return MAG_BANDS.map((band, index) => ({ label: band.label, count: counts[index] }));
+  return MAG_BANDS.map((band, index) => ({ label: band.label, count: counts[index], min: index === 0 ? -Infinity : MAG_BANDS[index - 1].max, max: band.max }));
 }
 
 // ---------- lectura en texto: solo hechos registrados ----------

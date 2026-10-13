@@ -137,3 +137,15 @@ html[data-a11y-contrast="high"] .hs-card{border-color:#3b4756}
 html[data-a11y-contrast="high"] :is(.hs-sub,.hs-note,.hs-dec-max,.hs-legend,.hs-source p,.hs-lead,.hs-table thead th,.hs-table small){color:#10151c}
 html[data-a11y-contrast="high"] .hs-tiles span{color:#fff}
 @media(prefers-reduced-motion:reduce){.hs-next a{transition:none}}
+
+/* Animaciones de la página (solo CSS): los puntos y números de los mapas aparecen uno tras otro, los más grandes reaccionan al cursor, el
+   sismo de 2026 late, y las barras de las décadas crecen al llegar a la pantalla donde el navegador lo permite (si no, al cargar). */
+.hs-pop,.hs-pin{transform-box:fill-box;transform-origin:center;animation:hs-pop .5s cubic-bezier(.2,1.4,.4,1) calc(var(--i,0)*9ms) backwards;transition:transform .15s}
+.hs-pop:hover,.hs-pin:hover{transform:scale(1.2)}
+@keyframes hs-pop{from{opacity:0;transform:scale(.3)}}
+.hs-halo{transform-box:fill-box;transform-origin:center;animation:hs-beat 2.4s ease-out infinite}
+@keyframes hs-beat{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.6);opacity:0}}
+.hs-dec-bar i{transform-origin:left center;animation:hs-grow .9s cubic-bezier(.2,.9,.3,1) both}
+@supports (animation-timeline:view()){.hs-dec-bar i{animation:hs-grow linear both;animation-timeline:view();animation-range:entry 0% entry 80%}}
+@keyframes hs-grow{from{transform:scaleX(0)}to{transform:none}}
+@media(prefers-reduced-motion:reduce){.hs-pop,.hs-pin,.hs-halo,.hs-dec-bar i{animation:none;transition:none}.hs-pop:hover,.hs-pin:hover{transform:none}}

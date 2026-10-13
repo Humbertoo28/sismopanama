@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { PANAMA_RINGS } from "../../lib/panama";
 import { formatMag, placeEs, type HistoricQuake } from "../../lib/history";
 
@@ -50,11 +51,11 @@ export default function HistoryMap({ quakes }: { quakes: HistoricQuake[] }) {
       </g>
       <path className="hs-land" d={outline} />
       <g>
-        {ordered.map(quake => {
+        {ordered.map((quake, index) => {
           const era = eraOf(quake);
           const r = radius(quake.mag);
           return (
-            <g key={quake.id}>
+            <g key={quake.id} className="hs-pop" style={{ "--i": index } as CSSProperties}>
               {era === "now" && quake.mag >= 7 && <circle className="hs-halo" cx={x(quake.lng)} cy={y(quake.lat)} r={r + 7} />}
               <circle className={`hs-dot hs-${era}`} cx={x(quake.lng)} cy={y(quake.lat)} r={r}>
                 <title>{`M ${formatMag(quake.mag)} · ${new Date(quake.time).getUTCFullYear()} · ${placeEs(quake.place)}`}</title>

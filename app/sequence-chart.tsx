@@ -117,7 +117,7 @@ export default function SequenceChart({ mainshock, aftershocks, selectedId, repl
               <button type="button" className={`seq-hour${active ? " selected" : ""}`} disabled={top === null} onClick={() => top && onSelect(top)}
                 aria-describedby={`seq-hour-desc-${row.n}`}>
                 <span className="seq-hour-range">{from}–{from + binHours} h</span>
-                <span className="seq-hour-track"><i className={tier} style={{ width: `${(row.events.length / peak) * 100}%` }} /></span>
+                <span className="seq-hour-track"><i className={tier} style={{ width: `${(row.events.length / peak) * 100}%`, "--n": row.n } as CSSProperties} /></span>
                 <span className="seq-hour-count">{row.events.length}</span>
                 <span className={`seq-hour-max ${tier}`}>{topMag === null ? "—" : `M ${topMag.toFixed(1)}`}</span>
               </button>

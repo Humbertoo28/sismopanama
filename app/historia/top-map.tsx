@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { PANAMA_RINGS } from "../../lib/panama";
 import { formatDateUTC, formatMag, placeEs, type HistoricQuake } from "../../lib/history";
 import { eraOf } from "./history-map";
@@ -92,7 +93,7 @@ function Grid({ f, lngs, lats }: { f: Frame; lngs: number[]; lats: number[] }) {
 
 function Pin({ x, y, rank, quake, size }: { x: number; y: number; rank: number; quake: HistoricQuake; size: "main" | "inset" }) {
   return (
-    <g className={`hs-pin hs-pin-${size} hs-${eraOf(quake)}`}>
+    <g className={`hs-pin hs-pin-${size} hs-${eraOf(quake)}`} style={{ "--i": rank } as CSSProperties}>
       <title>{rankTitle(rank, quake)}</title>
       <circle cx={x} cy={y} r={size === "main" ? 14 : 16} />
       <text x={x} y={y} textAnchor="middle" dominantBaseline="central">{rank}</text>

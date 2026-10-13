@@ -132,6 +132,42 @@ El servidor no es el cuello de botella: en cada sismo Google (FCM) y Apple acept
 
 ---
 
+## 📊 Gráficas interactivas y animadas
+
+Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya publicaron**: las animaciones y la interacción no calculan, estiman ni proyectan nada. La reproducción de la secuencia, por ejemplo, muestra los sismos reales en su orden real; lo único comprimido es el tiempo de la animación.
+
+**Qué cambió en cada gráfica**
+
+| Gráfica | Ahora |
+|---|---|
+| **Línea de tiempo** (`/analisis`) | Los puntos entran en orden cronológico (~0.9 s), crecen al pasar el cursor, hay una cruz punteada que sigue al cursor y los sismos nuevos llevan un aro que se expande 3 veces. **Acercar, alejar y desplazar** la ventana de tiempo con botones, arrastrando (si está acercada) o con Ctrl/⌘ + rueda (la rueda normal sigue haciendo scroll); ventana mínima de 5 min; la transición es suave y solo se dibujan los puntos de la ventana. **Reproducir secuencia**: los sismos aparecen uno a uno con su lectura (magnitud, lugar, día y hora) y una onda; dura entre 5 y 18 s (505 sismos: 18 s), con *Pausar / Seguir / Reiniciar / Salir*. El eje de magnitud no se mueve al acercar ni al reproducir. |
+| **Actividad** (barras y acumulado) | Las barras crecen y el área acumulada se dibuja al cargar o cambiar de gráfico. **Elegir un intervalo** (clic, o flechas + Enter con el teclado) lo resalta, acerca la línea de tiempo a ese tramo y filtra la tabla. |
+| **Magnitudes y Profundidad** | Las barras crecen y los números cuentan cuando la gráfica llega a la pantalla. Cada fila es un botón: al elegirla se resaltan esos sismos en la línea de tiempo (los demás se apagan) y la tabla muestra solo esos. |
+| **Indicadores** | Los números cuentan hacia su valor y las tarjetas entran escalonadas. |
+| **Detalle del sismo** | Botones *Anterior / Siguiente* para recorrer los sismos en el tiempo, dentro de lo que esté seleccionado; si queda fuera de la ventana acercada, la ventana se corre hasta él. |
+| **Secuencia** (página principal) | En la vista «Por horas» las barras crecen desde la izquierda, una fila tras otra. (La vista «Cada sismo» ya tenía su animación.) |
+| **Historia sísmica** (`/historia`) | Los puntos del mapa y los números del mapa de los 12 mayores aparecen uno tras otro y reaccionan al cursor; el sismo de 2026 late; las barras de las décadas crecen al llegar a la pantalla (en navegadores sin esa función, al cargar). Solo CSS. |
+
+**Selección cruzada.** Solo hay una selección a la vez (un intervalo, una banda de magnitud o una de profundidad). Aparece un aviso «Intervalo / Magnitud / Profundidad: … · N de M sismos resaltados» con *Quitar selección*; cambiar un filtro (periodo, magnitud, fuentes) la quita y deshace el zoom. Las bandas tienen `min` incluido y `max` excluido (`lib/analytics.ts`), la misma regla de las barras, así que lo resaltado coincide exactamente con el número de cada barra.
+
+**Accesibilidad y movimiento**
+- Con **«Reducir animaciones»** (el interruptor del panel de accesibilidad o el ajuste del sistema) no hay animaciones ni transiciones, las barras de Recharts se dibujan completas de golpe y los números saltan al valor final (`app/analisis/motion.tsx`).
+- Teclado: la gráfica de actividad se recorre con las flechas y se elige con Enter o espacio; las filas de magnitud y profundidad son botones (`aria-pressed`); todos los controles miden 40 px o más; la reproducción anuncia solo su inicio y su final (no cada sismo) por `aria-live`.
+- Nada se dice solo con animación: lo que se resalta también está en el aviso de selección, la tabla y el texto de la ventana de tiempo.
+- Corregido de paso: el pie de `/analisis` tenía texto gris sobre la banda azul del sitio (contraste 2.3; el mínimo es 4.5) y ya estaba así en producción; ahora usa los colores claros del pie del sitio.
+
+**Cómo se probó**
+- 25 pruebas con valores en los límites (magnitud 4.0, 4.99, 5.0; profundidad negativa, 10 km, sin dato; intervalos): lo resaltado siempre es igual al número de cada barra.
+- En el navegador (desarrollo y `next build` + `next start`, que aplica la política de seguridad de producción): elegir intervalos y bandas con el ratón y con el teclado, acercar/alejar/desplazar con botones, arrastre y Ctrl + rueda, *Anterior/Siguiente*, quitar la selección, y la reproducción de 39 y 505 sismos en desarrollo (505 en ~18 s a ritmo constante; la animación usa un reloj real, así que si el navegador va lento muestra varios sismos juntos en vez de alargarse) y de 229 en producción (arranque, avance y «Salir»). También: la ventana mínima de 5 min, que al elegir un sismo fuera de la ventana esta se corre hasta él, que cambiar el periodo quita zoom y selección, la cruz punteada y el crecimiento del punto con un cursor real, el aro de un sismo nuevo (se simuló la llegada de uno falso, rotulado «PRUEBA LOCAL», solo en la pestaña de prueba) y que durante la reproducción la lectura no se anuncia a los lectores de pantalla (solo «Reproducción iniciada» y su final). Sin errores nuevos en la consola ni bloqueos de la política de seguridad.
+- axe-core 4.11: **0 violaciones** en `/analisis` en escritorio (estado inicial, con selección y detalle, y durante la reproducción), en teléfono de 375 px (inicial y con selección), con el texto al 130 % (sin desborde horizontal) y en `/historia` (escritorio).
+- Con «Reducir animaciones» activado: sin animaciones, sin transiciones y el área acumulada se dibuja completa al instante.
+
+**Lo que no se ha probado:** en un teléfono real, con VoiceOver o TalkBack, ni en Safari ni Firefox (solo Chromium). Con 500 puntos la reproducción corrió a ~37 cuadros por segundo en desarrollo; no se midió en producción ni en teléfonos de gama baja, ni con más de ~1 000 sismos. En la prueba de producción el aviso de la selección y la reproducción se comprobaron, pero no se repitió la auditoría de axe en ese modo.
+
+**Archivos:** `app/analisis/charts.tsx` (gráficas), `app/analisis/timeline-panel.tsx` (zoom, desplazamiento y reproducción), `app/analisis/motion.tsx` (reducir movimiento y «visto en pantalla»), `app/analisis/dashboard.tsx` (selección cruzada), `app/analisis/analisis.css`, `lib/analytics.ts` (rangos de las bandas), `app/analisis/format.ts` (pasos de 1, 2 y 5 min en el eje), `app/sequence-chart.tsx` y `app/globals.css`, `app/historia/*`.
+
+---
+
 ## 🛡️ Seguridad y Buenas Prácticas (OWASP Top 10)
 
 - **Anti-SSRF:** Validación estricta de endpoints push con lista blanca de proveedores oficiales (`fcm.googleapis.com`, `push.apple.com`, `mozilla`, `windows`).
