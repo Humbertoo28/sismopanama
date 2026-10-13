@@ -71,10 +71,6 @@ const nextConfig: NextConfig = {
         source: "/vendor/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
-      {
-        source: "/:file((?:favicon\\.svg|icon-192\\.png|icon-512\\.png|manifest\\.json))",
-        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
-      },
     ];
   },
   async redirects() {

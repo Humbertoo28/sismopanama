@@ -456,7 +456,7 @@ export async function sendSystemNotification({
         }
         await reg.showNotification(title, {
           body,
-          icon: "/icon-192.png",
+          icon: "/icon-192.png?v=2",
           badge: "/badge-96.png",
           tag,
           renotify: true,
@@ -471,7 +471,7 @@ export async function sendSystemNotification({
 
     const notif = new Notification(title, {
       body,
-      icon: "/icon-192.png",
+      icon: "/icon-192.png?v=2",
       tag,
     });
     notif.onclick = () => {
