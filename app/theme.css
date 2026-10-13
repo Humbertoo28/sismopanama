@@ -803,7 +803,7 @@ html[data-a11y-motion="reduce"] .more-sheet[open] { animation: none; }
 .more-sheet ul { margin: 0; padding: 0; list-style: none; }
 .more-sheet li + li { border-top: 1px solid var(--line); }
 .more-sheet a { display: flex; align-items: center; gap: 14px; min-height: 68px; padding: 10px 4px; color: var(--ink); text-decoration: none; }
-.more-sheet a:hover strong { color: var(--primary); }
+@media (hover: hover) { .more-sheet a:hover strong { color: var(--primary); } }
 .more-sheet-icon { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--primary-soft); color: var(--primary); }
 .more-sheet-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .more-sheet-text strong { font-size: calc(17px*var(--ts,1)); font-weight: 700; color: var(--ink); }
