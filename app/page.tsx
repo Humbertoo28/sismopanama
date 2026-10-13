@@ -16,7 +16,7 @@ import ThemeToggle from "./theme-toggle";
 import { placeTitle } from "../lib/quake-summary";
 import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
-import PwaInstall from "./pwa-install";
+import PwaInstall, { InstallCard } from "./pwa-install";
 import InAppBrowserNotice from "./in-app-browser-notice";
 import {
   ALARM_MAX_AGE_MS,
@@ -674,6 +674,7 @@ export default function Home() {
       <main id="inicio" className="main-content">
         <div className="content-wrap">
           <InAppBrowserNotice />
+          <InstallCard />
           <StatusNow
             latest={hero}
             main={main}
