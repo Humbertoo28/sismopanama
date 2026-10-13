@@ -364,6 +364,7 @@ body:before { display: none; }
 .report-matches span { font-size: calc(14px*var(--ts,1)); color: var(--muted); }
 .report-note { margin: 8px 0 0; font-size: calc(14px*var(--ts,1)); color: var(--muted); }
 .report-error { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+.report-pending { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--primary-soft); color: var(--ink); font-weight: 600; }
 .report-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .report-actions .btn-primary { flex: 1 1 220px; min-height: 54px; font-size: calc(18px*var(--ts,1)); }
 .report-actions .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }

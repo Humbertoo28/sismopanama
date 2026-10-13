@@ -18,7 +18,18 @@ export type Intensity = (typeof INTENSITIES)[number]["value"];
 export const PLACE_INDEX = new Map<string, Place>(PLACES.map(place => [place.id, place]));
 
 // Lo que llega del formulario, ya validado.
-export type ReportInput = { eventId: string; felt: boolean; intensity: Intensity | null; placeId: string };
+// `hint`: hora y epicentro del sismo tal como los ve la página. Solo sirven para encontrar el mismo sismo en el catálogo si su
+// id cambió (el IGC lo revisa) o si el servidor todavía no lo tiene; los datos que se guardan siempre salen del catálogo.
+export type EventHint = { time: number; lat: number; lng: number };
+export type ReportInput = { eventId: string; felt: boolean; intensity: Intensity | null; placeId: string; hint?: EventHint };
+
+function parseHint(value: unknown): EventHint | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { time, lat, lng } = value as Record<string, unknown>;
+  if (typeof time !== "number" || typeof lat !== "number" || typeof lng !== "number") return undefined;
+  if (!Number.isFinite(time) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return undefined;
+  return { time, lat, lng };
+}
 
 // Datos del sismo que el servidor guarda junto al reporte (los toma del catálogo, no de lo que manda el navegador).
 export type ReportedEvent = { id: string; time: number; mag: number | null; place: string | null; lat: number; lng: number };
@@ -42,12 +53,13 @@ const EVENT_ID = /^(?:[a-z]{2}[0-9a-z]{6,12}|igc:\d{9,11}|emsc:[0-9A-Za-z_-]{4,4
 export function parseReport(body: Record<string, unknown> | null): ReportInput | null {
   if (!body) return null;
   const { eventId, felt, intensity, placeId } = body;
+  const hint = parseHint(body.hint);
   if (typeof eventId !== "string" || !EVENT_ID.test(eventId)) return null;
   if (typeof felt !== "boolean") return null;
   if (typeof placeId !== "string" || !PLACE_INDEX.has(placeId)) return null;
-  if (!felt) return intensity === undefined || intensity === null ? { eventId, felt, intensity: null, placeId } : null;
+  if (!felt) return intensity === undefined || intensity === null ? { eventId, felt, intensity: null, placeId, hint } : null;
   if (typeof intensity !== "number" || !INTENSITIES.some(item => item.value === intensity)) return null;
-  return { eventId, felt, intensity: intensity as Intensity, placeId };
+  return { eventId, felt, intensity: intensity as Intensity, placeId, hint };
 }
 
 // ---------- Controles contra reportes falsos ----------

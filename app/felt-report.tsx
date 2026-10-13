@@ -136,20 +136,27 @@ export default function FeltReport({ event, onClose }: { event: Earthquake; onCl
     } catch {
       // Sin almacenamiento la próxima vez se vuelve a escribir el lugar.
     }
+    const [lng, lat] = event.geometry.coordinates;
+    const body = JSON.stringify({ eventId: event.id, felt, intensity: felt ? intensity : null, placeId: place.id, hint: { time: event.properties.time, lat, lng } });
     try {
-      const response = await fetch("/api/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId: event.id, felt, intensity: felt ? intensity : null, placeId: place.id }),
-      });
-      const data = (await response.json().catch(() => ({}))) as { error?: string; duplicate?: boolean };
-      if (response.ok || data.duplicate) {
-        remember(event);
-        setState("done");
+      // Si el sismo es muy reciente, el servidor puede tardar unos segundos en tenerlo («pending»): se reintenta solo.
+      for (let attempt = 0; ; attempt++) {
+        const response = await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        const data = (await response.json().catch(() => ({}))) as { error?: unknown; code?: unknown; duplicate?: boolean };
+        if (response.ok || data.duplicate) {
+          remember(event);
+          setState("done");
+          return;
+        }
+        if (data.code === "pending" && attempt < 6) {
+          setMessage("Estamos confirmando el sismo con los catálogos. Tu reporte se enviará en unos segundos…");
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+          continue;
+        }
+        setMessage(typeof data.error === "string" && data.error ? data.error : "No se pudo enviar tu reporte. Inténtalo de nuevo.");
+        setState("error");
         return;
       }
-      setMessage(data.error ?? "No se pudo enviar tu reporte. Inténtalo de nuevo.");
-      setState("error");
     } catch {
       setMessage("Sin conexión. Revisa tu internet e inténtalo de nuevo.");
       setState("error");
@@ -240,7 +247,7 @@ export default function FeltReport({ event, onClose }: { event: Earthquake; onCl
               </fieldset>
             )}
 
-            {message && <p className="report-error" role="alert">{message}</p>}
+            {message && (state === "sending" ? <p className="report-pending" role="status">{message}</p> : <p className="report-error" role="alert">{message}</p>)}
             <div className="report-actions">
               <button type="button" className="btn btn-primary" disabled={!ready || state === "sending"} onClick={send}>
                 {state === "sending" ? "Enviando…" : "Enviar mi reporte"}
