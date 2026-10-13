@@ -117,10 +117,12 @@ export default function PushDiagnostics({ minMagnitude, onChanged }: { minMagnit
     android: (
       <ul>
         <li><b>Batería:</b> Ajustes → Aplicaciones → Chrome (o «Ojo Panamá» si la instalaste) → Batería → <b>Sin restricciones</b>.</li>
-        <li><b>Xiaomi, Redmi, POCO:</b> además activa <b>Inicio automático</b> para Chrome. <b>Huawei:</b> Inicio de apps → Chrome → gestionar manualmente y activar todo.</li>
+        <li><b>Xiaomi, Redmi, POCO:</b> además activa <b>Inicio automático</b> para Chrome.</li>
+        <li><b>Honor y Huawei (MagicOS / EMUI):</b> Ajustes → Batería → <b>Inicio de aplicaciones</b> → Chrome → apaga «Gestionar automáticamente» y activa <b>Inicio automático</b>, <b>Inicio secundario</b> y <b>Ejecutar en segundo plano</b>. Después abre las apps recientes y <b>bloquea Chrome</b> (candado) para que el sistema no lo cierre. Desactiva también el ahorro de energía y reinicia el teléfono.</li>
         <li><b>Samsung:</b> Ajustes → Batería → Límites de uso en segundo plano: quita Chrome de «Apps en suspensión».</li>
         <li>No uses «Forzar detención» con Chrome ni lo cierres con limpiadores de memoria: dejan de llegar los avisos.</li>
         <li>Mantén pulsada una alerta de Ojo Panamá → Ajustes: que esté permitida, con sonido y, si se puede, como <b>Urgente</b>.</li>
+        <li>Activa las alertas desde <b>Chrome</b>: el navegador que trae el teléfono de fábrica no está probado.</li>
       </ul>
     ),
     ios: (
