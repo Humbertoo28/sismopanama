@@ -75,11 +75,11 @@ export function feltRadiusKm(mag: number) {
   return 60 * 2 ** (mag - 2);
 }
 
-export type Flag = "fuera-del-pais" | "poco-creible";
+// No se filtra por país de la conexión: el sitio pasa por Cloudflare y por redes móviles que salen por otros países, y ese
+// filtro apartaba reportes reales de Panamá. Solo se aparta lo que no cuadra con la distancia y la magnitud del sismo.
+export type Flag = "poco-creible";
 
-export function flagFor(input: ReportInput, event: ReportedEvent, country: string | null): Flag | null {
-  // Vercel dice desde qué país llega la conexión (en local no hay dato y no se marca).
-  if (country && country !== "PA") return "fuera-del-pais";
+export function flagFor(input: ReportInput, event: ReportedEvent): Flag | null {
   if (!input.felt || event.mag === null) return null;
   const place = PLACE_INDEX.get(input.placeId);
   if (!place) return null;

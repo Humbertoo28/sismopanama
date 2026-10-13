@@ -49,10 +49,3 @@ export function getClientIp(request: Request): string {
   if (realIp) return realIp.trim();
   return "127.0.0.1";
 }
-
-// País de quien llama (código ISO de dos letras), con el mismo criterio: detrás de Cloudflare, x-vercel-ip-country es el país
-// del servidor de Cloudflare (por ejemplo, Estados Unidos), no el de la persona.
-export function getClientCountry(request: Request): string | null {
-  const country = request.headers.get("cf-ipcountry") || request.headers.get("x-vercel-ip-country");
-  return country && /^[A-Z]{2}$/.test(country) ? country : null;
-}

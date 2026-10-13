@@ -5,7 +5,7 @@ import { recentPanamaEvents } from "../../../lib/catalogs";
 import { REPORT_WINDOW_MS, flagFor, parseReport, summarize, summarizeEvent, type EventSummary, type ReportRow } from "../../../lib/felt-reports";
 import { insertReport, listReports, reportsAvailable } from "../../../lib/felt-store";
 import { readJsonObject } from "../../../lib/push-validation";
-import { getClientCountry, getClientIp } from "../../../lib/rate-limit";
+import { getClientIp } from "../../../lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     const [lng, lat] = event.geometry.coordinates;
     // Lo que no es creíble se guarda apartado y no se cuenta. A quien lo envía se le responde igual que siempre: así no sabe
     // qué filtro lo apartó ni cómo esquivarlo.
-    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng }, getClientCountry(request));
+    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng });
     const result = await insertReport({
       event_id: event.id,
       event_time: event.properties.time,
