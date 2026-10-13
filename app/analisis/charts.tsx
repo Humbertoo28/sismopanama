@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
-import { type Band, type Bucket, type Quake, depthHistogram, magnitudeHistogram } from "../../lib/analytics";
-import CountUp from "../count-up";
+import { type Bucket, type Quake } from "../../lib/analytics";
 import { fmtClock, fmtDay, fmtFull, fmtInt, tickLabel, timeTicks } from "./format";
-import { useInView, useReducedMotion } from "./motion";
+import { useReducedMotion } from "./motion";
+
+// Este archivo es el único que importa Recharts (~115 KB comprimidos): el panel lo carga aparte y en paralelo con los datos
+// (dashboard.tsx), para que el resto de la página no tenga que esperarlo. La leyenda y las barras horizontales viven en bars.tsx.
 
 // Los colores son variables CSS (analisis.css): el azul y el naranja son los dos primeros tonos categóricos de una
 // paleta validada contra daltonismo; el naranja solo se usa para lo que el lector debe ver primero.
@@ -33,57 +35,43 @@ function Tip({ title, rows }: { title: string; rows: [string, ReactNode][] }) {
   );
 }
 
-export function Legend({ items }: { items: { label: string; kind: "dot" | "line" | "bar" | "ring"; color: string }[] }) {
-  return (
-    <ul className="an-legend" aria-label="Leyenda">
-      {items.map((item) => (
-        <li key={item.label}><i className={`an-key an-key-${item.kind}`} style={{ "--key": item.color } as CSSProperties} aria-hidden="true" />{item.label}</li>
-      ))}
-    </ul>
-  );
-}
-
 // ---------- línea de tiempo: cada sismo es un punto (tiempo × magnitud) ----------
 
-type DotExtra = {
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  // Atenuados por lo que se eligió en otra gráfica (un intervalo, una magnitud, una profundidad).
-  dimmed?: (quake: Quake) => boolean;
-  // Sismos que acaban de entrar (aro que se expande) y el que se acaba de «ocurrir» en la reproducción (una sola onda).
-  freshIds?: ReadonlySet<string>;
-  rippleId?: string | null;
-  rank: ReadonlyMap<string, number>;
-  total: number;
-  stagger: boolean;
+type DotProps = {
+  cx: number;
+  cy: number;
+  id: string;
+  mag: number;
+  role: TimelinePoint["role"];
+  selected: boolean;
+  // Atenuado por lo que se eligió en otra gráfica (un intervalo, una magnitud, una profundidad).
+  dim: boolean;
+  // Sismo que acaba de entrar (aro que se expande) y el que se acaba de «ocurrir» en la reproducción (una sola onda).
+  fresh: boolean;
+  ripple: boolean;
+  delay: number;
+  onPick: (id: string) => void;
 };
-type DotProps = { cx?: number; cy?: number; payload?: TimelinePoint; extra: DotExtra };
 
-// Está fuera del componente que dibuja la gráfica a propósito: si se creara dentro, cada cambio de selección lo volvería un
-// componente «nuevo» para React y los 500 puntos se dibujarían de cero (y repetirían su animación de entrada).
-function TimelineDot({ cx, cy, payload, extra }: DotProps) {
-  if (cx === undefined || cy === undefined || !payload) return <g />;
-  const radius = Math.max(3.5, Math.min(15, 2.2 + (payload.mag - 2) * 2.4));
-  const selected = payload.id === extra.selectedId;
-  const dim = extra.dimmed?.(payload) ?? false;
-  const fill = payload.role === "main" ? "var(--an-s2)" : "var(--an-s1)";
-  // Al cargar, los puntos entran en orden cronológico (el más antiguo primero) a lo largo de ~0.9 s.
-  const delay = extra.stagger ? Math.round(((extra.rank.get(payload.id) ?? 0) / Math.max(1, extra.total)) * DOTS_MS) : 0;
+// Está fuera del componente que dibuja la gráfica a propósito (si se creara dentro, cada cambio lo volvería un componente «nuevo» para
+// React y los 500 puntos se dibujarían de cero y repetirían su animación de entrada) y recibe solo valores simples, para que
+// `memo` lo salte cuando nada de él cambió: al reproducir, elegir o atenuar, solo se vuelven a dibujar los puntos que cambian.
+// Un punto son 3 elementos del SVG: el grupo (que anima y recibe el toque), el área de toque y el círculo.
+const TimelineDot = memo(function TimelineDot({ cx, cy, id, mag, role, selected, dim, fresh, ripple, delay, onPick }: DotProps) {
+  const radius = Math.max(3.5, Math.min(15, 2.2 + (mag - 2) * 2.4));
   return (
-    <g className={`an-dot${dim ? " an-dim" : ""}${selected ? " an-sel" : ""}`} onClick={() => extra.onSelect(payload.id)}>
+    <g className={`an-dot${dim ? " an-dim" : ""}${selected ? " an-sel" : ""}`} style={{ "--d": `${delay}ms` } as CSSProperties} onClick={() => onPick(id)}>
       <circle cx={cx} cy={cy} r={radius + 9} fill="transparent" />
-      <g className="an-dot-body" style={{ "--d": `${delay}ms` } as CSSProperties}>
-        {extra.freshIds?.has(payload.id) && <circle className="an-ring an-ring-fresh" cx={cx} cy={cy} r={radius} />}
-        {extra.rippleId === payload.id && <circle className="an-ring an-ring-ripple" cx={cx} cy={cy} r={radius} />}
-        <circle cx={cx} cy={cy} r={radius} fill={fill} fillOpacity={payload.role === "normal" ? 0.6 : 0.95} stroke="var(--an-surface)" strokeWidth={1.5} />
-        {payload.role === "latest" && <circle cx={cx} cy={cy} r={radius + 3.5} fill="none" stroke="var(--an-ink)" strokeWidth={2} />}
-        {selected && <circle className="an-sel-ring" cx={cx} cy={cy} r={radius + 6} fill="none" stroke="var(--an-ink)" strokeWidth={2} strokeDasharray="2 3" />}
-      </g>
+      {fresh && <circle className="an-ring an-ring-fresh" cx={cx} cy={cy} r={radius} />}
+      {ripple && <circle className="an-ring an-ring-ripple" cx={cx} cy={cy} r={radius} />}
+      <circle cx={cx} cy={cy} r={radius} fill={role === "main" ? "var(--an-s2)" : "var(--an-s1)"} fillOpacity={role === "normal" ? 0.6 : 0.95} stroke="var(--an-surface)" strokeWidth={1.5} />
+      {role === "latest" && <circle cx={cx} cy={cy} r={radius + 3.5} fill="none" stroke="var(--an-ink)" strokeWidth={2} />}
+      {selected && <circle className="an-sel-ring" cx={cx} cy={cy} r={radius + 6} fill="none" stroke="var(--an-ink)" strokeWidth={2} strokeDasharray="2 3" />}
     </g>
   );
-}
+});
 
-export function TimelineChart({ points, domain, magRange, selectedId, onSelect, dimmed, freshIds, rippleId }: {
+export function TimelineChart({ points, domain, magRange, selectedId, onSelect, dimmed, freshIds, rippleId, fill }: {
   points: TimelinePoint[];
   // Ventana de tiempo que se ve (el panel la acerca, la aleja y la desplaza) y rango de magnitudes de TODOS los sismos:
   // el eje vertical no se mueve al acercar ni mientras se reproduce.
@@ -94,6 +82,8 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
   dimmed?: (quake: Quake) => boolean;
   freshIds?: ReadonlySet<string>;
   rippleId?: string | null;
+  // En pantalla completa la gráfica llena el alto que le deja el panel en vez de medir 320 px.
+  fill?: boolean;
 }) {
   const [from, to] = domain;
   const [staggering, setStaggering] = useState(true);
@@ -101,6 +91,12 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
     const timer = window.setTimeout(() => setStaggering(false), DOTS_MS + 700);
     return () => window.clearTimeout(timer);
   }, []);
+  // El toque sobre un punto llama siempre a la versión más reciente de onSelect, sin cambiar la función que reciben los puntos.
+  const latestSelect = useRef(onSelect);
+  useEffect(() => {
+    latestSelect.current = onSelect;
+  });
+  const pick = useCallback((id: string) => latestSelect.current(id), []);
 
   const rank = useMemo(() => new Map([...points].sort((a, b) => a.time - b.time).map((point, index) => [point.id, index] as const)), [points]);
   const low = Math.max(0, Math.floor(magRange[0] - 0.3));
@@ -116,12 +112,22 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
     () => [...visible].sort((a, b) => Number(a.role !== "normal") - Number(b.role !== "normal") || Number(a.id === selectedId) - Number(b.id === selectedId)),
     [visible, selectedId],
   );
-  const extra: DotExtra = { selectedId, onSelect, dimmed, freshIds, rippleId, rank, total: points.length, stagger: staggering };
+
+  const shape = (props: unknown) => {
+    const { cx, cy, payload } = props as { cx?: number; cy?: number; payload?: TimelinePoint };
+    if (cx === undefined || cy === undefined || !payload) return <g />;
+    // Al cargar, los puntos entran en orden cronológico (el más antiguo primero) a lo largo de ~0.9 s.
+    const delay = staggering ? Math.round(((rank.get(payload.id) ?? 0) / Math.max(1, points.length)) * DOTS_MS) : 0;
+    return (
+      <TimelineDot cx={cx} cy={cy} id={payload.id} mag={payload.mag} role={payload.role} selected={payload.id === selectedId}
+        dim={dimmed?.(payload) ?? false} fresh={freshIds?.has(payload.id) ?? false} ripple={rippleId === payload.id} delay={delay} onPick={pick} />
+    );
+  };
 
   if (!points.length) return <p className="an-empty">No hay sismos con estos filtros.</p>;
   return (
-    <div className="an-chart" role="img" aria-label={`Gráfico de ${points.length} sismos por hora y magnitud. Los mismos datos están en la tabla de eventos.`}>
-      <ResponsiveContainer width="100%" height={320}>
+    <div className={`an-chart${fill ? " is-fill" : ""}`} role="img" aria-label={`Gráfico de ${points.length} sismos por hora y magnitud. Los mismos datos están en la tabla de eventos.`}>
+      <ResponsiveContainer width="100%" height={fill ? "100%" : 320}>
         <ScatterChart margin={{ top: 10, right: 18, bottom: 22, left: 4 }}>
           <CartesianGrid stroke="var(--an-grid)" vertical={false} />
           <XAxis type="number" dataKey="time" domain={[from, edge]} ticks={ticks} allowDataOverflow tick={tick} tickLine={false} axisLine={axisLine}
@@ -141,7 +147,7 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
               ]} />
             ) : null;
           }} />
-          <Scatter data={ordered} shape={(props: unknown) => <TimelineDot {...(props as Omit<DotProps, "extra">)} extra={extra} />} isAnimationActive={false} />
+          <Scatter data={ordered} shape={shape} isAnimationActive={false} />
         </ScatterChart>
       </ResponsiveContainer>
     </div>
@@ -218,45 +224,4 @@ export function ActivityChart({ buckets, size, mode, selectedStart, onPick }: {
       </ResponsiveContainer>
     </div>
   );
-}
-
-// ---------- distribuciones: barras horizontales simples (HTML, con el valor siempre visible) ----------
-
-// Las barras crecen desde cero y los números cuentan hacia su valor cuando la gráfica llega a la pantalla. Cada fila es un botón:
-// al elegirla se resaltan en la línea de tiempo y en la tabla los sismos de esa banda.
-function HBars({ bands, unit, note, selected, onPick }: { bands: Band[]; unit: string; note?: string; selected?: string | null; onPick?: (band: Band) => void }) {
-  const max = Math.max(1, ...bands.map((band) => band.count));
-  const reduced = useReducedMotion();
-  const [ref, seen] = useInView<HTMLDivElement>();
-  const show = seen || reduced;
-  return (
-    <div className="an-hbars" ref={ref}>
-      {bands.map((band, index) => {
-        const inner = (
-          <>
-            <span>{band.label}</span>
-            <span className="an-hbar-track"><span style={{ width: show ? `${(band.count / max) * 100}%` : 0, transitionDelay: reduced ? "0ms" : `${index * 80}ms` }} /></span>
-            <b><CountUp value={show ? band.count : 0} from={0} duration={reduced ? 0 : 900} /></b>
-          </>
-        );
-        const title = `${band.label}: ${band.count} ${unit}`;
-        return onPick ? (
-          <button key={band.label} type="button" className={`an-hbar an-hbar-btn${selected === band.label ? " is-on" : ""}`} aria-pressed={selected === band.label}
-            disabled={band.count === 0} title={title} onClick={() => onPick(band)}>{inner}</button>
-        ) : (
-          <div key={band.label} className="an-hbar" title={title}>{inner}</div>
-        );
-      })}
-      {note && <p className="an-note">{note}</p>}
-    </div>
-  );
-}
-
-export function DepthBars({ quakes, selected, onPick }: { quakes: Quake[]; selected?: string | null; onPick?: (band: Band) => void }) {
-  const { bands, unknown } = depthHistogram(quakes);
-  return <HBars bands={bands} unit="sismos" selected={selected} onPick={onPick} note={unknown > 0 ? `${unknown} sin profundidad informada.` : undefined} />;
-}
-
-export function MagnitudeBars({ quakes, selected, onPick }: { quakes: Quake[]; selected?: string | null; onPick?: (band: Band) => void }) {
-  return <HBars bands={magnitudeHistogram(quakes)} unit="sismos" selected={selected} onPick={onPick} />;
 }

@@ -9,9 +9,28 @@ import {
 } from "../../lib/analytics";
 import { MAINSHOCK_ID, sameEvent, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../../lib/earthquakes";
 import CountUp from "../count-up";
-import { ActivityChart, DepthBars, Legend, MagnitudeBars, type TimelinePoint } from "./charts";
+import { DepthBars, Legend, MagnitudeBars } from "./bars";
+import type { TimelinePoint } from "./charts";
 import { fmtClock, fmtFull, fmtInt } from "./format";
-import TimelinePanel, { type Zoom } from "./timeline-panel";
+import type { Zoom } from "./timeline-panel";
+
+// Recharts pesa ~115 KB comprimidos y solo lo usan estas dos gráficas: va en un archivo aparte para que filtros, indicadores y
+// barras no tengan que esperarlo. La descarga empieza al abrir la página (efecto de «precarga» del panel), en paralelo con la consulta
+// de los datos. Se guardan en un estado en vez de usar `next/dynamic`: con `dynamic`, aunque el archivo ya hubiera llegado, React
+// mostraba primero un marco de «cargando» y esperaba ~300 ms antes de cambiarlo por la gráfica; así aparece en el mismo instante en
+// que llegan los datos. Si el archivo tarda más que los datos, se ve un marco del mismo alto (la página no salta).
+type ChartModules = { ActivityChart: typeof import("./charts").ActivityChart; TimelinePanel: typeof import("./timeline-panel").default };
+
+function ChartPlaceholder({ height, failed }: { height: number; failed: boolean }) {
+  return failed ? (
+    <div className="an-chart-fail" style={{ minHeight: height }} role="alert">
+      <p>No se pudo cargar la gráfica. Revisa tu conexión.</p>
+      <button type="button" className="an-btn" onClick={() => window.location.reload()}>Reintentar</button>
+    </div>
+  ) : (
+    <div className="an-chart-skeleton" style={{ height }} role="status"><span className="an-sr">Cargando la gráfica…</span></div>
+  );
+}
 
 // Igual que la página principal. Un sismo tarda minutos en publicarse en los catálogos: consultar más seguido solo gasta
 // cuota del servidor cuando hay mucha gente conectada.
@@ -114,6 +133,19 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
     } finally {
       inflight.current = false;
     }
+  }, []);
+
+  // Precarga: baja el archivo de las gráficas mientras se consultan los datos.
+  const [charts, setCharts] = useState<ChartModules | null>(null);
+  const [chartsFailed, setChartsFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([import("./charts"), import("./timeline-panel")])
+      .then(([chartModule, panelModule]) => {
+        if (alive) setCharts({ ActivityChart: chartModule.ActivityChart, TimelinePanel: panelModule.default });
+      })
+      .catch(() => { if (alive) setChartsFailed(true); });
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -360,8 +392,10 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
                   ...(freshIds.size > 0 ? [{ label: "Nuevo", kind: "ring" as const, color: "var(--an-coral)" }] : []),
                 ]} />
               </div>
-              <TimelinePanel key={`${filters.window}|${filters.minMag}|${filters.sources.join(",")}`} points={points} from={from} to={now} zoom={zoom} onZoom={setZoom}
-                selectedId={selectedId} onSelect={select} dimmed={dimmed} freshIds={freshIds} />
+              {charts ? (
+                <charts.TimelinePanel key={`${filters.window}|${filters.minMag}|${filters.sources.join(",")}`} points={points} from={from} to={now} zoom={zoom} onZoom={setZoom}
+                  selectedId={selectedId} onSelect={select} dimmed={dimmed} freshIds={freshIds} />
+              ) : <ChartPlaceholder height={390} failed={chartsFailed} />}
               {selected && (
                 <div className="an-detail" role="region" aria-label="Detalle del sismo seleccionado">
                   <div>
@@ -392,7 +426,9 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
                     <button type="button" role="radio" aria-checked={mode === "cumulative"} onClick={() => setMode("cumulative")}>Acumulado</button>
                   </div>
                 </div>
-                <ActivityChart buckets={buckets} size={size} mode={mode} selectedStart={focus?.kind === "interval" ? focus.start : null} onPick={pickInterval} />
+                {charts ? (
+                  <charts.ActivityChart buckets={buckets} size={size} mode={mode} selectedStart={focus?.kind === "interval" ? focus.start : null} onPick={pickInterval} />
+                ) : <ChartPlaceholder height={300} failed={chartsFailed} />}
               </section>
 
               <div className="an-stack">

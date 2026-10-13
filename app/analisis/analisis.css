@@ -63,7 +63,8 @@
 .an-btn-ghost:hover { background: var(--an-hover); }
 
 /* ---- aviso de sismo nuevo ---- */
-.an-toast { position: fixed; z-index: 50; top: calc(12px + env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: min(440px, calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; background: var(--an-surface); border: 1px solid var(--an-coral); border-left-width: 6px; border-radius: 12px; padding: 12px 12px 12px 14px; box-shadow: 0 12px 32px #1d2c4240; animation: an-slide 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+/* Debajo de la cabecera fija del sitio (63 px, z-index 1000): con top 12px quedaba tapado por ella y su botón de cerrar no se podía tocar. */
+.an-toast { position: fixed; z-index: 50; top: calc(76px + env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: min(440px, calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; background: var(--an-surface); border: 1px solid var(--an-coral); border-left-width: 6px; border-radius: 12px; padding: 12px 12px 12px 14px; box-shadow: 0 12px 32px #1d2c4240; animation: an-slide 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
 .an-toast i { width: 10px; height: 10px; border-radius: 50%; background: var(--an-coral); flex: none; animation: an-pulse-red 1.4s ease-out infinite; }
 .an-toast > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .an-toast strong { font-family: "Space Grotesk", sans-serif; font-size:calc(16px*var(--ts,1)); }
@@ -167,11 +168,10 @@
 
 /* ---- gráficas animadas e interactivas ---- */
 /* Línea de tiempo: los puntos entran en orden cronológico, crecen al pasar el cursor y se apagan si otra gráfica eligió algo. */
-.an-dot { cursor: pointer; }
-.an-dot-body { transform-box: fill-box; transform-origin: center; transition: transform 0.18s ease, opacity 0.25s ease; animation: an-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) var(--d, 0ms) backwards; }
-.an-dot:hover .an-dot-body { transform: scale(1.3); }
-.an-dim .an-dot-body { opacity: 0.16; }
-.an-dim:hover .an-dot-body { opacity: 0.65; }
+.an-dot { cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform 0.18s ease, opacity 0.25s ease; animation: an-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) var(--d, 0ms) backwards; }
+.an-dot:hover { transform: scale(1.3); }
+.an-dim { opacity: 0.16; }
+.an-dim:hover { opacity: 0.65; }
 @keyframes an-pop { from { opacity: 0; transform: scale(0.2); } to { opacity: 1; transform: none; } }
 /* Aro que se expande: los sismos nuevos (3 veces) y el que acaba de «ocurrir» en la reproducción (una). */
 .an-ring { fill: none; stroke-width: 2; transform-box: fill-box; transform-origin: center; pointer-events: none; }
@@ -181,6 +181,11 @@
 .an-sel-ring { animation: an-march 1.4s linear infinite; }
 @keyframes an-march { to { stroke-dashoffset: -10; } }
 
+/* Marco que ocupa el lugar de una gráfica mientras llega su código (mismo alto: la página no salta). */
+.an-chart-skeleton { border-radius: 10px; background: linear-gradient(90deg, var(--an-hover) 25%, #f6f8fa 50%, var(--an-hover) 75%); background-size: 200% 100%; animation: an-shimmer 1.4s linear infinite; }
+@keyframes an-shimmer { to { background-position: -200% 0; } }
+
+.an-chart-fail { display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; color: var(--an-muted); }
 .an-timeline { display: grid; gap: 10px; min-width: 0; }
 .an-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .an-tools { display: inline-flex; flex-wrap: wrap; gap: 6px; }
@@ -195,9 +200,27 @@
 .an-tl-wrap.is-zoomed { cursor: grab; touch-action: pan-y; }
 .an-tl-wrap.is-panning { cursor: grabbing; user-select: none; }
 .an-replay-read { position: absolute; z-index: 2; top: 10px; left: 64px; display: flex; align-items: baseline; gap: 8px; max-width: calc(100% - 84px); padding: 6px 12px; border: 1px solid #d5dce6; border-radius: 10px; background: var(--an-surface); box-shadow: 0 6px 18px #1d2c4222; pointer-events: none; animation: an-slide 0.2s ease; }
-.an-replay-read b { font-family: "Space Grotesk", sans-serif; font-size: calc(17px*var(--ts,1)); color: var(--an-ink); }
+.an-replay-read b { flex: none; white-space: nowrap; font-family: "Space Grotesk", sans-serif; font-size: calc(17px*var(--ts,1)); color: var(--an-ink); }
 .an-replay-read span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--an-ink); font-size: calc(13px*var(--ts,1)); }
 .an-replay-read small { flex: none; color: var(--an-muted); font-size: calc(12px*var(--ts,1)); }
+
+/* Pantalla completa de la línea de tiempo (la del navegador y el respaldo sobre la página): llena la ventana, la gráfica toma
+   todo el alto que dejan los controles y la lectura de la reproducción se hace más grande. */
+.an-chart.is-fill { height: 100%; }
+.an-timeline.is-full { position: fixed; inset: 0; z-index: 3000; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; height: 100dvh; background: var(--an-surface); color: var(--an-ink); overscroll-behavior: contain; animation: an-full-in 0.22s ease;
+  padding: max(14px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+.an-timeline.is-full .an-toolbar { flex: none; }
+.an-timeline.is-full .an-tl-wrap { flex: 1 1 0; min-height: 0; }
+.an-full-title { font-family: "Space Grotesk", sans-serif; font-size: calc(18px*var(--ts,1)); margin-right: 8px; }
+.an-timeline.is-full .an-replay-read { top: 16px; left: auto; right: 24px; max-width: min(640px, calc(100% - 100px)); gap: 12px; padding: 10px 18px; } /* a la derecha: arriba a la izquierda queda el sismo principal */
+.an-timeline.is-full .an-replay-read b { font-size: calc(28px*var(--ts,1)); }
+.an-timeline.is-full .an-replay-read span { font-size: calc(16px*var(--ts,1)); }
+.an-timeline.is-full .an-replay-read small { font-size: calc(14px*var(--ts,1)); }
+.an-full-detail { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding: 10px 14px; border: 1px solid var(--an-s1); border-radius: 12px; background: #e8f0fc; animation: an-slide 0.3s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.an-full-detail b { font-family: "Space Grotesk", sans-serif; font-size: calc(20px*var(--ts,1)); }
+.an-full-detail span { min-width: 0; font-weight: 600; }
+.an-full-detail small { color: var(--an-muted); font-size: calc(12.5px*var(--ts,1)); }
+@keyframes an-full-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
 
 /* Lo elegido en una gráfica y su aviso. */
 .an-focus { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 14px; border: 1px solid var(--an-s1); border-radius: 12px; background: #e8f0fc; color: var(--an-ink); animation: an-slide 0.3s cubic-bezier(0.2, 0.7, 0.2, 1); }
@@ -224,17 +247,37 @@
   .an-tool span { display: none; }
   .an-tool-main span { display: inline; }
   .an-replay-read { left: 56px; }
+  .an-timeline.is-full .an-replay-read { top: 10px; right: 12px; max-width: calc(100% - 90px); padding: 6px 12px; }
+  .an-timeline.is-full .an-replay-read b { font-size: calc(20px*var(--ts,1)); }
+  .an-full-title { display: none; }
+}
+
+/* Teléfono en horizontal (poca altura): la pantalla completa usa controles más compactos para que la gráfica conserve espacio. */
+@media (max-height: 520px) {
+  .an-timeline.is-full { gap: 6px; padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  .an-timeline.is-full .an-toolbar { gap: 6px 10px; }
+  .an-timeline.is-full .an-tool { min-width: 36px; min-height: 36px; padding: 0 10px; }
+  .an-timeline.is-full .an-tool span { display: none; }
+  .an-timeline.is-full .an-tool-main span { display: inline; }
+  .an-full-title { display: none; }
+  .an-timeline.is-full .an-replay-read { top: 8px; padding: 4px 10px; }
+  .an-timeline.is-full .an-replay-read b { font-size: calc(17px*var(--ts,1)); }
+  .an-timeline.is-full .an-replay-read span { font-size: calc(13px*var(--ts,1)); }
+  .an-timeline.is-full .an-replay-read small { font-size: calc(12px*var(--ts,1)); }
+  .an-full-detail { padding: 6px 12px; }
+  .an-full-detail b { font-size: calc(16px*var(--ts,1)); }
 }
 
 /* «Reducir animaciones»: lo pide el sistema o el interruptor del panel de accesibilidad del sitio. */
 @media (prefers-reduced-motion: reduce) {
-  .an-live i, .an-toast, .an-toast i, .an-dot-body, .an-ring, .an-sel-ring, .an-kpi, .an-detail, .an-focus, .an-replay-read { animation: none; }
-  .an-dot-body, .an-hbar-track > span, .an-tool, .an-hbar-btn, .an-chart .recharts-bar-rectangle path, .an-table tbody tr { transition: none; }
+  .an-live i, .an-toast, .an-toast i, .an-dot, .an-ring, .an-sel-ring, .an-kpi, .an-detail, .an-focus, .an-replay-read, .an-chart-skeleton, .an-timeline.is-full, .an-full-detail { animation: none; }
+  .an-dot, .an-hbar-track > span, .an-tool, .an-hbar-btn, .an-chart .recharts-bar-rectangle path, .an-table tbody tr { transition: none; }
 }
 html[data-a11y-motion="reduce"] .an-live i, html[data-a11y-motion="reduce"] .an-toast, html[data-a11y-motion="reduce"] .an-toast i,
-html[data-a11y-motion="reduce"] .an-dot-body, html[data-a11y-motion="reduce"] .an-ring, html[data-a11y-motion="reduce"] .an-sel-ring,
+html[data-a11y-motion="reduce"] .an-dot, html[data-a11y-motion="reduce"] .an-ring, html[data-a11y-motion="reduce"] .an-sel-ring,
 html[data-a11y-motion="reduce"] .an-kpi, html[data-a11y-motion="reduce"] .an-detail, html[data-a11y-motion="reduce"] .an-focus,
-html[data-a11y-motion="reduce"] .an-replay-read { animation: none; }
-html[data-a11y-motion="reduce"] .an-dot-body, html[data-a11y-motion="reduce"] .an-hbar-track > span, html[data-a11y-motion="reduce"] .an-tool,
+html[data-a11y-motion="reduce"] .an-replay-read, html[data-a11y-motion="reduce"] .an-chart-skeleton,
+html[data-a11y-motion="reduce"] .an-timeline.is-full, html[data-a11y-motion="reduce"] .an-full-detail { animation: none; }
+html[data-a11y-motion="reduce"] .an-dot, html[data-a11y-motion="reduce"] .an-hbar-track > span, html[data-a11y-motion="reduce"] .an-tool,
 html[data-a11y-motion="reduce"] .an-hbar-btn, html[data-a11y-motion="reduce"] .an-chart .recharts-bar-rectangle path,
 html[data-a11y-motion="reduce"] .an-table tbody tr { transition: none; }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { MINUTE, type Quake } from "../../lib/analytics";
 import { TimelineChart, type TimelinePoint } from "./charts";
 import { fmtFull, fmtInt } from "./format";
@@ -224,6 +224,75 @@ export default function TimelinePanel({ points, from, to, zoom, onZoom, selected
     setAnnounce("Reproducción detenida.");
   };
 
+  // ---- pantalla completa: la del navegador si la permite y, si no (iPhone y navegadores integrados), la línea de tiempo se
+  // amplía sobre toda la página. Es la misma idea que la del mapa (quake-map.tsx). Todo lo demás (zoom, reproducción, selección)
+  // sigue funcionando igual porque es el mismo componente, solo con más espacio. ----
+  const root = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState<"off" | "native" | "overlay">("off");
+  const full = fullscreen !== "off";
+  useEffect(() => {
+    const update = () => {
+      const active = document.fullscreenElement !== null && document.fullscreenElement === root.current;
+      setFullscreen((mode) => (active ? "native" : mode === "native" ? "off" : mode));
+    };
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  const toggleFullscreen = async () => {
+    const frame = root.current;
+    if (!frame) return;
+    try {
+      if (document.fullscreenElement === frame) {
+        await document.exitFullscreen();
+      } else if (fullscreen === "overlay") {
+        setFullscreen("off");
+      } else {
+        if (!frame.requestFullscreen) throw new Error("Fullscreen unavailable");
+        // Algunos navegadores integrados dejan la promesa sin resolver: se espera un instante y, si no se logró, se usa el respaldo.
+        await Promise.race([frame.requestFullscreen(), new Promise((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 900))]);
+        if (document.fullscreenElement !== frame) throw new Error("Fullscreen not granted");
+      }
+    } catch {
+      setFullscreen((mode) => (mode === "off" ? "overlay" : "off"));
+    }
+  };
+  // Mientras está abierta: la página de abajo no se desplaza, Escape cierra el respaldo (la del navegador la cierra el propio
+  // navegador) y Tab no sale de la línea de tiempo hacia lo que queda tapado.
+  useEffect(() => {
+    if (!full) return;
+    const frame = root.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFullscreen((mode) => (mode === "overlay" ? "off" : mode));
+        return;
+      }
+      if (event.key !== "Tab" || !frame) return;
+      const items = [...frame.querySelectorAll<HTMLElement>('button, [href], [tabindex]:not([tabindex="-1"])')].filter(
+        (item) => !(item as HTMLButtonElement).disabled && item.getClientRects().length > 0,
+      );
+      const first = items[0];
+      const end = items[items.length - 1];
+      if (!first || !end) return;
+      const inside = document.activeElement instanceof Node && frame.contains(document.activeElement);
+      if (!inside || (event.shiftKey && document.activeElement === first)) {
+        event.preventDefault();
+        (inside ? end : first).focus();
+      } else if (!event.shiftKey && document.activeElement === end) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const previous = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.documentElement.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+      if ((document.activeElement === document.body || document.activeElement === null) && opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [full]);
+
   const drawn = replay ? replay.list.slice(0, replay.shown) : points;
   const last = replay && replay.shown > 0 ? replay.list[replay.shown - 1] : null;
   const magRange = useMemo<[number, number]>(() => {
@@ -232,9 +301,13 @@ export default function TimelinePanel({ points, from, to, zoom, onZoom, selected
   }, [points]);
   const inWindow = useMemo(() => points.filter((point) => point.time >= target0 && point.time <= target1).length, [points, target0, target1]);
 
+  const picked = full && selectedId ? points.find((point) => point.id === selectedId) : undefined;
+
   return (
-    <div className="an-timeline">
+    <div ref={root} className={`an-timeline${full ? " is-full" : ""}`}
+      {...(fullscreen === "overlay" ? { role: "dialog", "aria-modal": true, "aria-label": "Línea de tiempo en pantalla completa" } : {})}>
       <div className="an-toolbar" role="toolbar" aria-label="Controles de la línea de tiempo">
+        {full && <strong className="an-full-title">Línea de tiempo</strong>}
         <div className="an-tools" role="group" aria-label="Acercar y desplazar">
           <button type="button" className="an-tool" onClick={() => zoomBy(0.5)} disabled={target1 - target0 <= MIN_SPAN} aria-label="Acercar"><ZoomIn aria-hidden="true" size={18} /><span>Acercar</span></button>
           <button type="button" className="an-tool" onClick={() => zoomBy(2)} disabled={!zoomed} aria-label="Alejar"><ZoomOut aria-hidden="true" size={18} /><span>Alejar</span></button>
@@ -251,9 +324,14 @@ export default function TimelinePanel({ points, from, to, zoom, onZoom, selected
                 ? <button type="button" className="an-tool an-tool-main" onClick={pauseReplay}><Pause aria-hidden="true" size={18} /><span>Pausar</span></button>
                 : <button type="button" className="an-tool an-tool-main" onClick={replay.shown >= replay.list.length ? startReplay : resumeReplay}><Play aria-hidden="true" size={18} /><span>{replay.shown >= replay.list.length ? "Volver a ver" : "Seguir"}</span></button>}
               <button type="button" className="an-tool" onClick={startReplay} aria-label="Reiniciar la reproducción"><RotateCcw aria-hidden="true" size={18} /></button>
-              <button type="button" className="an-tool" onClick={stopReplay}>Salir</button>
+              <button type="button" className="an-tool" onClick={stopReplay}>Detener</button>
             </>
           )}
+        </div>
+        <div className="an-tools" role="group" aria-label="Vista">
+          <button type="button" className="an-tool" onClick={toggleFullscreen} aria-label={full ? "Salir de la pantalla completa" : "Ver la línea de tiempo en pantalla completa"}>
+            {full ? <Minimize2 aria-hidden="true" size={18} /> : <Maximize2 aria-hidden="true" size={18} />}<span>{full ? "Salir de pantalla completa" : "Pantalla completa"}</span>
+          </button>
         </div>
         {/* Durante la reproducción cambia a cada sismo: no se anuncia (solo el inicio y el final, en la región de abajo). */}
         <p className="an-window" role={replay ? undefined : "status"}>
@@ -268,7 +346,7 @@ export default function TimelinePanel({ points, from, to, zoom, onZoom, selected
       <div ref={wrap} className={`an-tl-wrap${zoomed ? " is-zoomed" : ""}${panning ? " is-panning" : ""}`}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
         onClickCapture={(event) => { if (suppress.current) { event.stopPropagation(); event.preventDefault(); } }}>
-        <TimelineChart points={drawn} domain={view} magRange={magRange} selectedId={selectedId} onSelect={onSelect} dimmed={dimmed} freshIds={freshIds} rippleId={last?.id ?? null} />
+        <TimelineChart points={drawn} domain={view} magRange={magRange} selectedId={selectedId} onSelect={onSelect} dimmed={dimmed} freshIds={freshIds} rippleId={last?.id ?? null} fill={full} />
         {last && (
           <div className="an-replay-read" aria-hidden="true">
             <b>M {last.mag.toFixed(1)}</b>
@@ -277,7 +355,15 @@ export default function TimelinePanel({ points, from, to, zoom, onZoom, selected
           </div>
         )}
       </div>
+      {picked && (
+        <div className="an-full-detail" role="region" aria-label="Sismo seleccionado">
+          <b>M {picked.mag.toFixed(1)}</b>
+          <span>{picked.place}</span>
+          <small>{fmtFull.format(picked.time)} · prof. {picked.depth === null ? "—" : `${Math.round(picked.depth)} km`} · {picked.source.toUpperCase()}</small>
+        </div>
+      )}
       <p className="an-sr" aria-live="polite">{announce}</p>
+      <p className="an-sr" role="status">{full ? "Línea de tiempo en pantalla completa. Pulsa Escape para salir." : ""}</p>
     </div>
   );
 }
