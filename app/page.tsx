@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { Bell, BellRing, ExternalLink, House, Info, List, Map as MapIcon, Phone, ShieldCheck } from "lucide-react";
+import { Bell, BellRing, ExternalLink, House, Info, LayoutGrid, List, Map as MapIcon, Phone, ShieldCheck } from "lucide-react";
 import MainshockUsgs from "./mainshock-usgs";
 import PlatesExplainer from "./plates-explainer";
 import FaultsExplainer from "./faults-explainer";
@@ -11,6 +11,7 @@ import Checklists from "./checklists";
 import Sources from "./sources";
 import FlagMark from "./flag-mark";
 import StatusNow from "./status-now";
+import MoreSheet from "./more-sheet";
 import ThemeToggle from "./theme-toggle";
 import { placeTitle } from "../lib/quake-summary";
 import SequenceChart from "./sequence-chart";
@@ -155,6 +156,7 @@ export default function Home() {
   const [alert, setAlert] = useState<LiveAlert | null>(null);
   const [dismissedKey, setDismissedKey] = useState(0);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   // ¿Llegan las alertas con la app cerrada? (permiso + suscripción push). Es lo que dice el botón del encabezado.
   const [pushActive, setPushActive] = useState(false);
   useEffect(() => {
@@ -642,11 +644,15 @@ export default function Home() {
         </div>
         <nav className="site-nav" aria-label="Secciones de la página">
           {NAV.map(([id, Icon, label]) => (
-            <a key={id} href={`#${id}`} className={section === id ? "active" : ""} aria-current={section === id ? "location" : undefined}
+            <a key={id} href={`#${id}`} className={`${section === id ? "active" : ""}${id === "fuentes" ? " nav-fuentes" : ""}`} aria-current={section === id ? "location" : undefined}
               onClick={() => { navLock.current = performance.now() + 900; setSection(id); }}>
               <Icon aria-hidden="true" size={22} /><span>{label}</span>
             </a>
           ))}
+          {/* En celular y tablet las otras páginas no caben en la barra: van en el panel «Más» (en lugar de «Fuentes»). */}
+          <button type="button" className="nav-more" onClick={() => setMoreOpen(true)} aria-haspopup="dialog" aria-expanded={moreOpen}>
+            <LayoutGrid aria-hidden="true" size={22} /><span>Más</span>
+          </button>
           <span className="site-nav-pages">
             <a href="/reportes">Reportes</a>
             <a href="/analisis">Gráficos</a>
@@ -749,6 +755,7 @@ export default function Home() {
         </div>
       </main>
 
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       <AlertModal
         isOpen={alertModalOpen}
         onClose={() => {

@@ -1,16 +1,18 @@
 import Link from "next/link";
+import { ChartColumn, History, House, MessageSquareText, Newspaper } from "lucide-react";
 import type { ReactNode } from "react";
 import FlagMark from "./flag-mark";
 import ThemeToggle from "./theme-toggle";
 
 // Encabezado de las páginas secundarias, con la misma identidad que la página principal: marca a la izquierda y las demás
 // páginas a un toque. `current` marca la página en la que se está.
+// En el celular, el menú va abajo como barra con íconos, igual que las pestañas de la portada.
 const PAGES = [
-  ["/", "Inicio"],
-  ["/reportes", "Reportes"],
-  ["/analisis", "Gráficos"],
-  ["/noticias", "Noticias"],
-  ["/historia", "Historia"],
+  ["/", House, "Inicio"],
+  ["/reportes", MessageSquareText, "Reportes"],
+  ["/analisis", ChartColumn, "Gráficos"],
+  ["/noticias", Newspaper, "Noticias"],
+  ["/historia", History, "Historia"],
 ] as const;
 
 // `children`: algo propio de la página que va en la barra, junto al botón del tema (por ejemplo, «En vivo» en Gráficos).
@@ -29,8 +31,10 @@ export default function PageHeader({ current, children }: { current: string; chi
         </div>
       </div>
       <nav className="page-nav" aria-label="Páginas">
-        {PAGES.map(([href, label]) => (
-          <Link key={href} href={href} className={href === current ? "active" : ""} aria-current={href === current ? "page" : undefined}>{label}</Link>
+        {PAGES.map(([href, Icon, label]) => (
+          <Link key={href} href={href} className={href === current ? "active" : ""} aria-current={href === current ? "page" : undefined}>
+            <Icon aria-hidden="true" size={20} /><span>{label}</span>
+          </Link>
         ))}
       </nav>
     </header>
