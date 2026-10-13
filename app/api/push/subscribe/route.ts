@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
+import { CURRENT_VAPID, vapidKeyIdFor } from "@/lib/push-service";
 import { endpointHost, isPushEndpoint, isPushKeys, keyBytes, parseMinMagnitude, readJsonObject } from "@/lib/push-validation";
 import { isAllowedOrigin, isAutomatedBot } from "@/lib/bot-defense";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -48,6 +49,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(INVALID, { status: 400 });
     }
 
+    // Con qué clave pública se creó la suscripción (la manda la app). Si es una clave que ya no se usa, la app tiene que
+    // crear otra: se le avisa con «stale-key». Sin el dato (versiones viejas de la app), se asume la actual.
+    const vapidKey = body?.serverKey === undefined ? CURRENT_VAPID?.id ?? "v1" : vapidKeyIdFor(body.serverKey);
+    if (!vapidKey) {
+      return NextResponse.json({ error: "La suscripción usa una clave que ya no es válida.", code: "stale-key" }, { status: 409 });
+    }
+
     const supabase = getSupabaseServerClient();
     if (!supabase) {
       return NextResponse.json(
@@ -72,16 +80,18 @@ export async function POST(req: NextRequest) {
       await supabase.from("push_subscriptions").delete().eq("endpoint", oldEndpoint);
     }
 
-    const { error } = await supabase.from("push_subscriptions").upsert(
-      {
-        endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
-        min_magnitude: threshold || 3.0,
-        last_seen: new Date().toISOString(),
-      },
-      { onConflict: "endpoint" },
-    );
+    const row = {
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      min_magnitude: threshold || 3.0,
+      last_seen: new Date().toISOString(),
+    };
+    let { error } = await supabase.from("push_subscriptions").upsert({ ...row, vapid_key: vapidKey }, { onConflict: "endpoint" });
+    if (error && /vapid_key/.test(error.message)) {
+      // La columna vapid_key todavía no existe en la base (supabase/schema.sql): se guarda sin ella.
+      ({ error } = await supabase.from("push_subscriptions").upsert(row, { onConflict: "endpoint" }));
+    }
 
     if (error) {
       console.error("Error guardando suscripción en Supabase:", error);

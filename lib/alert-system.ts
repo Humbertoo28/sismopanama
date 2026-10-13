@@ -536,11 +536,56 @@ async function serverError(res: Response, fallback: string): Promise<{ error: st
   }
 }
 
+// ---------- Clave del servidor (VAPID) ----------
+// Cada suscripción queda ligada a la clave pública del servidor con la que se creó. Cuando el servidor cambia de clave, la
+// suscripción vieja se reemplaza al abrir la app (ensureCurrentSubscription) y el servidor traspasa su configuración.
+const SERVER_KEY_STORE = "sismo_panama_push_server_key";
+
+async function currentServerKey(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/push/vapid-public-key");
+    const { publicKey } = (await res.json()) as { publicKey?: unknown };
+    return typeof publicKey === "string" && publicKey ? publicKey.replace(/=+$/, "") : null;
+  } catch {
+    return null;
+  }
+}
+
+// Clave con la que se creó la suscripción, en base64url. Si el navegador no la expone, se usa la que se anotó al crearla.
+function serverKeyOf(sub: PushSubscription): string | null {
+  const raw = sub.options?.applicationServerKey;
+  if (raw) {
+    let binary = "";
+    new Uint8Array(raw).forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  try {
+    return localStorage.getItem(SERVER_KEY_STORE);
+  } catch {
+    return null;
+  }
+}
+
+// La suscripción de este equipo con la clave actual del servidor: la existente si ya la usa; si se creó con otra (o no se sabe
+// con cuál, en suscripciones de antes de este cambio), se reemplaza y se devuelve también la dirección anterior para que el
+// servidor traspase el umbral y la borre.
+async function ensureCurrentSubscription(reg: ServiceWorkerRegistration): Promise<{ sub: PushSubscription; oldEndpoint?: string; created: boolean }> {
+  const existing = await reg.pushManager.getSubscription();
+  if (!existing) return { sub: await createPushSubscription(reg), created: true };
+  const current = await currentServerKey();
+  if (!current || serverKeyOf(existing) === current) return { sub: existing, created: false };
+  const oldEndpoint = existing.endpoint;
+  await existing.unsubscribe().catch(() => false);
+  return { sub: await createPushSubscription(reg), oldEndpoint, created: true };
+}
+
 async function createPushSubscription(reg: ServiceWorkerRegistration) {
-  const keyRes = await fetch("/api/push/vapid-public-key");
-  const { publicKey } = (await keyRes.json()) as { publicKey?: string };
+  const publicKey = await currentServerKey();
   if (!publicKey) throw new Error("No se pudo obtener la clave VAPID pública");
   const keyBuffer = urlBase64ToUint8Array(publicKey);
+  try {
+    localStorage.setItem(SERVER_KEY_STORE, publicKey);
+  } catch {}
 
   try {
     return await reg.pushManager.subscribe({
@@ -607,13 +652,11 @@ export async function syncPushSubscription(minMagnitude: number, force = false):
 
   try {
     const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await createPushSubscription(reg);
+    const { sub, oldEndpoint, created } = await ensureCurrentSubscription(reg);
+    if (created) {
       force = true;
       rememberPushEnabled(true);
     }
-    if (!sub) return false;
     // Si el servidor no confirmó esta dirección, se vuelve a registrar ya (sin esperar las 24 h).
     if (confirmedEndpoint() !== sub.endpoint) force = true;
     if (!force) {
@@ -631,7 +674,7 @@ export async function syncPushSubscription(minMagnitude: number, force = false):
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, minMagnitude }),
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, minMagnitude, serverKey: serverKeyOf(sub) ?? undefined, oldEndpoint }),
     });
     if (res.ok) {
       try {
@@ -669,7 +712,7 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
     }
 
     const reg = await navigator.serviceWorker.ready;
-    const sub = (await reg.pushManager.getSubscription()) ?? (await createPushSubscription(reg));
+    const { sub, oldEndpoint } = await ensureCurrentSubscription(reg);
 
     const subJson = sub.toJSON();
     const saveRes = await fetch("/api/push/subscribe", {
@@ -679,6 +722,8 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
         endpoint: subJson.endpoint,
         keys: subJson.keys,
         minMagnitude,
+        serverKey: serverKeyOf(sub) ?? undefined,
+        oldEndpoint,
       }),
     });
 
@@ -726,7 +771,7 @@ export async function sendTestWebPush(delayed = false): Promise<{ ok: boolean; e
     const res = await fetch("/api/push/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys, ...(delayed ? { delaySeconds: 30 } : {}) }),
+      body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys, serverKey: serverKeyOf(sub) ?? undefined, ...(delayed ? { delaySeconds: 30 } : {}) }),
     });
     if (!res.ok) {
       return { ok: false, ...(await serverError(res, "Error al enviar la prueba")) };

@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { sendWebPushToSubscription } from "@/lib/push-service";
+import { sendWebPushToSubscription, vapidKeyIdFor } from "@/lib/push-service";
 import { isPushEndpoint, isPushKeys, readJsonObject } from "@/lib/push-validation";
 import { getClientIp } from "@/lib/rate-limit";
 
@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
       url: "/",
     };
     const subscription = { endpoint, p256dh: keys.p256dh, auth: keys.auth };
+    // La clave con la que se creó la suscripción (si la app no la manda, se prueba con la actual y, si la rechazan, con la otra).
+    const keyId = vapidKeyIdFor(body?.serverKey);
 
     if (delayed) {
       const ip = getClientIp(req);
@@ -57,14 +59,14 @@ export async function POST(req: NextRequest) {
       if (lastDelayed.size > 5_000) lastDelayed.clear();
       after(async () => {
         await new Promise(resolve => setTimeout(resolve, DELAY_SECONDS * 1000));
-        const result = await sendWebPushToSubscription(subscription, payload);
+        const result = await sendWebPushToSubscription(subscription, payload, keyId);
         if (!result.success) console.warn("[push] prueba diferida rechazada:", result.statusCode ?? "sin respuesta", String(result.error ?? "").slice(0, 160));
         else console.log("[push] prueba diferida enviada:", result.statusCode);
       });
       return NextResponse.json({ success: true, scheduled: true, delaySeconds: DELAY_SECONDS }, { status: 202 });
     }
 
-    const result = await sendWebPushToSubscription(subscription, payload);
+    const result = await sendWebPushToSubscription(subscription, payload, keyId);
     if (!result.success) {
       // El detalle del fallo (red, certificados, respuesta del servicio) queda en el registro del servidor; a quien prueba
       // se le dice solo qué significa, para que sepa si es su equipo o el servidor.
