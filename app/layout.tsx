@@ -37,10 +37,10 @@ export const metadata: Metadata = {
   creator: "Ojo Panamá",
   publisher: "Ojo Panamá",
   category: "weather",
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=2",
   icons: {
-    icon: "/favicon.svg",
-    apple: "/apple-touch-icon.png",
+    icon: "/favicon.svg?v=2",
+    apple: "/apple-touch-icon.png?v=2",
   },
   appleWebApp: {
     capable: true,
@@ -68,8 +68,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="es-PA" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.json?v=2" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Ojo Panamá" />

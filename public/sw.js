@@ -1,10 +1,9 @@
-const CACHE_NAME = "sismo-panama-v11";
+const CACHE_NAME = "sismo-panama-v12";
 const STATIC_ASSETS = [
   "/",
-  "/manifest.json",
-  "/favicon.svg",
-  "/icon-192.png",
-  "/icon-512.png",
+  "/favicon.svg?v=2",
+  "/icon-192.png?v=2",
+  "/icon-512.png?v=2",
   "/badge-96.png",
   "/leaflet.js",
   "/siren.wav",
@@ -52,6 +51,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (event.request.method !== "GET") {
+    return;
+  }
+  // El manifiesto (nombre e íconos de la app instalada) siempre se pide a la red: guardado en el caché, el teléfono
+  // seguía viendo el nombre y los íconos de antes.
+  if (url.pathname === "/manifest.json") {
     return;
   }
   // Para navegación HTML, usar Network-First: carga la versión más reciente si hay conexión,
@@ -102,7 +106,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "🚨 Alerta Sísmica - Panamá";
   const options = {
     body: data.body || "Se ha registrado un evento sísmico reciente en Panamá.",
-    icon: "/icon-192.png",
+    icon: "/icon-192.png?v=2",
     // Android pinta la insignia de un solo color con su transparencia: tiene que ser una silueta PNG.
     badge: "/badge-96.png",
     vibrate: [400, 150, 400, 150, 400],

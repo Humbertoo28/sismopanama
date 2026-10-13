@@ -26,7 +26,7 @@ export function SiteStructuredData() {
         "@id": `${SITE_URL}/#organization`,
         name: SITE_NAME,
         url: `${SITE_URL}/`,
-        logo: `${SITE_URL}/icon-512.png`,
+        logo: `${SITE_URL}/icon-512.png?v=2`,
         sameAs: ["https://www.instagram.com/ojopanama507"],
         description: "Plataforma de monitoreo y alertas sísmicas en tiempo real para la República de Panamá.",
       },
