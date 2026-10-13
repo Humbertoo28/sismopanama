@@ -83,7 +83,7 @@ export default function Accessibility() {
   const [ready, setReady] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const latest = useSyncExternalStore(subscribeLatestQuake, getLatestQuake, () => null);
-  const themeChoice = useSyncExternalStore(subscribeTheme, getThemeChoice, (): ThemeChoice => "auto");
+  const themeChoice = useSyncExternalStore(subscribeTheme, getThemeChoice, (): ThemeChoice => "light");
   const fab = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -190,7 +190,7 @@ export default function Accessibility() {
           <div className="a11y-group" role="group" aria-label="Apariencia">
             <span className="a11y-label">Apariencia</span>
             <div className="a11y-scales a11y-themes">
-              {([["auto", "Automático"], ["light", "Claro"], ["dark", "Oscuro"]] as const).map(([value, label]) => (
+              {([["light", "Claro"], ["dark", "Oscuro"], ["auto", "Automático"]] as const).map(([value, label]) => (
                 <button key={value} type="button" aria-pressed={themeChoice === value} className={themeChoice === value ? "on" : ""} onClick={() => setThemeChoice(value)}>
                   {label}
                 </button>

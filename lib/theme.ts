@@ -1,5 +1,5 @@
-// Modo claro u oscuro. La persona elige «automático» (lo que pida su teléfono o computadora), «claro» u «oscuro»; la elección se
-// guarda en el navegador. El tema resuelto va en <html data-theme="light|dark"> y el CSS (app/theme.css) hace el resto. El script
+// Modo claro u oscuro. Por defecto, claro. La persona puede elegir «oscuro» o «automático» (lo que pida su teléfono o
+// computadora); la elección se guarda en el navegador. El tema resuelto va en <html data-theme="light|dark"> y el CSS (app/theme.css) hace el resto. El script
 // de app/layout.tsx lo aplica antes de pintar, para que no haya un destello blanco al abrir de noche.
 
 export type ThemeChoice = "auto" | "light" | "dark";
@@ -10,9 +10,9 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 export function readThemeChoice(): ThemeChoice {
   try {
     const value = localStorage.getItem(THEME_KEY);
-    return value === "light" || value === "dark" ? value : "auto";
+    return value === "auto" || value === "dark" ? value : "light";
   } catch {
-    return "auto";
+    return "light";
   }
 }
 
@@ -28,7 +28,7 @@ export function applyTheme(choice: ThemeChoice = readThemeChoice()) {
 
 export function setThemeChoice(choice: ThemeChoice) {
   try {
-    if (choice === "auto") localStorage.removeItem(THEME_KEY);
+    if (choice === "light") localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, choice);
   } catch {
     // Sin almacenamiento vale solo para esta visita.
@@ -53,4 +53,4 @@ export function subscribeTheme(changed: () => void) {
 }
 
 export const getResolvedTheme = () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
-export const getThemeChoice = () => (document.documentElement.dataset.themeChoice as ThemeChoice | undefined) ?? "auto";
+export const getThemeChoice = () => (document.documentElement.dataset.themeChoice as ThemeChoice | undefined) ?? "light";
