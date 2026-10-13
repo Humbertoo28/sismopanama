@@ -1,4 +1,4 @@
-const CACHE_NAME = "sismo-panama-v10";
+const CACHE_NAME = "sismo-panama-v11";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -186,10 +186,15 @@ self.addEventListener("pushsubscriptionchange", (event) => {
           sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
         }
         const json = sub.toJSON();
+        // Con qué clave del servidor quedó la suscripción, para que el servidor firme con esa (ver lib/push-service.ts).
+        const used = sub.options && sub.options.applicationServerKey;
+        const serverKey = used
+          ? btoa(String.fromCharCode(...new Uint8Array(used))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+          : undefined;
         await fetch("/api/push/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, oldEndpoint: old ? old.endpoint : undefined }),
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, serverKey, oldEndpoint: old ? old.endpoint : undefined }),
         });
       } catch {
         // Sin red o sin permiso: la página lo reintenta al abrirse (syncPushSubscription).

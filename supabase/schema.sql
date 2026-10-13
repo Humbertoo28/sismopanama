@@ -11,8 +11,12 @@ create table if not exists public.push_subscriptions (
   auth text not null,
   min_magnitude numeric default 3.0,
   created_at timestamp with time zone default now(),
-  last_seen timestamp with time zone default now()
+  last_seen timestamp with time zone default now(),
+  -- Con qué clave VAPID del servidor se creó la suscripción ('v1' o 'v2'): se le envía firmando con esa. Ver lib/push-service.ts.
+  vapid_key text not null default 'v1' check (vapid_key in ('v1', 'v2'))
 );
+-- En una base creada antes de este cambio:
+alter table public.push_subscriptions add column if not exists vapid_key text not null default 'v1' check (vapid_key in ('v1', 'v2'));
 
 -- Índices para búsqueda rápida
 create index if not exists idx_push_subs_min_mag on public.push_subscriptions(min_magnitude);

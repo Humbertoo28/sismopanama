@@ -2,12 +2,39 @@ import https from "node:https";
 import webPush from "web-push";
 import { getSupabaseServerClient } from "./supabase";
 
-export const DEFAULT_VAPID_PUBLIC_KEY =
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-  "BBcuXEeaAhLByNGNzF9t6eXgxNUYUAbTPBwuZFn09is6iLJfN9vX3XVz4hiwOx8s6H0OTRv2rvT1eF05dech4mM";
+// Claves VAPID (firman cada aviso). Solo vienen de las variables de entorno, nunca del código.
+// Para cambiar de clave sin cortar las alertas conviven dos: «v1» (VAPID_PRIVATE_KEY y NEXT_PUBLIC_VAPID_PUBLIC_KEY) y «v2»
+// (VAPID_PRIVATE_KEY_V2 y VAPID_PUBLIC_KEY_V2). Cada suscripción queda ligada a la clave pública con la que se creó: se guarda
+// cuál fue (columna vapid_key) y se le envía firmando con esa. Las suscripciones nuevas usan la más reciente, y la app cambia
+// sola las viejas al abrirse (lib/alert-system.ts). Cuando ya casi no queden en v1, se retira v1 de Vercel.
+export type VapidKeyId = "v1" | "v2";
+type VapidKey = { id: VapidKeyId; publicKey: string; privateKey: string };
 
-export const DEFAULT_VAPID_PRIVATE_KEY =
-  process.env.VAPID_PRIVATE_KEY || "XuMz-bt6fsdad5-THsmkrewGRJp_RZbETwI6FCzJOyo";
+function loadVapidKeys(): VapidKey[] {
+  const keys: VapidKey[] = [];
+  const v1 = { publicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
+  const v2 = { publicKey: process.env.VAPID_PUBLIC_KEY_V2, privateKey: process.env.VAPID_PRIVATE_KEY_V2 };
+  if (v1.publicKey && v1.privateKey) keys.push({ id: "v1", publicKey: v1.publicKey.trim(), privateKey: v1.privateKey.trim() });
+  if (v2.publicKey && v2.privateKey) keys.push({ id: "v2", publicKey: v2.publicKey.trim(), privateKey: v2.privateKey.trim() });
+  if (keys.length === 0) console.error("[push] FALTAN LAS CLAVES VAPID en las variables de entorno: no se puede enviar ningún aviso");
+  return keys;
+}
+
+const VAPID_KEYS = loadVapidKeys();
+// La clave para las suscripciones nuevas: la más reciente que esté configurada.
+export const CURRENT_VAPID: { id: VapidKeyId; publicKey: string } | null = VAPID_KEYS.length
+  ? { id: VAPID_KEYS[VAPID_KEYS.length - 1].id, publicKey: VAPID_KEYS[VAPID_KEYS.length - 1].publicKey }
+  : null;
+
+// Qué clave corresponde a la clave pública con la que el navegador creó la suscripción (la manda la app). null si no es
+// ninguna de las configuradas (por ejemplo, una ya retirada).
+export function vapidKeyIdFor(serverKey: unknown): VapidKeyId | null {
+  if (typeof serverKey !== "string") return null;
+  const normalized = serverKey.trim().replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  return VAPID_KEYS.find(key => key.publicKey === normalized)?.id ?? null;
+}
+
+const keyById = (id: VapidKeyId | null | undefined) => VAPID_KEYS.find(key => key.id === id) ?? VAPID_KEYS[VAPID_KEYS.length - 1];
 
 export const VAPID_SUBJECT =
   process.env.VAPID_SUBJECT || "mailto:alerta@sismopanama.com";
@@ -17,17 +44,6 @@ const pushAgent = new https.Agent({ keepAlive: true, maxSockets: 500 });
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
-let vapidConfigured = false;
-function ensureVapidConfig() {
-  if (!vapidConfigured) {
-    webPush.setVapidDetails(
-      VAPID_SUBJECT,
-      DEFAULT_VAPID_PUBLIC_KEY,
-      DEFAULT_VAPID_PRIVATE_KEY,
-    );
-    vapidConfigured = true;
-  }
-}
 
 export type WebPushPayload = {
   title: string;
@@ -50,12 +66,30 @@ export type PushSubscriptionRecord = {
   min_magnitude?: number;
 };
 
+// Envía con la clave `keyId` (la de la suscripción). Si el servicio la rechaza (401/403) y hay otra clave configurada, se
+// prueba con la otra: así una suscripción registrada con la clave equivocada se corrige sola (`keyId` del resultado dice con
+// cuál llegó).
 export async function sendWebPushToSubscription(
   sub: { endpoint: string; p256dh: string; auth: string },
   payload: WebPushPayload,
-): Promise<{ success: boolean; statusCode?: number; error?: string; expired?: boolean }> {
-  ensureVapidConfig();
+  keyId?: VapidKeyId | null,
+): Promise<{ success: boolean; statusCode?: number; error?: string; expired?: boolean; keyId?: VapidKeyId }> {
+  const first = keyById(keyId);
+  if (!first) return { success: false, error: "Faltan las claves VAPID" };
+  const result = await sendWithKey(sub, payload, first);
+  const other = VAPID_KEYS.find(key => key.id !== first.id);
+  if (!result.success && other && (result.statusCode === 401 || result.statusCode === 403)) {
+    const retry = await sendWithKey(sub, payload, other);
+    if (retry.success) return { ...retry, keyId: other.id };
+  }
+  return { ...result, keyId: first.id };
+}
 
+async function sendWithKey(
+  sub: { endpoint: string; p256dh: string; auth: string },
+  payload: WebPushPayload,
+  key: VapidKey,
+): Promise<{ success: boolean; statusCode?: number; error?: string; expired?: boolean }> {
   const pushSubscription = {
     endpoint: sub.endpoint,
     keys: {
@@ -78,6 +112,7 @@ export async function sendWebPushToSubscription(
           // Un servicio de push lento no debe retener la respuesta del resto de dispositivos.
           timeout: 10_000,
           agent: pushAgent,
+          vapidDetails: { subject: VAPID_SUBJECT, publicKey: key.publicKey, privateKey: key.privateKey },
         },
       );
       return { success: true, statusCode: res.statusCode };
@@ -100,7 +135,7 @@ export async function sendWebPushToSubscription(
   }
 }
 
-type PushSubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: string; min_magnitude: number };
+type PushSubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: string; min_magnitude: number; vapid_key?: VapidKeyId | null };
 const SUBSCRIPTION_PAGE = 1000;
 const MAX_CONCURRENT_SENDS = 350;
 // Tiempo máximo para despachar (en Vercel Pro con maxDuration ampliado).
@@ -117,38 +152,39 @@ export async function broadcastPush(
     throw new Error("Supabase no está configurado");
   }
 
-  // Obtenemos la primera página y el conteo total en paralelo para despachar sin demoras.
-  const { data: firstPage, error: firstErr, count } = await supabase
-    .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth, min_magnitude", { count: "exact" })
-    .lte("min_magnitude", payload.magnitude ?? minMagnitude)
-    .order("created_at", { ascending: false })
-    .range(0, SUBSCRIPTION_PAGE - 1);
+  // Obtenemos la primera página y el conteo total en paralelo para despachar sin demoras. Si la columna vapid_key todavía no
+  // existe en la base (se agrega con supabase/schema.sql), se lee sin ella y todas cuentan como v1.
+  let columns = "id, endpoint, p256dh, auth, min_magnitude, vapid_key";
+  const readPage = (from: number, to: number, withCount = false) =>
+    supabase
+      .from("push_subscriptions")
+      .select(columns, withCount ? { count: "exact" } : undefined)
+      .lte("min_magnitude", payload.magnitude ?? minMagnitude)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+  let { data: firstPage, error: firstErr, count } = await readPage(0, SUBSCRIPTION_PAGE - 1, true);
+  if (firstErr && /vapid_key/.test(firstErr.message)) {
+    columns = "id, endpoint, p256dh, auth, min_magnitude";
+    ({ data: firstPage, error: firstErr, count } = await readPage(0, SUBSCRIPTION_PAGE - 1, true));
+  }
 
   if (firstErr) {
     console.error("[push] no se pudo leer las suscripciones:", firstErr.message);
     return { total: 0, sent: 0, failed: 0, cleaned: 0, unsent: 0, outcomes: {} };
   }
 
-  const subs: PushSubscriptionRow[] = (firstPage as PushSubscriptionRow[]) ?? [];
+  const subs: PushSubscriptionRow[] = (firstPage as unknown as PushSubscriptionRow[]) ?? [];
   const totalCount = count ?? subs.length;
 
   // Descargar todas las páginas restantes EN PARALELO simultáneo (1 solo viaje de red)
   if (totalCount > SUBSCRIPTION_PAGE) {
     const pagePromises = [];
     for (let from = SUBSCRIPTION_PAGE; from < totalCount; from += SUBSCRIPTION_PAGE) {
-      pagePromises.push(
-        supabase
-          .from("push_subscriptions")
-          .select("id, endpoint, p256dh, auth, min_magnitude")
-          .lte("min_magnitude", payload.magnitude ?? minMagnitude)
-          .order("created_at", { ascending: false })
-          .range(from, Math.min(from + SUBSCRIPTION_PAGE - 1, totalCount - 1))
-      );
+      pagePromises.push(readPage(from, Math.min(from + SUBSCRIPTION_PAGE - 1, totalCount - 1)));
     }
     const pages = await Promise.all(pagePromises);
     for (const page of pages) {
-      if (page.data) subs.push(...(page.data as PushSubscriptionRow[]));
+      if (page.data) subs.push(...(page.data as unknown as PushSubscriptionRow[]));
     }
   }
 
@@ -159,6 +195,9 @@ export async function broadcastPush(
   let sent = 0;
   let failed = 0;
   const expiredIds: string[] = [];
+  // Suscripciones que llegaron con la otra clave (la guardada era incorrecta): se corrige su vapid_key al final.
+  const fixedKeys: Record<VapidKeyId, string[]> = { v1: [], v2: [] };
+  const byKey: Record<string, number> = {};
   // Qué respondió cada servicio (Apple, Google...) para poder ver por qué un celular no recibe: "apple:201",
   // "apple:403", "fcm:410"... Sin esto un envío rechazado era invisible.
   const outcomes: Record<string, number> = {};
@@ -179,10 +218,14 @@ export async function broadcastPush(
   const worker = async () => {
     while (next < subs.length && Date.now() - startedAt < budgetMs) {
       const row = subs[next++];
+      const stored = row.vapid_key ?? "v1";
       const res = await sendWebPushToSubscription(
         { endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth },
         payload,
+        stored,
       );
+      byKey[stored] = (byKey[stored] ?? 0) + 1;
+      if (res.success && res.keyId && res.keyId !== stored) fixedKeys[res.keyId].push(row.id);
       const outcome = `${serviceOf(row.endpoint)}:${res.success ? "ok" : (res.statusCode ?? "error")}`;
       outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
       if (res.success) {
@@ -214,9 +257,18 @@ export async function broadcastPush(
     });
   }
 
+  if (columns.includes("vapid_key")) {
+    for (const id of ["v1", "v2"] as const) {
+      for (let from = 0; from < fixedKeys[id].length; from += CLEAN_BATCH) {
+        const { error } = await supabase.from("push_subscriptions").update({ vapid_key: id }).in("id", fixedKeys[id].slice(from, from + CLEAN_BATCH));
+        if (error) console.error("[push] no se pudo corregir la clave de suscripciones:", error.message);
+      }
+    }
+  }
+
   const unsent = subs.length - next;
   if (unsent > 0) console.error(`[push] TIEMPO AGOTADO en ${payload.id ?? "?"}: ${unsent} de ${subs.length} dispositivos quedaron sin aviso`);
 
-  console.log(`[push] ${payload.id ?? "?"} M${payload.magnitude ?? "?"}: ${sent}/${subs.length} aceptados, ${failed} rechazados, ${cleaned} dados de baja`, JSON.stringify(outcomes), errorSamples.length ? JSON.stringify(errorSamples) : "");
+  console.log(`[push] ${payload.id ?? "?"} M${payload.magnitude ?? "?"}: ${sent}/${subs.length} aceptados, ${failed} rechazados, ${cleaned} dados de baja`, JSON.stringify(outcomes), "claves", JSON.stringify(byKey), errorSamples.length ? JSON.stringify(errorSamples) : "");
   return { total: subs.length, sent, failed, cleaned, unsent, outcomes };
 }
