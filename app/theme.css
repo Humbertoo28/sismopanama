@@ -71,6 +71,7 @@ html { scroll-padding-top: calc(var(--header-h) + var(--nav-h) + 12px + env(safe
 .site-install:empty { display: none; }
 .site-install .pwa-install-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--primary); font-size: calc(15px*var(--ts,1)); font-weight: 600; box-shadow: none; transform: none; }
 .site-install .pwa-install-btn:hover { background: var(--primary-soft); }
+a.pwa-install-btn { text-decoration: none; }
 /* La barra de progreso de lectura arriba de la página era decoración. */
 body:before { display: none; }
 .alerts-button {

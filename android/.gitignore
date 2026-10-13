@@ -1,0 +1,11 @@
+# Compilados y archivos locales: se generan con `bubblewrap build`.
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.idsig
+# La clave de firma NUNCA va en el repositorio (es público).
+*.jks
+*.keystore
