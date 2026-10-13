@@ -8,9 +8,9 @@ const TITLE = "Gráficos de sismos y réplicas en Panamá";
 const DESCRIPTION = "Gráficos interactivos de los sismos y réplicas registrados en Panamá por USGS, IGC y EMSC: línea de tiempo, actividad, magnitudes y profundidad, en vivo.";
 
 export const metadata: Metadata = {
-  title: TITLE, // el sitio añade "| Sismo Panamá"
+  title: TITLE, // el sitio añade "| Ojo Panamá"
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/analisis", true),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/analisis", true),
 };
 
 // Esta explicación vive en el HTML inicial (no se carga con JavaScript): es lo que lee el buscador, y también ayuda a quien
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default function AnalisisPage() {
   return (
     <>
-      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Gráficos de sismos", path: "/analisis" }]} />
+      <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Gráficos de sismos", path: "/analisis" }]} />
       <Dashboard>
         <section className="an-about" aria-labelledby="an-about-title">
           <h2 id="an-about-title">Sobre estos gráficos</h2>

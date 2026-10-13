@@ -17,8 +17,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
 // Ficha completa de un sismo: se abre al tocarlo en el mapa. Lo medido o publicado por los catálogos se presenta tal cual; lo
 // que se calcula aquí (energía, tiempo de llegada) lleva su aviso.
 export default function QuakeSheet({
-  event, mainshock, onClose, onPropagate, onShowOnMap,
-}: { event: Earthquake; mainshock: Earthquake | null; onClose: () => void; onPropagate: () => void; onShowOnMap?: () => void }) {
+  event, mainshock, onClose, onPropagate, onShowOnMap, onReport,
+}: { event: Earthquake; mainshock: Earthquake | null; onClose: () => void; onPropagate: () => void; onShowOnMap?: () => void; onReport?: () => void }) {
   const panel = useRef<HTMLElement>(null);
   const { properties } = event;
   const [, , depthRaw] = event.geometry.coordinates;
@@ -84,7 +84,7 @@ export default function QuakeSheet({
       <section ref={panel} className="qs" role="dialog" aria-modal="true" aria-labelledby="qs-title" tabIndex={-1} onClick={click => click.stopPropagation()}>
         <button type="button" className="qs-close" onClick={onClose} aria-label="Cerrar la ficha del sismo">✕</button>
         <header className="qs-head">
-          {isMain && <span className="qs-badge main">SISMO PRINCIPAL</span>}
+          {isMain && <span className="qs-badge main">Sismo principal</span>}
           {!isMain && after && <span className="qs-badge">RÉPLICA DEL SISMO M {mainshock?.properties.mag?.toFixed(1)}</span>}
           <div className="qs-mag-row">
             <strong className="qs-mag" aria-label={`Magnitud ${magnitude}`}>{magnitude}</strong>
@@ -164,6 +164,7 @@ export default function QuakeSheet({
         <div className="qs-actions">
           <button type="button" className="qs-primary" onClick={onPropagate}>Ver cómo se propagó</button>
           {onShowOnMap && <button type="button" className="qs-secondary" onClick={onShowOnMap}>Ver en el mapa</button>}
+          {onReport && <button type="button" className="qs-secondary" onClick={onReport}>¿Lo sentiste? Repórtalo</button>}
           <a className="qs-link" href={reportUrl(event)} target="_blank" rel="noopener noreferrer">Ver el reporte en {primary} <span aria-hidden="true">↗</span></a>
         </div>
       </section>

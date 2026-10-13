@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import PageHeader from "../page-header";
 import { fetchMediaNews, MEDIA, type MediaNews } from "../../lib/media-news";
 import { fetchOfficialNews, SOURCES, type NewsItem, type NewsSource, type OfficialNews } from "../../lib/news";
 import { OFFICIAL_ACCOUNTS, type OfficialAccount } from "../../lib/official-accounts";
@@ -13,9 +13,9 @@ const TITLE = "Noticias sobre el sismo en Panamá";
 const DESCRIPTION = "Titulares de Telemetro y TVN y comunicados oficiales de SINAPROC y MEDUCA sobre el sismo del 9 de octubre en Panamá, con el enlace a cada nota.";
 
 export const metadata: Metadata = {
-  title: TITLE, // el sitio añade "| Sismo Panamá"
+  title: TITLE, // el sitio añade "| Ojo Panamá"
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/noticias", true),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/noticias", true),
 };
 
 // La página se genera una vez y se renueva como máximo cada 5 minutos: los visitantes reciben la copia ya hecha y las
@@ -130,12 +130,8 @@ export default async function NoticiasPage() {
 
   return (
     <div className="nw-root">
-      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Noticias sobre el sismo", path: "/noticias" }]} />
-      <header className="nw-header">
-        <Link className="nw-back" href="/">← Panel principal</Link>
-        <div className="nw-brand" aria-label="Sismo Panamá"><strong>SISMO</strong><small>PANAMÁ</small></div>
-        <span className="nw-spacer" aria-hidden="true" />
-      </header>
+      <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Noticias sobre el sismo", path: "/noticias" }]} />
+      <PageHeader current="/noticias" />
 
       <main className="nw-wrap">
         <section className="nw-intro" aria-labelledby="nw-title">

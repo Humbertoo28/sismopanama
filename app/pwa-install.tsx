@@ -44,7 +44,7 @@ export default function PwaInstall() {
       setShowIosGuide(true);
     } else {
       // Navegadores de escritorio u otros
-      alert("Para instalar la app: en el menú de tu navegador pulsa 'Instalar Sismo Panamá' o 'Agregar a pantalla de inicio'.");
+      alert("Para instalar la app: en el menú de tu navegador pulsa 'Instalar Ojo Panamá' o 'Agregar a pantalla de inicio'.");
     }
   };
 
@@ -70,7 +70,7 @@ export default function PwaInstall() {
           <line x1="12" y1="8" x2="12" y2="13" />
           <polyline points="9 11 12 14 15 11" />
         </svg>
-        <span className="pwa-btn-text">Instalar App Web</span>
+        <span className="pwa-btn-text">Instalar la app</span>
         <span className="pwa-btn-short">Instalar</span>
       </button>
 
@@ -120,7 +120,7 @@ export default function PwaInstall() {
                 <div>
                   <strong style={{ fontSize: 13, color: "#17253c" }}>Ábrela desde el ícono y activa las alertas</strong>
                   <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748b" }}>
-                    Abre <strong>Sismo Panamá</strong> desde tu pantalla de inicio, toca <strong>Alertas</strong> y pulsa <strong>Activar 24/7</strong>. Solo así llegan los avisos con la app cerrada (iOS 16.4 o superior).
+                    Abre <strong>Ojo Panamá</strong> desde tu pantalla de inicio, toca <strong>Alertas</strong> y pulsa <strong>Activar 24/7</strong>. Solo así llegan los avisos con la app cerrada (iOS 16.4 o superior).
                   </p>
                 </div>
               </div>

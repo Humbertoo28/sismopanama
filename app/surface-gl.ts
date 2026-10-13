@@ -8,12 +8,15 @@
 import { mercatorX, mercatorY, type Mosaic } from "./satellite-tiles";
 
 const VERTEX = `#version 300 es
-in vec3 aPos;
+in vec4 aPos;
 in vec2 aUv;
+in float aShade;
 out vec2 vUv;
+out float vShade;
 void main() {
   vUv = aUv;
-  gl_Position = vec4(aPos.xy, 0.0, aPos.z);
+  vShade = aShade;
+  gl_Position = aPos;
 }`;
 
 // Los colores llegan con el alfa ya multiplicado, que es lo que espera el lienzo.
@@ -22,14 +25,19 @@ precision highp float;
 uniform sampler2D uTex;
 uniform float uClip;
 in vec2 vUv;
+in float vShade;
 out vec4 outColor;
 void main() {
   if (uClip > 0.5 && (vUv.x < 0.0 || vUv.x > 1.0 || vUv.y < 0.0 || vUv.y > 1.0)) discard;
-  outColor = texture(uTex, vUv);
+  vec4 color = texture(uTex, vUv);
+  // Sombreado del relieve (1 = plano): las laderas al sol más claras y las de sombra más oscuras.
+  outColor = vec4(min(color.rgb * vShade, vec3(color.a)), color.a);
 }`;
 
 type Bounds = { west: number; east: number; south: number; north: number };
-type Projected = { sx: number; sy: number; k: number };
+// `depth` crece hacia quien mira (como en la proyección de la vista 3D): con relieve, lo cercano tapa a lo lejano. `shade`: luz
+// sobre el terreno en ese punto (1 = plano).
+type Projected = { sx: number; sy: number; k: number; depth?: number; shade?: number };
 
 export type SurfaceGL = {
   canvas: HTMLCanvasElement;
@@ -50,7 +58,7 @@ export function createSurfaceGL(): SurfaceGL | null {
   let gl: WebGL2RenderingContext | null;
   try {
     canvas = document.createElement("canvas");
-    gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: "low-power" });
+    gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false, depth: true, stencil: false, powerPreference: "low-power" });
   } catch {
     return null;
   }
@@ -72,21 +80,26 @@ export function createSurfaceGL(): SurfaceGL | null {
   g.linkProgram(program);
   if (!g.getProgramParameter(program, g.LINK_STATUS)) return null;
   g.useProgram(program);
-  const [aPos, aUv] = [g.getAttribLocation(program, "aPos"), g.getAttribLocation(program, "aUv")];
+  const [aPos, aUv, aShade] = [g.getAttribLocation(program, "aPos"), g.getAttribLocation(program, "aUv"), g.getAttribLocation(program, "aShade")];
   const [uTex, uClip] = [g.getUniformLocation(program, "uTex"), g.getUniformLocation(program, "uClip")];
 
   const vao = g.createVertexArray();
-  const [posBuffer, uvBuffer, indexBuffer] = [g.createBuffer(), g.createBuffer(), g.createBuffer()];
+  const [posBuffer, uvBuffer, shadeBuffer, indexBuffer] = [g.createBuffer(), g.createBuffer(), g.createBuffer(), g.createBuffer()];
   g.bindVertexArray(vao);
   g.bindBuffer(g.ARRAY_BUFFER, posBuffer);
   g.enableVertexAttribArray(aPos);
-  g.vertexAttribPointer(aPos, 3, g.FLOAT, false, 0, 0);
+  g.vertexAttribPointer(aPos, 4, g.FLOAT, false, 0, 0);
   g.bindBuffer(g.ARRAY_BUFFER, uvBuffer);
   g.enableVertexAttribArray(aUv);
   g.vertexAttribPointer(aUv, 2, g.FLOAT, false, 0, 0);
+  g.bindBuffer(g.ARRAY_BUFFER, shadeBuffer);
+  g.enableVertexAttribArray(aShade);
+  g.vertexAttribPointer(aShade, 1, g.FLOAT, false, 0, 0);
   g.bindBuffer(g.ELEMENT_ARRAY_BUFFER, indexBuffer);
   g.disable(g.BLEND);
-  g.disable(g.DEPTH_TEST);
+  // Con relieve, una montaña de adelante tapa lo que queda detrás de ella.
+  g.enable(g.DEPTH_TEST);
+  g.depthFunc(g.LEQUAL);
 
   const anisotropy = g.getExtension("EXT_texture_filter_anisotropic");
   const maxAnisotropy = anisotropy ? Math.min(4, g.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number) : 1;
@@ -114,6 +127,8 @@ export function createSurfaceGL(): SurfaceGL | null {
 
   let positions = new Float32Array(0);
   let uvs = new Float32Array(0);
+  let depths = new Float32Array(0);
+  let shades = new Float32Array(0);
   let meshShape = "";
   const draw = (unit: number, clip: boolean, { w, h, dpr }: { w: number; h: number; dpr: number }, bounds: Bounds, uv: (lng: number, lat: number) => [number, number], project: (lng: number, lat: number) => Projected, cols: number, rows: number) => {
     const [pw, ph] = [Math.round(w * dpr), Math.round(h * dpr)];
@@ -123,13 +138,15 @@ export function createSurfaceGL(): SurfaceGL | null {
     }
     g.viewport(0, 0, pw, ph);
     g.clearColor(0, 0, 0, 0);
-    g.clear(g.COLOR_BUFFER_BIT);
+    g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);
     const count = (cols + 1) * (rows + 1);
     if (meshShape !== `${cols}x${rows}`) {
       meshShape = `${cols}x${rows}`;
-      positions = new Float32Array(count * 3);
+      positions = new Float32Array(count * 4);
       uvs = new Float32Array(count * 2);
-      const indices = new Uint16Array(cols * rows * 6);
+      depths = new Float32Array(count);
+      shades = new Float32Array(count);
+      const indices = new Uint32Array(cols * rows * 6);
       let n = 0;
       for (let j = 0; j < rows; j++) {
         for (let i = 0; i < cols; i++) {
@@ -145,26 +162,41 @@ export function createSurfaceGL(): SurfaceGL | null {
       const lat = bounds.north - ((bounds.north - bounds.south) * j) / rows;
       for (let i = 0; i <= cols; i++) {
         const lng = bounds.west + ((bounds.east - bounds.west) * i) / cols;
-        const { sx, sy, k } = project(lng, lat);
+        const { sx, sy, k, depth = 0, shade = 1 } = project(lng, lat);
         const v = j * (cols + 1) + i;
         // Con el divisor de la perspectiva (w = 1/k) metido en la posición, la tarjeta interpola la imagen sin deformarla.
         const wv = 1 / k;
-        positions[v * 3] = ((sx / w) * 2 - 1) * wv;
-        positions[v * 3 + 1] = (1 - (sy / h) * 2) * wv;
-        positions[v * 3 + 2] = wv;
+        positions[v * 4] = ((sx / w) * 2 - 1) * wv;
+        positions[v * 4 + 1] = (1 - (sy / h) * 2) * wv;
+        positions[v * 4 + 3] = wv;
+        depths[v] = depth;
+        shades[v] = shade;
         const [u, t] = uv(lng, lat);
         uvs[v * 2] = u;
         uvs[v * 2 + 1] = t;
       }
+    }
+    // Profundidad de cada vértice llevada a [-1, 1] (lo más cercano a quien mira, -1), con el mismo divisor de perspectiva.
+    let [near, far] = [-Infinity, Infinity];
+    for (let v = 0; v < count; v++) {
+      near = Math.max(near, depths[v]);
+      far = Math.min(far, depths[v]);
+    }
+    const span = Math.max(near - far, 1e-6);
+    for (let v = 0; v < count; v++) {
+      const ndc = 0.98 - 1.96 * ((depths[v] - far) / span);
+      positions[v * 4 + 2] = ndc * positions[v * 4 + 3];
     }
     g.bindVertexArray(vao);
     g.bindBuffer(g.ARRAY_BUFFER, posBuffer);
     g.bufferData(g.ARRAY_BUFFER, positions, g.DYNAMIC_DRAW);
     g.bindBuffer(g.ARRAY_BUFFER, uvBuffer);
     g.bufferData(g.ARRAY_BUFFER, uvs, g.DYNAMIC_DRAW);
+    g.bindBuffer(g.ARRAY_BUFFER, shadeBuffer);
+    g.bufferData(g.ARRAY_BUFFER, shades, g.DYNAMIC_DRAW);
     g.uniform1i(uTex, unit);
     g.uniform1f(uClip, clip ? 1 : 0);
-    g.drawElements(g.TRIANGLES, cols * rows * 6, g.UNSIGNED_SHORT, 0);
+    g.drawElements(g.TRIANGLES, cols * rows * 6, g.UNSIGNED_INT, 0);
   };
 
   return {

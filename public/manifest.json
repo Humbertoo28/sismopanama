@@ -1,14 +1,14 @@
 {
   "id": "sismo-panama-pwa",
-  "name": "Sismo Panamá — Monitor y Alerta Sísmica",
-  "short_name": "Sismo Panamá",
+  "name": "Ojo Panamá — Monitor y Alerta Sísmica",
+  "short_name": "Ojo Panamá",
   "description": "Detector sísmico en vivo, alertas con sonido de sirena y monitoreo en tiempo real para Panamá",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#072357",
-  "theme_color": "#072357",
+  "background_color": "#f3f5f8",
+  "theme_color": "#ffffff",
   "categories": [
     "utilities",
     "news"

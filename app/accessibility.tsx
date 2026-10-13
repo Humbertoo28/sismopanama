@@ -6,6 +6,7 @@ import type { Earthquake } from "../lib/earthquakes";
 import { playVoiceAlert, spokenPlace } from "../lib/alert-system";
 import { getLatestQuake, subscribeLatestQuake } from "../lib/latest-quake";
 import { spokenWhere } from "../lib/place-of";
+import { getThemeChoice, setThemeChoice, subscribeTheme, type ThemeChoice } from "../lib/theme";
 
 // Opciones de accesibilidad que elige cada persona (se guardan solo en su navegador). Cada una se aplica con un atributo en
 // <html> (data-a11y-*) o la variable --ts del tamaño de texto, y el CSS (accessibility.css y los font-size de calc(...*var(--ts)))
@@ -82,6 +83,7 @@ export default function Accessibility() {
   const [ready, setReady] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const latest = useSyncExternalStore(subscribeLatestQuake, getLatestQuake, () => null);
+  const themeChoice = useSyncExternalStore(subscribeTheme, getThemeChoice, (): ThemeChoice => "auto");
   const fab = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -181,6 +183,16 @@ export default function Accessibility() {
               {SCALES.map(item => (
                 <button key={item.value} type="button" aria-pressed={settings.scale === item.value} aria-label={item.label} className={settings.scale === item.value ? "on" : ""} onClick={() => change({ scale: item.value })}>
                   {item.short}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="a11y-group" role="group" aria-label="Apariencia">
+            <span className="a11y-label">Apariencia</span>
+            <div className="a11y-scales a11y-themes">
+              {([["auto", "Automático"], ["light", "Claro"], ["dark", "Oscuro"]] as const).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={themeChoice === value} className={themeChoice === value ? "on" : ""} onClick={() => setThemeChoice(value)}>
+                  {label}
                 </button>
               ))}
             </div>

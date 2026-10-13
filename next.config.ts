@@ -9,13 +9,14 @@ const production = process.env.NODE_ENV === "production";
 //   El resto de directivas limita lo que un script inyectado podría hacer: no puede cargar código
 //   externo, enviar datos a otros sitios ni mostrarse dentro de un marco.
 // - style-src-attr admite estilos en línea porque los marcadores del mapa y React los usan.
-// - img-src incluye los mosaicos de OpenStreetMap, que es lo único de terceros que se carga.
+// - img-src incluye los mosaicos de los mapas (Google, Esri, Carto, OpenStreetMap) y los de elevación de AWS (Terrain Tiles,
+//   s3.amazonaws.com/elevation-tiles-prod) con los que la vista 3D levanta el relieve.
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
   "style-src-elem 'self'",
   "style-src-attr 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org",
+  "img-src 'self' data: blob: https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org https://s3.amazonaws.com",
   "font-src 'self'",
   "connect-src 'self' https://*.google.com https://*.googleapis.com https://*.arcgisonline.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.cartocdn.com https://va.vercel-scripts.com",
   "worker-src 'self'",
@@ -37,7 +38,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), hid=(), accelerometer=(), gyroscope=(), magnetometer=(), browsing-topics=()",
+    value: "camera=(), microphone=(), geolocation=(self), payment=(), usb=(), bluetooth=(), serial=(), hid=(), accelerometer=(), gyroscope=(), magnetometer=(), browsing-topics=()",
   },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" },

@@ -519,14 +519,6 @@ function rememberPushEnabled(enabled: boolean) {
   }
 }
 
-function pushWasEnabled() {
-  try {
-    return localStorage.getItem(STORAGE_PUSH_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 async function createPushSubscription(reg: ServiceWorkerRegistration) {
   const keyRes = await fetch("/api/push/vapid-public-key");
   const { publicKey } = (await keyRes.json()) as { publicKey?: string };
@@ -559,26 +551,65 @@ async function createPushSubscription(reg: ServiceWorkerRegistration) {
 const LAST_SYNC_KEY = "sismo_panama_push_last_sync";
 const SYNC_INTERVAL_MS = 24 * 3_600_000; // 24 horas
 
+// Aviso a la página de que cambió el estado de las alertas push (para el botón del encabezado).
+export const PUSH_CHANGE_EVENT = "sismo-panama-push";
+const announcePush = () => typeof window !== "undefined" && window.dispatchEvent(new Event(PUSH_CHANGE_EVENT));
+
+// ¿Este equipo recibirá alertas con la app cerrada? Hace falta el permiso Y una suscripción push. Antes el encabezado decía
+// «Alertas activadas» con solo el permiso: la página abierta avisaba por su cuenta y la persona creía que todo funcionaba,
+// pero con la app cerrada no llegaba nada si la suscripción no existía.
+// Dirección push que el servidor confirmó por última vez. Si el servidor rechaza la suscripción (como pasó con las direcciones
+// jmt17.google.com de Chrome), el teléfono igual la tiene creada: sin esta comprobación la app diría «activadas» sin estarlo.
+const SERVER_OK_KEY = "sismo_panama_push_server_v1";
+const confirmedEndpoint = () => {
+  try {
+    return localStorage.getItem(SERVER_OK_KEY);
+  } catch {
+    return null;
+  }
+};
+const confirmEndpoint = (endpoint: string) => {
+  try {
+    localStorage.setItem(SERVER_OK_KEY, endpoint);
+  } catch {}
+};
+
+export async function hasActivePush(): Promise<boolean> {
+  if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return false;
+  const sub = await getExistingPushSubscription();
+  return Boolean(sub && confirmedEndpoint() === sub.endpoint);
+}
+
 // Mantiene al día el "buzón" push de este equipo: solo sincroniza con el servidor si han pasado 24 h
 // o si force=true (cambio de magnitud o re-suscripción manual), eliminando cientos de miles de funciones serverless.
-export async function syncPushSubscription(minMagnitude: number, force = false): Promise<void> {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  if (!force) {
-    try {
-      const last = localStorage.getItem(LAST_SYNC_KEY);
-      if (last && Date.now() - Number(last) < SYNC_INTERVAL_MS) return;
-    } catch {
-      // Ignorar si localStorage está deshabilitado
-    }
-  }
+// Si hay permiso de notificaciones pero no suscripción (nunca se creó, falló en silencio o el navegador la borró), se crea
+// aquí mismo: quien dio el permiso a esta página lo hizo para recibir las alertas. Devuelve si quedó suscrito.
+export async function syncPushSubscription(minMagnitude: number, force = false): Promise<boolean> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  if (Notification.permission !== "granted") return false;
 
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
-    if (!sub && pushWasEnabled()) sub = await createPushSubscription(reg);
-    if (!sub) return;
+    if (!sub) {
+      sub = await createPushSubscription(reg);
+      force = true;
+      rememberPushEnabled(true);
+    }
+    if (!sub) return false;
+    // Si el servidor no confirmó esta dirección, se vuelve a registrar ya (sin esperar las 24 h).
+    if (confirmedEndpoint() !== sub.endpoint) force = true;
+    if (!force) {
+      try {
+        const last = localStorage.getItem(LAST_SYNC_KEY);
+        if (last && Date.now() - Number(last) < SYNC_INTERVAL_MS) {
+          announcePush();
+          return true;
+        }
+      } catch {
+        // Ignorar si localStorage está deshabilitado
+      }
+    }
     const json = sub.toJSON();
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
@@ -589,9 +620,13 @@ export async function syncPushSubscription(minMagnitude: number, force = false):
       try {
         localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
       } catch {}
+      confirmEndpoint(sub.endpoint);
     }
+    announcePush();
+    return res.ok;
   } catch (err) {
     console.warn("No se pudo sincronizar la suscripción push:", err);
+    return false;
   }
 }
 
@@ -636,6 +671,11 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
     }
 
     rememberPushEnabled(true);
+    try {
+      localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+    } catch {}
+    if (subJson.endpoint) confirmEndpoint(subJson.endpoint);
+    announcePush();
     return { ok: true };
   } catch (err: unknown) {
     const raw = err instanceof Error ? err.message : String(err);
@@ -652,7 +692,10 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
   }
 }
 
-export async function sendTestWebPush(): Promise<{ ok: boolean; error?: string }> {
+// Prueba de envío a este equipo. Con `delayed`, el servidor la manda 30 s después: da tiempo a cerrar la app o bloquear el
+// teléfono, que es lo que hay que comprobar. `code` dice qué pasó si falló ("expired": la suscripción caducó; "rejected": el
+// servicio de push rechazó al servidor).
+export async function sendTestWebPush(delayed = false): Promise<{ ok: boolean; error?: string; code?: string }> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return { ok: false, error: "Web Push no disponible en este entorno" };
   }
@@ -660,26 +703,39 @@ export async function sendTestWebPush(): Promise<{ ok: boolean; error?: string }
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (!sub) {
-      return { ok: false, error: "No tienes una suscripción Push activa aún. Activa las alertas primero." };
+      return { ok: false, code: "missing", error: "Este equipo todavía no tiene la suscripción para alertas con la app cerrada. Toca «Reparar»." };
     }
     const subJson = sub.toJSON();
     const res = await fetch("/api/push/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        endpoint: subJson.endpoint,
-        keys: subJson.keys,
-      }),
+      body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys, ...(delayed ? { delaySeconds: 30 } : {}) }),
     });
-    const data = (await res.json()) as { error?: string };
+    const data = (await res.json()) as { error?: string; code?: string };
     if (!res.ok) {
-      return { ok: false, error: data.error || "Error al enviar la prueba" };
+      return { ok: false, error: data.error || "Error al enviar la prueba", code: data.code };
     }
     return { ok: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
+}
+
+// «Reparar»: borra la suscripción de este equipo (puede estar caducada o hecha con otra clave) y crea una nueva.
+export async function repairPushSubscription(minMagnitude: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const old = await reg.pushManager.getSubscription();
+    if (old) {
+      const endpoint = old.endpoint;
+      await old.unsubscribe().catch(() => false);
+      fetch("/api/push/subscribe", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint }) }).catch(() => {});
+    }
+  } catch {
+    // Si no se pudo borrar la anterior, igual se intenta crear una nueva.
+  }
+  return subscribeToWebPush(minMagnitude);
 }
 
 export function loadAlertPreferences(): AlertPreferences {

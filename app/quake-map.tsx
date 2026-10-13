@@ -9,11 +9,14 @@ import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
 import { PROVINCE_LABELS } from "../lib/province-labels";
 import { PROVINCES } from "../lib/provinces";
-import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES } from "../lib/plates";
+import { KIND_INFO, PLATE_BOUNDARIES, PLATE_LABELS, PLATE_NAMES, PLATE_SHORT } from "../lib/plates";
+import { ACTIVE_FAULTS, ACTIVE_FAULTS_SOURCE, labelPoint } from "../lib/active-faults";
 import PlatesLegend from "./plates-legend";
-import { intensityColor, slipColor } from "../lib/usgs-colors";
+import { intensityColor } from "../lib/usgs-colors";
+import { SLIP_GRADIENT, buildSlipRaster, feltRadiusM, sideOf, teethAlong } from "./map-layers";
 import { loadMainshockDetail, useMainshockDetail } from "./mainshock-detail";
-import { arrivals } from "../lib/quake-facts";
+import { agoLabel, arrivals } from "../lib/quake-facts";
+import { placeTitle } from "../lib/quake-summary";
 import { frontRadiusKm } from "../lib/travel-time";
 import { loadEventPhases } from "./event-phases";
 import { reducedMotion, shakeElement, vibrate } from "./shake";
@@ -42,7 +45,13 @@ type Props = {
   replay: ReplayStep | null;
   onSelect: (id: string) => void;
   onReplay: (step: ReplayStep | null) => void;
+  // Sube cuando se pide ver las fallas activas (desde su ficha): se enciende la capa y el mapa las encuadra.
+  faultsKey: number;
 };
+
+// Escala de Mercalli en palabras, para los reportes de «¿Lo sentiste?».
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const INTENSITY_WORD = ["no sentido", "débil", "débil", "ligera", "moderada", "fuerte", "muy fuerte", "severa", "violenta", "extrema", "extrema", "extrema"];
 
 const dateTime = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
@@ -115,13 +124,20 @@ const readMapMode = (): MapLayerMode => {
     return "satellite";
   }
 };
-export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPropagationEnd, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay }: Props) {
+const noSubscribe = () => () => {};
+
+export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPropagationEnd, mainshock, focus, alert, replayKey, region, place, selectedId, replay, onSelect, onReplay, faultsKey }: Props) {
   const [ready, setReady] = useState(() => typeof window !== "undefined" && !!(window as any).L);
   // El modo guardado se lee con useSyncExternalStore: el servidor (y la hidratación) usan «satélite» y, ya en el
   // navegador, pasa al guardado sin el aviso de que el HTML no coincide.
   const mapMode = useSyncExternalStore(subscribeMapMode, readMapMode, () => "satellite" as MapLayerMode);
   // Vista 3D y capas con datos del USGS (ruptura de la falla y «lo que se sintió»), compartidas por el mapa y el 3D.
   const [view3d, setView3d] = useState(false);
+  // Aviso que aparece un momento si se usa la rueda sobre el mapa sin Ctrl/⌘ (la página sigue desplazándose).
+  const [wheelHint, setWheelHint] = useState(false);
+  // Cada vez que cambia se vuelve a animar cómo se propagó la ruptura (botón de la leyenda).
+  const [ruptureRun, setRuptureRun] = useState(0);
+  const modKey = useSyncExternalStore(noSubscribe, () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"), () => "Ctrl");
   // Pantalla completa del mapa (el plano y el 3D comparten el mismo marco): la del navegador si la permite y, si no (iPhone y
   // navegadores integrados), el marco se amplía sobre toda la página.
   const mapDiv = useRef<HTMLDivElement>(null);
@@ -174,10 +190,11 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       if ((document.activeElement === document.body || document.activeElement === null) && opener?.isConnected) opener.focus({ preventScroll: true });
     };
   }, [fullscreen]);
-  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false });
+  const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false, faults: false });
   const usgs = useMainshockDetail();
   const usgsLayerRef = useRef<any>(null);
   const platesLayerRef = useRef<any>(null);
+  const faultsLayerRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
@@ -275,10 +292,37 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const markDetail = () => container.classList.toggle("map-detail", map.getZoom() >= 9);
     map.on("zoomend", markDetail);
 
+    // Ctrl/⌘ + rueda (y el pellizco del trackpad, que el navegador entrega igual) acerca o aleja el mapa alrededor del puntero en
+    // vez de agrandar la página. Sin esas teclas la rueda sigue desplazando la página, como en el 3D. Un clic de la rueda mueve
+    // ~100 px y el trackpad unos pocos por evento: se acumula y se cambia de nivel cada ~100 px para que ambos se sientan igual.
+    let wheelPx = 0;
+    let hintTimer = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+          setWheelHint(true);
+          window.clearTimeout(hintTimer);
+          hintTimer = window.setTimeout(() => setWheelHint(false), 1400);
+        }
+        return;
+      }
+      event.preventDefault();
+      setWheelHint(false);
+      wheelPx += event.deltaMode === 1 ? event.deltaY * 33 : event.deltaY;
+      if (Math.abs(wheelPx) < 100) return;
+      const step = wheelPx > 0 ? -1 : 1;
+      wheelPx = 0;
+      const zoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + step));
+      if (zoom !== map.getZoom()) map.setZoomAround(map.mouseEventToContainerPoint(event), zoom);
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
     const markers = markersRef.current;
     return () => {
+      container.removeEventListener("wheel", onWheel);
+      window.clearTimeout(hintTimer);
       map.off("zoomend", markDetail);
       map.off("zoomend", syncProvinces);
       map.remove();
@@ -338,12 +382,16 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     builtKey.current = key;
     layer.clearLayers();
     markersRef.current.clear();
+    // Al cargar, los puntos entran en orden cronológico pero todos en medio segundo. Antes cada uno esperaba 80 ms más que el
+    // anterior: con 400 sismos tardaban más de 30 s en aparecer y parecía una reproducción que nadie había pedido.
     const chronological = [...events].sort((a, b) => a.properties.time - b.properties.time).map(event => event.id);
+    const popDelay = new Map(chronological.map((id, index) => [id, Math.round((index / Math.max(1, chronological.length - 1)) * 500)]));
     const latestEvent = events.reduce<Earthquake | null>(
       (newest, e) => (!newest || e.properties.time > newest.properties.time ? e : newest),
       null,
     );
     const pop = popIn.current && !reducedMotion();
+    const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     for (const event of events) {
       const [lng, lat, depth] = event.geometry.coordinates;
       const mag = event.properties.mag;
@@ -372,7 +420,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         ? baseSize + 3
         : baseSize;
 
-      const kind = isLatest ? " latest" : isMain ? " main" : mainshock && isAftershock(event, mainshock) ? " after" : "";
+      // Los sismos de los alrededores («Incluir alrededores») no son réplicas aunque sean posteriores al principal.
+      const after = !event.properties.nearby && !!mainshock && isAftershock(event, mainshock);
+      const kind = isLatest ? " latest" : isMain ? " main" : after ? " after" : "";
       const ageClass = isVeryRecent ? " recent-3h" : isRecent12h ? " recent-12h" : isAged ? " aged" : "";
       const recent = !isMain && !isLatest && isVeryRecent ? " recent" : "";
       const highlight = fresh.current?.id === event.id && now < fresh.current.until ? " fresh" : "";
@@ -391,31 +441,64 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
 
       const icon = L.divIcon({
         className: "",
-        html: `<span class="quake-marker${m >= 5 ? " high" : m >= 3 ? " m-mid" : " m-low"}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--i:${chronological.indexOf(event.id)}">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
+        html: `<span class="quake-marker${m >= 5 ? " high" : m >= 3 ? " m-mid" : " m-low"}${kind}${recent}${ageClass}${highlight}${hiddenByReplay}${pop ? " pop" : ""}" style="width:${size}px;height:${size}px;--d:${popDelay.get(event.id) ?? 0}ms">${hasRipples ? "<i></i><i></i>" : ""}</span>`,
         iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
-      const marker = L.marker([lat, lng], {
-        icon,
-        zIndexOffset: zIndex,
-        title: `${isLatest ? (mainshock && isAftershock(event, mainshock) ? "Última réplica - " : "Último sismo - ") : isMain ? "Sismo principal - " : ""}M ${mag === null ? "—" : mag.toFixed(1)}: ${event.properties.place || "Ubicación no especificada"}`,
-      }).addTo(layer);
+      const role = isMain ? "Sismo principal" : isLatest
+        ? (after ? "Última réplica" : "Último sismo")
+        : after ? "Réplica" : event.properties.nearby ? "Sismo fuera de Panamá" : "Sismo";
+      const magLabel = mag === null ? "—" : mag.toFixed(1);
+      const marker = L.marker([lat, lng], { icon, zIndexOffset: zIndex }).addTo(layer);
+      // Nombre para lectores de pantalla (antes era un `title`, que además mostraba un recuadro nativo lento y en inglés).
+      marker.getElement()?.setAttribute("aria-label", `${role}, magnitud ${magLabel}: ${placeTitle(event)}`);
+      // Con ratón: ficha corta al pasar por encima, sin tener que hacer clic. Se arma al abrirse para que «hace…» esté al día.
+      // En pantallas táctiles no hace falta: tocar abre la ficha completa.
+      if (canHover) {
+        marker.bindTooltip(() => {
+          const tip = document.createElement("div");
+          const head = document.createElement("div");
+          head.className = "quake-tip-head";
+          const badge = document.createElement("span");
+          badge.className = `quake-tip-mag${m >= 6 ? " high" : m >= 4 ? " mid" : ""}`;
+          badge.textContent = magLabel;
+          const text = document.createElement("div");
+          const place = document.createElement("strong");
+          place.textContent = placeTitle(event);
+          const when = document.createElement("small");
+          when.textContent = `${role} · ${agoLabel(event.properties.time)}`;
+          text.appendChild(place);
+          text.appendChild(when);
+          head.appendChild(badge);
+          head.appendChild(text);
+          const meta = document.createElement("div");
+          meta.className = "quake-tip-meta";
+          meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km de profundidad` : "profundidad no disponible"} · ${provinceLabel(event)}`;
+          const hint = document.createElement("div");
+          hint.className = "quake-tip-hint";
+          hint.textContent = "Clic para ver la ficha completa";
+          tip.appendChild(head);
+          tip.appendChild(meta);
+          tip.appendChild(hint);
+          return tip;
+        }, { direction: "top", offset: [0, -size / 2 - 4], className: "quake-tip", opacity: 1 });
+      }
       const popup = document.createElement("div");
       if (isLatest) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-latest";
-        badge.textContent = mainshock && isAftershock(event, mainshock)
-          ? "📍 ÚLTIMA RÉPLICA · SISMO M 7.7"
-          : "📍 ÚLTIMO SISMO REGISTRADO";
+        badge.textContent = after
+          ? "Última réplica"
+          : "Último sismo registrado";
         popup.appendChild(badge);
       } else if (isMain) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-main";
-        badge.textContent = "⭐ SISMO PRINCIPAL · M 7.7";
+        badge.textContent = "Sismo principal";
         popup.appendChild(badge);
-      } else if (mainshock && isAftershock(event, mainshock)) {
+      } else if (after) {
         const badge = document.createElement("div");
         badge.className = "popup-badge-after";
-        badge.textContent = "🔄 RÉPLICA DEL SISMO M 7.7";
+        badge.textContent = "Réplica";
         popup.appendChild(badge);
       }
       const title = document.createElement("div");
@@ -455,21 +538,54 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       map.removeLayer(usgsLayerRef.current);
       usgsLayerRef.current = null;
     }
+    map.getContainer().classList.toggle("layers-on", Boolean(usgsDetail && (layers.rupture || layers.felt || layers.shaking)));
     if (!usgsDetail || (!layers.rupture && !layers.felt && !layers.shaking)) return;
     const group = L.layerGroup();
+    let frame = 0;
     if (layers.felt && usgsDetail.felt) {
-      for (const [south, west, north, east, cdi, count] of usgsDetail.felt.cells) {
-        L.rectangle([[south, west], [north, east]], {
-          pane: "felt", color: "#ffffff", weight: 0.6, opacity: 0.55, fillColor: intensityColor(cdi, 1), fillOpacity: 0.62,
-        }).bindTooltip(`Intensidad ${cdi.toFixed(1)} según ${count} ${count === 1 ? "reporte" : "reportes"} de personas`, { sticky: true }).addTo(group);
+      // Un círculo por zona de 10 km con respuestas: el color es la intensidad que reportaron y el tamaño, cuántas personas
+      // respondieron (una zona con un solo reporte es un dato menos firme y se ve pequeña). Los grandes primero, debajo.
+      const cells = [...usgsDetail.felt.cells].sort((a, b) => b[5] - a[5]);
+      for (const [south, west, north, east, cdi, count] of cells) {
+        const level = Math.min(12, Math.max(1, Math.round(cdi)));
+        L.circle([(south + north) / 2, (west + east) / 2], {
+          pane: "felt", radius: feltRadiusM(count), color: "#ffffff", weight: 1, opacity: 0.85, fillColor: intensityColor(cdi, 1), fillOpacity: 0.82,
+        }).bindTooltip(`Intensidad ${ROMAN[level - 1]} (${INTENSITY_WORD[level - 1]}) · ${count.toLocaleString("es-PA")} ${count === 1 ? "reporte" : "reportes"} de personas`, { sticky: true }).addTo(group);
       }
     }
     if (layers.rupture && usgsDetail.fault) {
-      const { subfaults, maxSlipM } = usgsDetail.fault;
-      for (const sub of subfaults) {
-        L.polygon(sub.ring.map(([lng, lat]) => [lat, lng]), {
-          pane: "rupture", interactive: false, stroke: false, fillColor: slipColor(sub.slip, maxSlipM, 1), fillOpacity: 0.55,
-        }).addTo(group);
+      const raster = buildSlipRaster(usgsDetail.fault);
+      if (raster) {
+        // El deslizamiento interpolado se pinta en un lienzo y se pone sobre el mapa como imagen: una mancha continua, más
+        // intensa donde más se movió la falla. El contorno es el plano de falla del modelo proyectado en la superficie.
+        const [[south, west], [north, east]] = raster.bounds;
+        const canvas = document.createElement("canvas");
+        canvas.width = 520;
+        canvas.height = Math.max(60, Math.round(520 * ((north - south) / ((east - west) * Math.cos(((south + north) / 2) * Math.PI / 180)))));
+        raster.render(canvas);
+        const overlay = L.imageOverlay(canvas.toDataURL(), raster.bounds, { pane: "rupture", className: "slip-raster", interactive: false }).addTo(group);
+        L.polygon(raster.outline, { pane: "rupture", interactive: false, color: "#ffffff", weight: 1.2, opacity: 0.75, dashArray: "4 5", fill: false }).addTo(group);
+        L.polyline(raster.topEdge, { pane: "rupture", color: "#ffffff", weight: 3.5, opacity: 0.95, lineCap: "round" })
+          .bindTooltip(`Borde superior de la falla que se rompió (a unos ${Math.round(raster.topDepthKm)} km de profundidad). La falla baja desde aquí hacia el norte.`, { sticky: true })
+          .addTo(group);
+        // Al encender la capa (o con «Ver cómo se rompió») la ruptura crece con los tiempos del modelo, comprimidos a ~5 s.
+        if (raster.durationS && !reducedMotion()) {
+          const total = raster.durationS;
+          const started = performance.now();
+          let last = 0;
+          const tick = (now: number) => {
+            const second = ((now - started) / 5000) * total;
+            if (now - last > 60 || second >= total) {
+              last = now;
+              raster.render(canvas, Math.min(total, second));
+              overlay.setUrl(canvas.toDataURL());
+            }
+            if (second < total) frame = requestAnimationFrame(tick);
+          };
+          raster.render(canvas, 0);
+          overlay.setUrl(canvas.toDataURL());
+          frame = requestAnimationFrame(tick);
+        }
       }
     }
     if (layers.shaking && usgsDetail.shaking) {
@@ -481,7 +597,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     }
     group.addTo(map);
     usgsLayerRef.current = group;
-  }, [layers, usgsDetail, ready]);
+    return () => cancelAnimationFrame(frame);
+  }, [layers, usgsDetail, ready, ruptureRun]);
 
   // Placas tectónicas: límites del modelo PB2002 (datos estáticos, no pasan por el servidor).
   useEffect(() => {
@@ -496,10 +613,33 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const group = L.layerGroup();
     for (const boundary of PLATE_BOUNDARIES) {
       const info = KIND_INFO[boundary.kind];
-      L.polyline(boundary.points.map(([lng, lat]) => [lat, lng]), {
-        pane: "plates", color: info.color, weight: 3.2, opacity: 0.95, lineCap: "round", dashArray: boundary.kind === "subduction" ? "10 6" : undefined,
-      }).bindTooltip(`${PLATE_NAMES[boundary.a] ?? boundary.a} – ${PLATE_NAMES[boundary.b] ?? boundary.b} · ${info.name.toLowerCase()}: ${info.meaning}`, { sticky: true }).addTo(group);
+      const latlngs = boundary.points.map(([lng, lat]) => [lat, lng]);
+      // Un borde oscuro debajo separa la línea de la imagen satelital.
+      L.polyline(latlngs, { pane: "plates", interactive: false, color: "#0b1a33", weight: 6.5, opacity: 0.55, lineCap: "round", lineJoin: "round" }).addTo(group);
+      L.polyline(latlngs, { pane: "plates", color: info.color, weight: 3, opacity: 1, lineCap: "round", lineJoin: "round" })
+        .bindTooltip(`${PLATE_NAMES[boundary.a] ?? boundary.a} – ${PLATE_NAMES[boundary.b] ?? boundary.b} · ${info.name.toLowerCase()}: ${info.meaning}${boundary.over ? `. Los triángulos señalan la placa que queda encima (${PLATE_SHORT[boundary.over] ?? boundary.over}).` : ""}`, { sticky: true })
+        .addTo(group);
     }
+    // Triángulos de subducción y convergencia, del lado de la placa que queda encima (simbología de los mapas geológicos). Se
+    // calculan en píxeles para que tengan el mismo tamaño y separación a cualquier zoom.
+    const teeth = L.layerGroup().addTo(group);
+    const drawTeeth = () => {
+      teeth.clearLayers();
+      for (const boundary of PLATE_BOUNDARIES) {
+        const label = boundary.over && PLATE_LABELS.find(item => item.code === boundary.over);
+        if (!label) continue;
+        const points = boundary.points.map(([lng, lat]) => map.latLngToLayerPoint([lat, lng]));
+        const side = sideOf(points, map.latLngToLayerPoint([label.lat, label.lng]));
+        for (const tooth of teethAlong(points, side, 24, 7)) {
+          L.polygon(tooth.map(point => map.layerPointToLatLng([point.x, point.y])), {
+            pane: "plates", interactive: false, stroke: true, color: "#0b1a33", weight: 0.8, opacity: 0.6,
+            fillColor: KIND_INFO[boundary.kind].color, fillOpacity: 1,
+          }).addTo(teeth);
+        }
+      }
+    };
+    drawTeeth();
+    map.on("zoomend", drawTeeth);
     for (const label of PLATE_LABELS) {
       L.marker([label.lat, label.lng], {
         pane: "plates", interactive: false, keyboard: false,
@@ -508,16 +648,58 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     }
     group.addTo(map);
     platesLayerRef.current = group;
+    return () => { map.off("zoomend", drawTeeth); };
   }, [layers.plates, ready]);
 
-  // La primera vez que se abre el 3D se enciende la ruptura de la falla (es lo que más se luce); luego manda lo que elija la persona.
+  // Fallas activas en tierra (Pedro Miguel y Limón): trazo blanco con borde rojo, distinto de los límites de placas, y su nombre.
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (!ready || !map || !L) return;
+    if (faultsLayerRef.current) {
+      map.removeLayer(faultsLayerRef.current);
+      faultsLayerRef.current = null;
+    }
+    if (!layers.faults) return;
+    const group = L.layerGroup();
+    for (const fault of ACTIVE_FAULTS) {
+      const latlngs = fault.lines.map(line => line.map(([lng, lat]) => [lat, lng]));
+      L.polyline(latlngs, { pane: "plates", interactive: false, color: "#b8102b", weight: 7, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(group);
+      L.polyline(latlngs, { pane: "plates", color: "#ffffff", weight: 3, opacity: 1, lineCap: "round", lineJoin: "round" })
+        .bindTooltip(`${fault.name}: falla activa, ${fault.kind}. ${fault.facts[0]}`, { sticky: true, className: "fault-tip" })
+        .addTo(group);
+      const [lng, lat] = labelPoint(fault);
+      L.marker([lat, lng], {
+        pane: "plates", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "plate-label-wrap", html: `<span class="fault-label" aria-hidden="true">${fault.name}</span>`, iconSize: [0, 0] }),
+      }).addTo(group);
+    }
+    group.addTo(map);
+    faultsLayerRef.current = group;
+  }, [layers.faults, ready]);
+
+  // «Ver las fallas en el mapa» (desde su ficha): se enciende la capa, se vuelve al mapa plano y se encuadran las fallas.
+  const faultsSeen = useRef(faultsKey);
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    if (faultsSeen.current === faultsKey || !ready || !map || !L) return;
+    faultsSeen.current = faultsKey;
+    setLayers(current => ({ ...current, faults: true }));
+    setView3d(false);
+    const bounds = L.latLngBounds(ACTIVE_FAULTS.flatMap(fault => fault.lines.flat().map(([lng, lat]) => [lat, lng])));
+    map.flyToBounds(bounds.pad(0.35), { duration: reducedMotion() ? 0 : 1.2, maxZoom: 11 });
+  }, [faultsKey, ready]);
+
+  // La primera vez que se abre el 3D se enciende la ruptura de la falla; la onda de sacudida queda como opción (tapaba medio país
+  // al abrir). Luego manda lo que elija la persona.
   const autoRupture = useRef(true);
   const openView3d = () => {
     setView3d(true);
     if (autoRupture.current) {
       autoRupture.current = false;
       loadMainshockDetail();
-      setLayers(current => ({ ...current, rupture: true, wave: true }));
+      setLayers(current => ({ ...current, rupture: true }));
     }
   };
   // «Ver cómo se propagó»: para el sismo principal se reinicia la animación de la vista 3D (ruptura y onda); para cualquier otro,
@@ -537,6 +719,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const { event } = propagation;
     if (latest.current.mainshock && event.id === latest.current.mainshock.id) {
       if (!view3dNow.current) openView3d();
+      // Aquí sí se pidió ver la propagación: ruptura y onda de sacudida.
+      setLayers(current => ({ ...current, rupture: true, wave: true }));
       setRestart3d(count => count + 1);
       latest.current.onPropagationEnd();
       return;
@@ -632,8 +816,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       if (group) map.removeLayer(group);
     };
   }, [propagation, ready]);
-  const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates" | "wave") => {
-    if (name !== "plates") loadMainshockDetail();
+  const toggleLayer = (name: "rupture" | "felt" | "shaking" | "plates" | "wave" | "faults") => {
+    if (name !== "plates" && name !== "faults") loadMainshockDetail();
     setLayers(current => ({ ...current, [name]: !current[name] }));
   };
   const detailReady = usgs.status === "ready" && usgsDetail !== null;
@@ -838,6 +1022,10 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         type="button" className={`layer-chip${layers.plates ? " on" : ""}`} aria-pressed={layers.plates} onClick={() => toggleLayer("plates")}
         title="Límites entre las placas tectónicas (modelo PB2002, P. Bird 2003): aproximados"
       ><span className="chip-long">Placas tectónicas</span><span className="chip-short" aria-hidden="true">Placas</span></button>
+      <button
+        type="button" className={`layer-chip${layers.faults ? " on" : ""}`} aria-pressed={layers.faults} onClick={() => toggleLayer("faults")}
+        title="Fallas activas en tierra en el centro del país: Pedro Miguel, Limón y Gatún (CCAF-DB/GEM; Rockwell et al., 2010; Gath et al.)"
+      ><span className="chip-long">Fallas activas</span><span className="chip-short" aria-hidden="true">Fallas</span></button>
     </>
   );
   // La onda de sacudida solo existe en la vista 3D.
@@ -862,6 +1050,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         onReady={() => setReady(true)}
       />
       <div id="leaflet-map" ref={mapDiv} role="group" aria-label="Mapa interactivo de sismos en Panamá" data-filtered={filtersKey !== "" ? "true" : undefined} />
+      <div className={`map-wheel-hint${wheelHint && !view3d ? " show" : ""}`} aria-hidden="true">
+        Mantén <kbd>{modKey}</kbd> y usa la rueda para acercar el mapa
+      </div>
       {fullscreen === "overlay" && <span className="map-overlay-flag" hidden />}
       {propagation && waveHud && !view3d && (
         <div className="wave-hud" role="status">
@@ -888,7 +1079,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         <Suspense fallback={<div className="q3-loading" role="status">Cargando la vista 3D…</div>}>
           <Quake3D
             events={events} filtersKey={filtersKey} fitKey={fitKey} restartKey={restart3d} expanded={fullscreen !== "off"} overlay={fullscreen === "overlay"} onToggleExpanded={toggleFullscreen} mainshock={mainshock} selectedId={selectedId} replay={replay} region={region}
-            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
+            fault={layers.rupture ? fault : null} felt={layers.felt ? felt : null} shaking={layers.shaking ? shaking : null} plates={layers.plates} activeFaults={layers.faults} wave={layers.wave} shakeGrid={detailReady ? usgsDetail.shakeGrid : null} mechanism={detailReady ? usgsDetail.mechanism : null} onSelect={onSelect}
             layerControls={<><div className="q3-seg q3-layers" role="group" aria-label="Capas con datos del USGS">{layerChips}{waveChip}</div>{layerNote}</>}
           />
         </Suspense>
@@ -952,20 +1143,27 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           <span className="layer-text-full">{fullscreen !== "off" ? "Salir" : "Pantalla completa"}</span>
         </button>
       </div>
+      {/* Los botones de capas y su leyenda van en una misma columna: la leyenda crece hacia abajo y nunca tapa los botones. */}
+      <div className="map-layers-dock">
       {!view3d && (
         <div className="map-layers" role="group" aria-label="Capas del mapa: datos del USGS y placas tectónicas">
-          <span className="map-layers-title" aria-hidden="true">CAPAS DEL MAPA</span>
+          <span className="map-layers-title" aria-hidden="true">Capas del mapa</span>
           {layerChips}
           {layerNote}
         </div>
       )}
-      {((detailReady && anyLayer) || layers.plates) && (
+      {((detailReady && anyLayer) || layers.plates || layers.faults) && (
         <div className="map-layers-legend" role="group" aria-label="Leyenda de las capas del mapa">
           {detailReady && layers.rupture && (
             fault ? (
               <div>
-                <i className="slip-ramp" aria-hidden="true" style={{ background: `linear-gradient(90deg, ${[0, 0.33, 0.66, 1].map(t => slipColor(t, 1)).join(", ")})` }} />
-                <span>Ruptura: más claro, más deslizamiento (máx. {fault.maxSlipM.toFixed(1)} m)</span>
+                <i className="slip-ramp" aria-hidden="true" style={{ background: SLIP_GRADIENT }} />
+                <span>Ruptura de la falla: cuánto se deslizó, de poco (amarillo) a {fault.maxSlipM.toFixed(1)} m (rojo oscuro). Las curvas van cada 2 m; la línea blanca gruesa es el borde superior de la falla.</span>
+                {fault.durationS && (
+                  <button type="button" className="legend-action" onClick={() => setRuptureRun(run => run + 1)}>
+                    ▶ Ver cómo se rompió ({Math.round(fault.durationS)} s)
+                  </button>
+                )}
               </div>
             ) : <div><span>El USGS no publica el modelo de ruptura de este sismo.</span></div>
           )}
@@ -973,7 +1171,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
             felt ? (
               <div>
                 <span className="felt-scale" aria-hidden="true">{[3, 4, 5, 6, 7, 8, 9].map(v => <i key={v} style={{ background: intensityColor(v) }} />)}</span>
-                <span>Lo que sintió la gente: el color es la intensidad que reportaron ({felt.responses.toLocaleString("es-PA")} respuestas al USGS)</span>
+                <span>Lo que sintió la gente: cada círculo es una zona de 10 km. El color es la intensidad que reportaron y el tamaño, cuántas personas respondieron ({felt.responses.toLocaleString("es-PA")} respuestas al USGS).</span>
               </div>
             ) : <div><span>El USGS no publica reportes de personas para este sismo.</span></div>
           )}
@@ -986,9 +1184,16 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
             ) : <div><span>El USGS no publica el mapa de sacudida de este sismo.</span></div>
           )}
           {layers.plates && <div className="plates-legend"><PlatesLegend detailed /></div>}
+          {layers.faults && (
+            <div className="faults-legend">
+              <span><i className="fault-swatch" aria-hidden="true" />Fallas activas en tierra: Pedro Miguel, Limón y Gatún. Trazado aproximado (escalas de 1:75 000 a 1:300 000).</span>
+              <span className="plate-note">{ACTIVE_FAULTS_SOURCE}.</span>
+            </div>
+          )}
           {detailReady && anyLayer && <div className="map-layers-source"><span>Fuente de los datos sísmicos: USGS (earthquake.usgs.gov)</span></div>}
         </div>
       )}
+      </div>
       {!ready && <div className="map-fallback">Cargando mapa satelital…</div>}
     </>
   );

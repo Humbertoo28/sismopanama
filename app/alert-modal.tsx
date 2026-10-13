@@ -20,6 +20,7 @@ import {
   type AlertPreferences,
 } from "../lib/alert-system";
 import PwaInstall from "./pwa-install";
+import PushDiagnostics from "./push-diagnostics";
 
 type AlertModalProps = {
   isOpen: boolean;
@@ -275,10 +276,12 @@ export default function AlertModal({ isOpen, onClose, latestEvent }: AlertModalP
             <details className="push-sound-tips">
               <summary>¿Suena poco con la app cerrada?</summary>
               <p>Una página web no puede hacer sonar su propia sirena en segundo plano: suena el tono de notificación de tu teléfono. La sirena y la voz sí suenan con la app abierta.</p>
-              <p><b>Android:</b> mantén pulsada una notificación de Sismo Panamá, entra en Ajustes y pon la importancia en «Urgente» con un sonido de alarma.</p>
-              <p><b>iPhone:</b> instala la app en la pantalla de inicio, y en Ajustes → Notificaciones → Sismo Panamá deja los sonidos activados. Sube el volumen del timbre, quita el modo silencio y permite la app en tu Modo de concentración.</p>
+              <p><b>Android:</b> mantén pulsada una notificación de Ojo Panamá, entra en Ajustes y pon la importancia en «Urgente» con un sonido de alarma.</p>
+              <p><b>iPhone:</b> instala la app en la pantalla de inicio, y en Ajustes → Notificaciones → Ojo Panamá deja los sonidos activados. Sube el volumen del timbre, quita el modo silencio y permite la app en tu Modo de concentración.</p>
             </details>
           </div>
+
+          <PushDiagnostics minMagnitude={prefs.minMagnitude} onChanged={() => getExistingPushSubscription().then(sub => setIsPushSubscribed(Boolean(sub)))} />
 
           {/* Sección de Sonido de Emergencia */}
           <div className="alert-setting-row">

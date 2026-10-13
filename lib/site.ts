@@ -9,7 +9,7 @@ export const SITE_TITLE = "Ojo Panamá | Sismos y temblores en vivo, mapa y aler
 export const SITE_DESCRIPTION =
   "Monitoreo de sismos y temblores en Panamá en tiempo real. Mapa en vivo, magnitud, réplicas y alertas tempranas al celular con datos oficiales de IGC-UP, USGS y EMSC.";
 
-const OG_IMAGE = { url: "/opengraph-image", width: 1200, height: 630, alt: "Sismo Panamá: sismos y réplicas en vivo, mapa y avisos al celular" };
+const OG_IMAGE = { url: "/opengraph-image", width: 1200, height: 630, alt: "Ojo Panamá: sismos y réplicas en vivo, mapa y avisos al celular" };
 
 // Next reemplaza (no mezcla) openGraph y twitter de la página por los del layout: cada página debe repetirlos completos.
 // La portada recibe la imagen de app/opengraph-image.tsx por convención; las demás páginas la piden con `withImage`.

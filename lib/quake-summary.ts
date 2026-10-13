@@ -44,6 +44,20 @@ export function plainPlace(event: Earthquake) {
   return `cerca de ${placeLabel(event).replace(/\s*\(([^)]*)\)/g, ", $1")}`;
 }
 
+/** Lo mismo para leer en pantalla, en español y con cifras: "A 12 km al oeste-suroeste de Pitaloza Arriba". */
+export function placeTitle(event: Earthquake) {
+  const label = event.properties.place ?? "";
+  const igc = /(\d+(?:[.,]\d+)?)\s*km\s+al?\s+([\wáéíóú-]+)\s+de\s+([^,(]+)/i.exec(label);
+  if (igc) return `A ${igc[1]} km al ${igc[2]} de ${igc[3].trim()}`;
+  const usgs = /(\d+(?:[.,]\d+)?)\s*km\s+([NSEW]{1,3})\s+of\s+([^,(]+)/i.exec(label);
+  const direction = usgs ? COMPASS[usgs[2].toUpperCase()] : undefined;
+  if (usgs && direction) return `A ${usgs[1]} km al ${direction} de ${usgs[3].trim()}`;
+  // Los de los alrededores conservan el nombre de su región («Frontera Panamá-Costa Rica»), sin las coordenadas.
+  if (event.properties.nearby) return (label.replace(/\s*\([^)]*\)\s*$/, "") || "Fuera de Panamá");
+  const near = placeLabel(event);
+  return near === "—" ? "Panamá" : `Cerca de ${near}`;
+}
+
 function depthWords(event: Earthquake) {
   const depth = event.geometry.coordinates[2];
   return Number.isFinite(depth) ? `profundidad ${plural(Math.round(depth!), "kilómetro", "kilómetros")}` : "profundidad no disponible";

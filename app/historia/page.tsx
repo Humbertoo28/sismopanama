@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import PageHeader from "../page-header";
 import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatDateUTC, formatMag, historyUrl, parseHistory, placeEs, type HistoricQuake, type HistorySummary } from "../../lib/history";
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
@@ -12,9 +13,9 @@ const DESCRIPTION =
   "Los sismos de magnitud 6 o más que el USGS ha registrado en Panamá desde 1900, dónde ocurrieron y cómo se compara con ellos el sismo de octubre de 2026.";
 
 export const metadata: Metadata = {
-  title: TITLE, // el sitio añade "| Sismo Panamá"
+  title: TITLE, // el sitio añade "| Ojo Panamá"
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Sismo Panamá`, DESCRIPTION, "/historia", true),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/historia", true),
 };
 
 // El catálogo histórico casi no cambia: se guarda en la caché de la red y se vuelve a pedir cada media hora.
@@ -50,12 +51,9 @@ export default async function HistoriaPage() {
   const data = await loadHistory();
   return (
     <>
-      <BreadcrumbStructuredData trail={[{ name: "Sismo Panamá", path: "/" }, { name: "Historia sísmica", path: "/historia" }]} />
-      <header className="hs-header">
-        <Link href="/">← Volver al panel principal</Link>
-      </header>
+      <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Historia sísmica", path: "/historia" }]} />
+      <PageHeader current="/historia" />
       <main className="hs-main" id="contenido">
-        <span className="hs-kicker">CONTEXTO HISTÓRICO</span>
         <h1>Sismos grandes en Panamá desde 1900</h1>
         {data ? <Body summary={data.summary} panama={data.panama} /> : <Unavailable />}
       </main>

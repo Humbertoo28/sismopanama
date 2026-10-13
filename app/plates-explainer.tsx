@@ -23,7 +23,6 @@ export default function PlatesExplainer({ main }: { main: Earthquake }) {
   return (
     <details className="usgs-card plates-explainer">
       <summary>
-        <span className="section-kicker">EXPLICACIÓN</span>
         <strong>Las placas tectónicas, explicadas</strong>
       </summary>
       <div className="usgs-body">
