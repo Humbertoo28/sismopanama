@@ -457,7 +457,7 @@ export async function sendSystemNotification({
         await reg.showNotification(title, {
           body,
           icon: "/icon-192.png",
-          badge: "/favicon.svg",
+          badge: "/badge-96.png",
           tag,
           renotify: true,
           // Explícitamente con sonido y vibración: el aviso no debe llegar en silencio por omisión.
@@ -471,7 +471,7 @@ export async function sendSystemNotification({
 
     const notif = new Notification(title, {
       body,
-      icon: "/favicon.svg",
+      icon: "/icon-192.png",
       tag,
     });
     notif.onclick = () => {

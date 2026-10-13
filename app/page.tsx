@@ -9,7 +9,7 @@ import QuakeMap from "./quake-map";
 import SafetyGuide from "./safety-guide";
 import Checklists from "./checklists";
 import Sources from "./sources";
-import FlagMark from "./flag-mark";
+import OjoMark from "./ojo-mark";
 import StatusNow from "./status-now";
 import MoreSheet from "./more-sheet";
 import ThemeToggle from "./theme-toggle";
@@ -624,7 +624,7 @@ export default function Home() {
       <header className="site-header">
         <div className="site-header-bar">
           <a className="site-brand" href="#inicio" aria-label="Ojo Panamá, inicio">
-            <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
+            <span className="brand-mark" aria-hidden="true"><OjoMark /></span>
             <span>Ojo Panamá</span>
           </a>
           <div className="site-header-tools">

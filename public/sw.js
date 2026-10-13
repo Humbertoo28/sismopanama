@@ -1,10 +1,11 @@
-const CACHE_NAME = "sismo-panama-v9";
+const CACHE_NAME = "sismo-panama-v10";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
   "/favicon.svg",
   "/icon-192.png",
   "/icon-512.png",
+  "/badge-96.png",
   "/leaflet.js",
   "/siren.wav",
   "/fonts/dm-sans-latin.woff2",
@@ -102,7 +103,8 @@ self.addEventListener("push", (event) => {
   const options = {
     body: data.body || "Se ha registrado un evento sísmico reciente en Panamá.",
     icon: "/icon-192.png",
-    badge: "/favicon.svg",
+    // Android pinta la insignia de un solo color con su transparencia: tiene que ser una silueta PNG.
+    badge: "/badge-96.png",
     vibrate: [400, 150, 400, 150, 400],
     tag: data.id ? `sismo-${data.id}` : "sismo-panama-alert",
     renotify: true,

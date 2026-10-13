@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChartColumn, History, House, MessageSquareText, Newspaper } from "lucide-react";
 import type { ReactNode } from "react";
-import FlagMark from "./flag-mark";
+import OjoMark from "./ojo-mark";
 import ThemeToggle from "./theme-toggle";
 
 // Encabezado de las páginas secundarias, con la misma identidad que la página principal: marca a la izquierda y las demás
@@ -22,7 +22,7 @@ export default function PageHeader({ current, children }: { current: string; chi
     <header className="site-header page-header">
       <div className="site-header-bar">
         <Link className="site-brand" href="/" aria-label="Ojo Panamá, inicio">
-          <span className="brand-mark" aria-hidden="true"><FlagMark /></span>
+          <span className="brand-mark" aria-hidden="true"><OjoMark /></span>
           <span>Ojo Panamá</span>
         </Link>
         <div className="page-header-tools">
