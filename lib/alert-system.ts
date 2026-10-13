@@ -519,6 +519,23 @@ function rememberPushEnabled(enabled: boolean) {
   }
 }
 
+// Mensaje de error de una respuesta del servidor, siempre como texto. El firewall de Vercel responde a su manera
+// ({ error: { code, message, id } }) y un objeto mostrado tal cual hacía caer la página entera.
+async function serverError(res: Response, fallback: string): Promise<{ error: string; code?: string }> {
+  if (res.status === 429) {
+    return { error: "Hay muchas personas activando alertas en este momento. Espera un minuto y vuelve a intentarlo.", code: "busy" };
+  }
+  try {
+    const data = (await res.json()) as { error?: unknown; code?: unknown };
+    return {
+      error: typeof data.error === "string" && data.error ? data.error : fallback,
+      code: typeof data.code === "string" ? data.code : undefined,
+    };
+  } catch {
+    return { error: fallback };
+  }
+}
+
 async function createPushSubscription(reg: ServiceWorkerRegistration) {
   const keyRes = await fetch("/api/push/vapid-public-key");
   const { publicKey } = (await keyRes.json()) as { publicKey?: string };
@@ -665,9 +682,9 @@ export async function subscribeToWebPush(minMagnitude = 3.0): Promise<{ ok: bool
       }),
     });
 
-    const data = (await saveRes.json()) as { error?: string };
     if (!saveRes.ok) {
-      return { ok: false, error: data.error || "No se pudo registrar la suscripción en el servidor." };
+      const { error } = await serverError(saveRes, "No se pudo registrar la suscripción en el servidor.");
+      return { ok: false, error };
     }
 
     rememberPushEnabled(true);
@@ -711,9 +728,8 @@ export async function sendTestWebPush(delayed = false): Promise<{ ok: boolean; e
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys, ...(delayed ? { delaySeconds: 30 } : {}) }),
     });
-    const data = (await res.json()) as { error?: string; code?: string };
     if (!res.ok) {
-      return { ok: false, error: data.error || "Error al enviar la prueba", code: data.code };
+      return { ok: false, ...(await serverError(res, "Error al enviar la prueba")) };
     }
     return { ok: true };
   } catch (err: unknown) {

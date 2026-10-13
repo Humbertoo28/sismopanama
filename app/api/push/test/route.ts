@@ -1,6 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { sendWebPushToSubscription } from "@/lib/push-service";
 import { isPushEndpoint, isPushKeys, readJsonObject } from "@/lib/push-validation";
+import { getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 // La prueba «con la app cerrada» espera unos segundos antes de enviar: la función tiene que seguir viva ese rato.
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     const subscription = { endpoint, p256dh: keys.p256dh, auth: keys.auth };
 
     if (delayed) {
-      const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "sin-ip";
+      const ip = getClientIp(req);
       const now = Date.now();
       if (now - (lastDelayed.get(ip) ?? 0) < DELAYED_EVERY_MS) {
         return NextResponse.json({ error: "Ya hay una prueba en camino. Espera un par de minutos para pedir otra." }, { status: 429 });

@@ -5,6 +5,7 @@ import { recentPanamaEvents } from "../../../lib/catalogs";
 import { REPORT_WINDOW_MS, flagFor, parseReport, summarize, summarizeEvent, type EventSummary, type ReportRow } from "../../../lib/felt-reports";
 import { insertReport, listReports, reportsAvailable } from "../../../lib/felt-store";
 import { readJsonObject } from "../../../lib/push-validation";
+import { getClientCountry, getClientIp } from "../../../lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -122,13 +123,13 @@ export async function POST(request: NextRequest) {
     if (Date.now() - event.properties.time > REPORT_WINDOW_MS) {
       return NextResponse.json({ error: "Ese sismo es de hace más de 15 días: ya no se reciben reportes." }, { status: 410, headers: NO_STORE });
     }
-    const ip = (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || request.headers.get("x-real-ip") || "sin-ip";
+    const ip = getClientIp(request);
     const agent = (request.headers.get("user-agent") ?? "").slice(0, 200);
     const day = new Date().toISOString().slice(0, 10);
     const [lng, lat] = event.geometry.coordinates;
     // Lo que no es creíble se guarda apartado y no se cuenta. A quien lo envía se le responde igual que siempre: así no sabe
     // qué filtro lo apartó ni cómo esquivarlo.
-    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng }, request.headers.get("x-vercel-ip-country"));
+    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng }, getClientCountry(request));
     const result = await insertReport({
       event_id: event.id,
       event_time: event.properties.time,
