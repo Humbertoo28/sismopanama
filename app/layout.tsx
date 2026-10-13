@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
-    apple: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
   },
   appleWebApp: {
     capable: true,
@@ -69,7 +69,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="es-PA" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Ojo Panamá" />
