@@ -2,6 +2,7 @@
 
 import { ChartColumn, ChevronRight, History, Info, MessageSquareText, Newspaper, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { InstallRow } from "./pwa-install";
 
 // Panel «Más» de las pestañas del celular y la tablet: ahí no caben las otras páginas en la barra, y escondidas al final de la
 // portada costaba encontrarlas. Es un <dialog> nativo: atrapa el foco, se cierra con Escape y devuelve el foco al botón.
@@ -49,6 +50,7 @@ export default function MoreSheet({ open, onClose }: { open: boolean; onClose: (
               </a>
             </li>
           ))}
+          <InstallRow onDone={onClose} />
         </ul>
       </div>
     </dialog>

@@ -845,3 +845,35 @@ html[data-theme="dark"] .more-sheet-icon { color: #8fb8ff; }
 @media (max-width: 360px) {
   .page-nav a, .site-nav a, .site-nav .nav-more { font-size: calc(12px*var(--ts,1)); }
 }
+
+/* ---------- Instalar la app (solo celular: en la computadora va el botón del encabezado) ---------- */
+.install-card { display: none; }
+@media (max-width: 700px) {
+  .install-card {
+    display: flex; align-items: flex-start; gap: 12px; margin: 0 0 18px; padding: 14px 8px 14px 14px;
+    border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--primary-soft); color: var(--ink);
+  }
+}
+.install-card-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 10px; background: var(--primary); color: #fff; }
+.install-card-text { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.install-card-text strong { font-size: calc(17px*var(--ts,1)); font-weight: 700; line-height: 1.25; }
+.install-card-text p { margin: 0; color: var(--ink-2); font-size: calc(15px*var(--ts,1)); line-height: 1.4; }
+.install-card-btn {
+  justify-self: start; display: inline-flex; align-items: center; min-height: 44px; margin-top: 6px; padding: 0 16px;
+  border: 1px solid var(--primary); border-radius: 10px; background: var(--primary); color: #fff;
+  font-size: calc(15px*var(--ts,1)); font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.install-card-close { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; margin-top: -6px; border: 0; border-radius: 10px; background: none; color: var(--ink-2); cursor: pointer; }
+html[data-theme="dark"] .install-card-text strong { color: var(--ink); }
+
+.more-sheet li > button { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 68px; padding: 10px 4px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+
+.install-guide-steps { margin: 0; padding: 20px 24px; list-style: none; counter-reset: paso; }
+.install-guide-steps li { counter-increment: paso; display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 12px; row-gap: 2px; padding: 12px; border-radius: 10px; background: var(--surface-2); }
+.install-guide-steps li::before { content: counter(paso); grid-row: span 2; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 700; }
+.install-guide-steps strong { font-size: calc(15px*var(--ts,1)); color: var(--ink); }
+.install-guide-steps p { margin: 0; font-size: calc(14px*var(--ts,1)); line-height: 1.45; color: var(--ink-2); }
+html[data-theme="dark"] :is(.alert-modal-header, .alert-modal-footer) { background: var(--surface-2); border-color: var(--line); }
+html[data-theme="dark"] .alert-modal-title-box h2 { color: var(--ink); }
+html[data-theme="dark"] :is(.alert-modal-title-box p, .alert-modal-close) { color: var(--ink-2); }
+html[data-theme="dark"] .alert-bell-icon { background: var(--primary-soft); }
