@@ -101,8 +101,8 @@ create table if not exists public.felt_reports (
   place_id text not null check (char_length(place_id) <= 20),
   reporter text not null check (char_length(reporter) <= 64),
   ip_key text not null check (char_length(ip_key) <= 64),
-  -- Apartado por los controles contra datos falsos (no se publica): conexión desde fuera de Panamá o reporte poco creíble
-  -- para la distancia y la magnitud del sismo. Null = se cuenta.
+  -- Apartado por los controles contra datos falsos (no se publica): reporte poco creíble para la distancia y la magnitud del
+  -- sismo. Null = se cuenta. ('fuera-del-pais' ya no se usa: el filtro por país apartaba reportes reales de Panamá.)
   flagged text check (flagged in ('fuera-del-pais', 'poco-creible')),
   created_at timestamp with time zone not null default now(),
   -- Un reporte por dispositivo y sismo.

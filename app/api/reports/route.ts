@@ -1,10 +1,11 @@
 import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { SINCE, type Earthquake } from "../../../lib/earthquakes";
+import { SINCE, kmBetween, type Earthquake } from "../../../lib/earthquakes";
 import { recentPanamaEvents } from "../../../lib/catalogs";
 import { REPORT_WINDOW_MS, flagFor, parseReport, summarize, summarizeEvent, type EventSummary, type ReportRow } from "../../../lib/felt-reports";
 import { insertReport, listReports, reportsAvailable } from "../../../lib/felt-store";
 import { readJsonObject } from "../../../lib/push-validation";
+import { getClientIp } from "../../../lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,9 @@ const EVENT_PARAM = /^(?:[a-z]{2}[0-9a-z]{6,12}|igc:\d{9,11}|emsc:[0-9A-Za-z_-]{
 const NO_STORE = { "Cache-Control": "no-store" };
 
 type Lookup = { byId: Map<string, Earthquake>; list: Earthquake[] };
-async function lookup(): Promise<Lookup | null> {
+async function lookup(maxAgeMs?: number): Promise<Lookup | null> {
   try {
-    const list = await recentPanamaEvents(SINCE);
+    const list = await recentPanamaEvents(SINCE, maxAgeMs);
     const byId = new Map<string, Earthquake>();
     for (const event of list) for (const id of [event.id, ...(event.properties.aliases ?? [])]) byId.set(id, event);
     return { byId, list };
@@ -114,21 +115,44 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Los reportes aún no están disponibles." }, { status: 503, headers: NO_STORE });
   }
   try {
-    const events = await lookup();
+    let events = await lookup();
     if (!events) return NextResponse.json({ error: "No se pudo comprobar el sismo. Inténtalo en un momento." }, { status: 503, headers: NO_STORE });
-    // El sismo tiene que existir en los catálogos: así nadie inventa sismos ni reporta en nombre de otro.
-    const event = events.byId.get(input.eventId);
-    if (!event) return NextResponse.json({ error: "Ese sismo no está en la lista." }, { status: 404, headers: NO_STORE });
+    // El sismo tiene que existir en los catálogos: así nadie inventa sismos ni reporta en nombre de otro. Cada servidor guarda
+    // su propia copia de los catálogos y el IGC cambia el id al revisar un sismo, así que la página puede ir unos segundos por
+    // delante: se busca también el mismo sismo por hora y epicentro y, si es muy reciente, con los catálogos recién pedidos.
+    const find = (from: Lookup) => {
+      const byId = from.byId.get(input.eventId);
+      if (byId || !input.hint) return byId;
+      const { time, lat, lng } = input.hint;
+      return from.list.find(item => {
+        const [itemLng, itemLat] = item.geometry.coordinates;
+        return Math.abs(item.properties.time - time) <= 60_000 && kmBetween(lat, lng, itemLat, itemLng) <= 120;
+      });
+    };
+    let event = find(events);
+    const veryRecent = input.hint && Date.now() - input.hint.time < 2 * 3_600_000;
+    if (!event && veryRecent) {
+      const fresh = await lookup(0);
+      if (fresh) {
+        events = fresh;
+        event = find(fresh);
+      }
+    }
+    if (!event) {
+      return veryRecent
+        ? NextResponse.json({ error: "Estamos confirmando el sismo con los catálogos.", code: "pending" }, { status: 404, headers: NO_STORE })
+        : NextResponse.json({ error: "Ese sismo no está en la lista." }, { status: 404, headers: NO_STORE });
+    }
     if (Date.now() - event.properties.time > REPORT_WINDOW_MS) {
       return NextResponse.json({ error: "Ese sismo es de hace más de 15 días: ya no se reciben reportes." }, { status: 410, headers: NO_STORE });
     }
-    const ip = (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || request.headers.get("x-real-ip") || "sin-ip";
+    const ip = getClientIp(request);
     const agent = (request.headers.get("user-agent") ?? "").slice(0, 200);
     const day = new Date().toISOString().slice(0, 10);
     const [lng, lat] = event.geometry.coordinates;
     // Lo que no es creíble se guarda apartado y no se cuenta. A quien lo envía se le responde igual que siempre: así no sabe
     // qué filtro lo apartó ni cómo esquivarlo.
-    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng }, request.headers.get("x-vercel-ip-country"));
+    const flagged = flagFor(input, { id: event.id, time: event.properties.time, mag: event.properties.mag, place: event.properties.place, lat, lng });
     const result = await insertReport({
       event_id: event.id,
       event_time: event.properties.time,
