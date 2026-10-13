@@ -413,10 +413,14 @@ body:before { display: none; }
 .map-legend > span { letter-spacing: 0; font-weight: 600; }
 @media (min-width: 961px) {
   /* El mapa llena el alto de la ficha de al lado: antes quedaba un hueco blanco debajo. */
-  .map-card { grid-template-columns: minmax(0, 1fr) 300px; align-items: stretch; }
-  .map-frame { height: auto; min-height: 560px; }
+  .map-card { grid-template-columns: minmax(0, 1fr) 390px; align-items: stretch; }
+  .map-frame { height: auto; min-height: 580px; }
+  .map-aside { max-height: 620px; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid var(--line); }
 }
-.map-aside { padding: 20px 20px 16px; }
+.map-aside { display: block; padding: 20px 20px 22px; box-sizing: border-box; }
+.map-aside .qs-head { padding-right: 0; }
+.event-row.selected { background: var(--primary-soft); }
+.quake-marker.selected { box-shadow: 0 0 0 3px #ffffff, 0 0 0 6px var(--primary, #1f5fd1), 0 4px 14px #00000066 !important; }
 .aside-top { color: var(--muted); font-size: calc(14px*var(--ts,1)); font-weight: 600; letter-spacing: 0; }
 .featured-magnitude { margin: 10px 0 6px; font: 700 calc(48px*var(--ts,1))/1 "DM Sans", sans-serif; letter-spacing: -.02em; color: var(--ink); }
 .featured-place { min-height: 0; font: 700 calc(20px*var(--ts,1))/1.25 "DM Sans", sans-serif; letter-spacing: 0; color: var(--ink); }
@@ -679,6 +683,12 @@ html[data-theme="dark"] :is(.guide-chips button, .guide-tabs button) { backgroun
 html[data-theme="dark"] .replica-tag { background: #3a1620; color: #ff9aa8; border-color: #5a2230; }
 html[data-theme="dark"] .source-tag { background: #1a2a48; color: #9cc0ff; }
 html[data-theme="dark"] .main-tag { background: #2a1640; color: #d8b4fe; }
+html[data-theme="dark"] .qs-badge { background: var(--surface-2); color: var(--ink-2); }
+html[data-theme="dark"] .qs-badge.main { background: #2a1640; color: #d8b4fe; }
+html[data-theme="dark"] :is(.qs-mag-row p, .qs-facts dt, .qs-facts dd > span, .qs-facts small, .qs-note, .qs-arrival li small) { color: var(--ink-2); }
+html[data-theme="dark"] :is(.qs-facts, .qs-facts > div, .qs-arrival li) { border-color: var(--line); }
+html[data-theme="dark"] .qs-link { color: #8fb8ff; }
+html[data-theme="dark"] .event-row.selected { background: var(--surface-2); }
 
 /* Mapa: globos, fichas al pasar el ratón y controles de Leaflet. */
 html[data-theme="dark"] .leaflet-popup-content-wrapper, html[data-theme="dark"] .leaflet-popup-tip { background: var(--surface); color: var(--ink); }

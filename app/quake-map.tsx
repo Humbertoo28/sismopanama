@@ -894,7 +894,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     };
   });
   useEffect(() => {
-    if (ready) fitRef.current(true);
+    if (ready && (!focus || focusedRef.current === focus)) fitRef.current(true);
   }, [filtersKey, region, placeLat, placeLng, ready]);
   useEffect(() => {
     if (ready && fitKey > 0) fitRef.current(true);
@@ -904,7 +904,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     if (view3d || !ready) return;
     const timer = window.setTimeout(() => {
       mapRef.current?.invalidateSize({ animate: false });
-      fitRef.current(false);
+      if (!focus || focusedRef.current === focus) fitRef.current(false);
     }, 80);
     return () => window.clearTimeout(timer);
   }, [view3d, ready]);
@@ -914,6 +914,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const marker = markersRef.current.get(focus.id);
     if (!marker) return;
     focusedRef.current = focus;
+    if (!focus.quiet && view3dNow.current) setView3d(false);
     const map = mapRef.current;
     // Abrir el popup antes de que termine el movimiento animado lo cancela.
     map.once("moveend", () => {
@@ -925,6 +926,14 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     if (reducedMotion()) map.setView(marker.getLatLng(), zoom, { animate: false });
     else map.flyTo(marker.getLatLng(), zoom, { duration: 1.4 });
   }, [focus, events, ready]);
+
+  // Marca en el mapa 2D el círculo del sismo seleccionado actualmente.
+  useEffect(() => {
+    for (const [id, marker] of markersRef.current.entries()) {
+      const span = marker.getElement()?.firstElementChild as HTMLElement | undefined;
+      span?.classList.toggle("selected", id === selectedId);
+    }
+  }, [selectedId, events, ready]);
 
   // Sismo nuevo mientras la página está abierta: su marcador destaca y el mapa tiembla según su magnitud.
   useEffect(() => {

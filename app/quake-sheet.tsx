@@ -14,12 +14,18 @@ const dateTime = new Intl.DateTimeFormat("es-PA", {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Ficha completa de un sismo: se abre al tocarlo en el mapa. Lo medido o publicado por los catálogos se presenta tal cual; lo
-// que se calcula aquí (energía, tiempo de llegada) lleva su aviso.
-export default function QuakeSheet({
-  event, mainshock, onClose, onPropagate, onShowOnMap, onReport,
-}: { event: Earthquake; mainshock: Earthquake | null; onClose: () => void; onPropagate: () => void; onShowOnMap?: () => void; onReport?: () => void }) {
-  const panel = useRef<HTMLElement>(null);
+// Ficha completa de un sismo: se muestra en la barra derecha junto al mapa y también en pantalla completa. Lo medido o
+// publicado por los catálogos se presenta tal cual; lo que se calcula aquí (energía, tiempo de llegada) lleva su aviso.
+export function QuakeDetails({
+  event, mainshock, onPropagate, onShowOnMap, onReport, headingId = "qs-title",
+}: {
+  event: Earthquake;
+  mainshock: Earthquake | null;
+  onPropagate: () => void;
+  onShowOnMap?: () => void;
+  onReport?: () => void;
+  headingId?: string;
+}) {
   const { properties } = event;
   const [, , depthRaw] = event.geometry.coordinates;
   const depth = Number.isFinite(depthRaw) ? depthRaw! : null;
@@ -30,6 +36,104 @@ export default function QuakeSheet({
   const agencies = properties.agencies ?? [{ source: properties.source ?? "usgs", mag: properties.mag, magType: properties.magType ?? null }];
   const primary = SOURCE_NAMES[properties.source ?? "usgs"];
   const reviewed = properties.status === "reviewed";
+  const magnitude = properties.mag === null ? "—" : properties.mag.toFixed(1);
+  const arrivalId = `${headingId}-arrival`;
+  const stationsId = `${headingId}-stations`;
+
+  return (
+    <>
+      <header className="qs-head">
+        {isMain && <span className="qs-badge main">Sismo principal</span>}
+        {!isMain && after && <span className="qs-badge">RÉPLICA DEL SISMO M {mainshock?.properties.mag?.toFixed(1)}</span>}
+        <div className="qs-mag-row">
+          <strong className="qs-mag" aria-label={`Magnitud ${magnitude}`}>{magnitude}</strong>
+          <div>
+            <h3 id={headingId}>{properties.place || "Ubicación no especificada"}</h3>
+            <p>{provinceLabel(event)} · cerca de {placeLabel(event)}</p>
+          </div>
+        </div>
+      </header>
+
+      <dl className="qs-facts">
+        <div>
+          <dt>Fecha y hora de Panamá</dt>
+          <dd>{dateTime.format(new Date(properties.time))} <span>({agoLabel(properties.time)})</span></dd>
+        </div>
+        <div>
+          <dt>Profundidad</dt>
+          <dd>
+            {depth === null ? "No disponible" : `${Math.round(depth)} km, ${depthClass(depth)}`}
+            {depth !== null && isRoundDepth(depth) && <small>Valor asignado por el catálogo cuando no logra calcularla: es aproximado.</small>}
+          </dd>
+        </div>
+        {properties.mag !== null && (
+          <div>
+            <dt>Energía liberada, más o menos</dt>
+            <dd>
+              Equivale a cerca de {energyTnt(properties.mag)}
+              <small>Cálculo aproximado con la magnitud (Gutenberg-Richter): sirve para comparar, no es una medición.</small>
+            </dd>
+          </div>
+        )}
+        {facts.capital && (
+          <div>
+            <dt>Distancia</dt>
+            <dd>A {Math.round(facts.capital.km)} km de {facts.capital.name}</dd>
+          </div>
+        )}
+        <div>
+          <dt>Agencias que lo publicaron</dt>
+          <dd>{agencies.map(agency => `${SOURCE_NAMES[agency.source]} M ${agency.mag === null ? "—" : agency.mag.toFixed(1)}`).join(", ")}</dd>
+        </div>
+        <div>
+          <dt>Estado</dt>
+          <dd>{reviewed ? `Revisado por ${primary}.` : "Preliminar: la magnitud y la ubicación pueden cambiar."}</dd>
+        </div>
+      </dl>
+
+      <section className="qs-arrival" aria-labelledby={arrivalId}>
+        <h4 id={arrivalId}>Cuánto tardó en llegar el temblor</h4>
+        <ul>
+          {facts.list.map(city => (
+            <li key={city.name}><span>{city.name} <small>a {Math.round(city.km)} km</small></span><strong>{Math.max(1, Math.round(city.seconds))} s</strong></li>
+          ))}
+        </ul>
+        <p className="qs-note">Tiempo calculado para la sacudida fuerte (onda S) con el modelo de velocidades ak135, la referencia de la sismología internacional (IASPEI). Se contrastó con las llegadas medidas por el USGS en réplicas de esta secuencia: la diferencia máxima fue de unos 3 s. No son registros en esas ciudades.</p>
+      </section>
+
+      <section className="qs-arrival" aria-labelledby={stationsId}>
+        <h4 id={stationsId}>Llegada registrada por estaciones (USGS)</h4>
+        {phaseStatus === "loading" && <p className="qs-note">Consultando las estaciones que lo registraron…</p>}
+        {phaseStatus === "ready" && phases && (
+          <>
+            <ul>
+              {phases.stations.slice(0, 4).map(station => (
+                <li key={station.code}>
+                  <span>{station.code} <small>a {station.distanceKm} km</small></span>
+                  <strong>{station.p !== null && `P ${Math.round(station.p)} s`}{station.p !== null && station.s !== null && " · "}{station.s !== null && `S ${Math.round(station.s)} s`}</strong>
+                </li>
+              ))}
+            </ul>
+            <p className="qs-note">Segundos desde el origen del sismo hasta que cada estación registró la onda P y la onda S, tal como los publica el USGS. {phases.total} {phases.total === 1 ? "estación lo registró" : "estaciones lo registraron"}; las más cercanas están a unos {phases.stations[0].distanceKm} km.</p>
+          </>
+        )}
+        {phaseStatus === "none" && <p className="qs-note">El USGS no publica llegadas a estaciones de este sismo (solo las tienen los sismos que registra el USGS); los tiempos de arriba son los del modelo.</p>}
+      </section>
+
+      <div className="qs-actions">
+        <button type="button" className="qs-primary" onClick={onPropagate}>Ver cómo se propagó</button>
+        {onShowOnMap && <button type="button" className="qs-secondary" onClick={onShowOnMap}>Ver en el mapa</button>}
+        {onReport && <button type="button" className="qs-secondary" onClick={onReport}>¿Lo sentiste? Repórtalo</button>}
+        <a className="qs-link" href={reportUrl(event)} target="_blank" rel="noopener noreferrer">Ver el reporte en {primary} <span aria-hidden="true">↗</span></a>
+      </div>
+    </>
+  );
+}
+
+export default function QuakeSheet({
+  event, mainshock, onClose, onPropagate, onShowOnMap, onReport,
+}: { event: Earthquake; mainshock: Earthquake | null; onClose: () => void; onPropagate: () => void; onShowOnMap?: () => void; onReport?: () => void }) {
+  const panel = useRef<HTMLElement>(null);
 
   const closeRef = useRef(onClose);
   useEffect(() => {
@@ -77,96 +181,18 @@ export default function QuakeSheet({
     };
   }, []);
 
-  const magnitude = properties.mag === null ? "—" : properties.mag.toFixed(1);
-
   return (
     <div className="qs-backdrop" onClick={onClose}>
       <section ref={panel} className="qs" role="dialog" aria-modal="true" aria-labelledby="qs-title" tabIndex={-1} onClick={click => click.stopPropagation()}>
         <button type="button" className="qs-close" onClick={onClose} aria-label="Cerrar la ficha del sismo">✕</button>
-        <header className="qs-head">
-          {isMain && <span className="qs-badge main">Sismo principal</span>}
-          {!isMain && after && <span className="qs-badge">RÉPLICA DEL SISMO M {mainshock?.properties.mag?.toFixed(1)}</span>}
-          <div className="qs-mag-row">
-            <strong className="qs-mag" aria-label={`Magnitud ${magnitude}`}>{magnitude}</strong>
-            <div>
-              <h3 id="qs-title">{properties.place || "Ubicación no especificada"}</h3>
-              <p>{provinceLabel(event)} · cerca de {placeLabel(event)}</p>
-            </div>
-          </div>
-        </header>
-
-        <dl className="qs-facts">
-          <div>
-            <dt>Fecha y hora de Panamá</dt>
-            <dd>{dateTime.format(new Date(properties.time))} <span>({agoLabel(properties.time)})</span></dd>
-          </div>
-          <div>
-            <dt>Profundidad</dt>
-            <dd>
-              {depth === null ? "No disponible" : `${Math.round(depth)} km, ${depthClass(depth)}`}
-              {depth !== null && isRoundDepth(depth) && <small>Valor asignado por el catálogo cuando no logra calcularla: es aproximado.</small>}
-            </dd>
-          </div>
-          {properties.mag !== null && (
-            <div>
-              <dt>Energía liberada, más o menos</dt>
-              <dd>
-                Equivale a cerca de {energyTnt(properties.mag)}
-                <small>Cálculo aproximado con la magnitud (Gutenberg-Richter): sirve para comparar, no es una medición.</small>
-              </dd>
-            </div>
-          )}
-          {facts.capital && (
-            <div>
-              <dt>Distancia</dt>
-              <dd>A {Math.round(facts.capital.km)} km de {facts.capital.name}</dd>
-            </div>
-          )}
-          <div>
-            <dt>Agencias que lo publicaron</dt>
-            <dd>{agencies.map(agency => `${SOURCE_NAMES[agency.source]} M ${agency.mag === null ? "—" : agency.mag.toFixed(1)}`).join(", ")}</dd>
-          </div>
-          <div>
-            <dt>Estado</dt>
-            <dd>{reviewed ? `Revisado por ${primary}.` : "Preliminar: la magnitud y la ubicación pueden cambiar."}</dd>
-          </div>
-        </dl>
-
-        <section className="qs-arrival" aria-labelledby="qs-arrival-title">
-          <h4 id="qs-arrival-title">Cuánto tardó en llegar el temblor</h4>
-          <ul>
-            {facts.list.map(city => (
-              <li key={city.name}><span>{city.name} <small>a {Math.round(city.km)} km</small></span><strong>{Math.max(1, Math.round(city.seconds))} s</strong></li>
-            ))}
-          </ul>
-          <p className="qs-note">Tiempo calculado para la sacudida fuerte (onda S) con el modelo de velocidades ak135, la referencia de la sismología internacional (IASPEI). Se contrastó con las llegadas medidas por el USGS en réplicas de esta secuencia: la diferencia máxima fue de unos 3 s. No son registros en esas ciudades.</p>
-        </section>
-
-        <section className="qs-arrival" aria-labelledby="qs-stations-title">
-          <h4 id="qs-stations-title">Llegada registrada por estaciones (USGS)</h4>
-          {phaseStatus === "loading" && <p className="qs-note">Consultando las estaciones que lo registraron…</p>}
-          {phaseStatus === "ready" && phases && (
-            <>
-              <ul>
-                {phases.stations.slice(0, 4).map(station => (
-                  <li key={station.code}>
-                    <span>{station.code} <small>a {station.distanceKm} km</small></span>
-                    <strong>{station.p !== null && `P ${Math.round(station.p)} s`}{station.p !== null && station.s !== null && " · "}{station.s !== null && `S ${Math.round(station.s)} s`}</strong>
-                  </li>
-                ))}
-              </ul>
-              <p className="qs-note">Segundos desde el origen del sismo hasta que cada estación registró la onda P y la onda S, tal como los publica el USGS. {phases.total} {phases.total === 1 ? "estación lo registró" : "estaciones lo registraron"}; las más cercanas están a unos {phases.stations[0].distanceKm} km.</p>
-            </>
-          )}
-          {phaseStatus === "none" && <p className="qs-note">El USGS no publica llegadas a estaciones de este sismo (solo las tienen los sismos que registra el USGS); los tiempos de arriba son los del modelo.</p>}
-        </section>
-
-        <div className="qs-actions">
-          <button type="button" className="qs-primary" onClick={onPropagate}>Ver cómo se propagó</button>
-          {onShowOnMap && <button type="button" className="qs-secondary" onClick={onShowOnMap}>Ver en el mapa</button>}
-          {onReport && <button type="button" className="qs-secondary" onClick={onReport}>¿Lo sentiste? Repórtalo</button>}
-          <a className="qs-link" href={reportUrl(event)} target="_blank" rel="noopener noreferrer">Ver el reporte en {primary} <span aria-hidden="true">↗</span></a>
-        </div>
+        <QuakeDetails
+          event={event}
+          mainshock={mainshock}
+          onPropagate={onPropagate}
+          onShowOnMap={onShowOnMap}
+          onReport={onReport}
+          headingId="qs-title"
+        />
       </section>
     </div>
   );

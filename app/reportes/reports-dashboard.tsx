@@ -222,6 +222,7 @@ export default function ReportsDashboardView({ children }: { children?: ReactNod
                       <p>{full.format(new Date(shown.time))} ({agoLabel(shown.time)})</p>
                     </div>
                     <div className="rp-detail-actions">
+                      <a className="btn btn-secondary" href={`/?focus=${encodeURIComponent(shown.id)}#mapa`}>Ver en el mapa</a>
                       <button type="button" className="btn btn-primary" onClick={() => setReportFor(asEarthquake(shown))}><MessageSquareText size={18} aria-hidden="true" /> ¿Lo sentiste?</button>
                       <button type="button" className="btn btn-secondary" onClick={download} disabled={!detail?.places.length}><Download size={18} aria-hidden="true" /> Descargar CSV</button>
                     </div>
