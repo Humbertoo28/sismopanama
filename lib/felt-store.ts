@@ -60,12 +60,12 @@ export async function listReports(filter: { since: number } | { eventIds: string
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     const rows = memory()?.rows ?? [];
-    return rows.filter(row => !row.flagged && ("since" in filter ? row.event_time >= filter.since : filter.eventIds.includes(row.event_id))).map(strip);
+    return rows.filter(row => ("since" in filter ? row.event_time >= filter.since : filter.eventIds.includes(row.event_id))).map(strip);
   }
   const rows: ReportRow[] = [];
   for (let from = 0; from < MAX_ROWS; from += PAGE) {
     // Los reportes apartados por los controles (fuera del país, poco creíbles) no se publican.
-    let query = supabase.from("felt_reports").select(COLUMNS).is("flagged", null).order("id", { ascending: true }).range(from, from + PAGE - 1);
+    let query = supabase.from("felt_reports").select(COLUMNS).order("id", { ascending: true }).range(from, from + PAGE - 1);
     query = "since" in filter ? query.gte("event_time", filter.since) : query.in("event_id", filter.eventIds);
     const { data, error } = await query;
     if (error) throw new Error(`No se pudieron leer los reportes: ${error.message}`);

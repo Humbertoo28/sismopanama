@@ -36,8 +36,7 @@ export default function ReportesPage() {
           <h3>¿Cómo se evitan los reportes falsos?</h3>
           <p>
             Cada teléfono puede reportar un sismo una sola vez, hay un tope de reportes por conexión y solo se aceptan sismos reales
-            de los últimos 15 días. No se cuentan los reportes que no son creíbles para la
-            distancia y la magnitud del sismo (por ejemplo, «muy fuerte» a cientos de kilómetros de un sismo pequeño).
+            de los últimos 15 días.
           </p>
           <h3>¿Es una medición oficial?</h3>
           <p>

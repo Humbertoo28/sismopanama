@@ -69,26 +69,8 @@ export function parseReport(body: Record<string, unknown> | null): ReportInput |
 // Solo se aceptan reportes de sismos de los últimos 15 días (incluye el sismo principal del 9 de octubre durante la emergencia).
 export const REPORT_WINDOW_MS = 15 * 24 * 3_600_000;
 
-// Hasta qué distancia es creíble que alguien sienta un sismo de esta magnitud, con margen amplio: unos 120 km para M 3,
-// 480 km para M 5 y más de 2 000 km para M 7.7 (la sacudida fuerte llega a mucho menos: un tercio).
-export function feltRadiusKm(mag: number) {
-  return 60 * 2 ** (mag - 2);
-}
-
-// No se filtra por país de la conexión: el sitio pasa por Cloudflare y por redes móviles que salen por otros países, y ese
-// filtro apartaba reportes reales de Panamá. Solo se aparta lo que no cuadra con la distancia y la magnitud del sismo.
-export type Flag = "poco-creible";
-
-export function flagFor(input: ReportInput, event: ReportedEvent): Flag | null {
-  if (!input.felt || event.mag === null) return null;
-  const place = PLACE_INDEX.get(input.placeId);
-  if (!place) return null;
-  const km = kmBetween(event.lat, event.lng, place.lat, place.lng);
-  const reach = feltRadiusKm(event.mag);
-  if (km > reach) return "poco-creible";
-  if ((input.intensity ?? 0) >= 3 && km > reach / 3) return "poco-creible";
-  return null;
-}
+// Se cuentan todos los reportes: no se apartan por país de la conexión ni por distancia y magnitud. Contra el abuso quedan
+// un reporte por dispositivo y sismo, el tope de envíos por conexión y que el sismo exista en los catálogos.
 
 // Localidad más cercana a un punto (el formulario la usa con el GPS: la posición no sale del teléfono, solo la localidad).
 export function nearestPlace(lat: number, lng: number) {
