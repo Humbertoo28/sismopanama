@@ -20,3 +20,8 @@ export function pageSocial(title: string, description: string, path: string, wit
     twitter: { card: "summary_large_image", title, description, ...(withImage && { images: [OG_IMAGE.url] }) },
   };
 }
+
+// Apps en las tiendas. Mientras no se defina la dirección de una tienda, el botón «Instalar» instala la web como hasta ahora;
+// al publicar la app basta con definir la variable en Vercel y redesplegar. Android: el proyecto está en android/.
+export const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL || null; // https://play.google.com/store/apps/details?id=com.ojopanama.app
+export const APP_STORE_URL = process.env.NEXT_PUBLIC_APP_STORE_URL || null;

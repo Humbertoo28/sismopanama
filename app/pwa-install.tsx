@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { APP_STORE_URL, PLAY_STORE_URL } from "../lib/site";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+const noSubscribe = () => () => {};
+const ANDROID_STORE = PLAY_STORE_URL ? { name: "Google Play", url: PLAY_STORE_URL } : null;
+const IOS_STORE = APP_STORE_URL ? { name: "App Store", url: APP_STORE_URL } : null;
+function storeForDevice() {
+  const ua = navigator.userAgent;
+  if (/android/i.test(ua)) return ANDROID_STORE;
+  if (/iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return IOS_STORE;
+  return null;
 }
 
 export default function PwaInstall() {
@@ -21,6 +32,7 @@ export default function PwaInstall() {
     return /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
   });
   const [showIosGuide, setShowIosGuide] = useState(false);
+  const store = useSyncExternalStore(noSubscribe, storeForDevice, () => null);
 
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
@@ -53,6 +65,23 @@ export default function PwaInstall() {
       <div className="pwa-status-pill ok" title="Ejecutándose como aplicación instalada">
         <span aria-hidden="true">✓</span> App Instalada
       </div>
+    );
+  }
+
+  // Con la app publicada en la tienda de su sistema, el botón lleva a la tienda en lugar de instalar la web. Se decide en el
+  // navegador (el servidor no sabe qué teléfono es): así lo que dibuja el servidor y lo que dibuja el navegador coinciden.
+  if (store) {
+    return (
+      <a className="pwa-install-btn" href={store.url} target="_blank" rel="noopener noreferrer" title={`Descargar Ojo Panamá en ${store.name}`}>
+        <svg viewBox="0 0 24 24" fill="none" width="16" height="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="5" y="2" width="14" height="20" rx="3" />
+          <line x1="12" y1="18" x2="12.01" y2="18" />
+          <line x1="12" y1="8" x2="12" y2="13" />
+          <polyline points="9 11 12 14 15 11" />
+        </svg>
+        <span className="pwa-btn-text">Descargar en {store.name}</span>
+        <span className="pwa-btn-short">Descargar</span>
+      </a>
     );
   }
 

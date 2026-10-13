@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ojopanama.app",
+      "sha256_cert_fingerprints": [
+        "67:16:94:47:58:A9:8E:52:5B:DD:17:81:7C:A2:BE:A1:1A:F4:3F:03:7B:72:CE:A7:11:04:4B:6D:C7:C0:5E:30"
+      ]
+    }
+  }
+]
