@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchPanamaEvents } from "@/lib/catalogs";
 import { runQuakeCheck } from "@/lib/push-check";
+import { sendClarificationOnce } from "@/lib/clarification-push";
+import { getSupabaseServerClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // amplio tiempo para despachar a decenas de miles de dispositivos en Vercel Pro
@@ -38,6 +40,15 @@ async function handleCheck(req: NextRequest) {
     // Ventana de 3 horas: la misma que usa runQuakeCheck para decidir qué falta por avisar.
     const { events, catalogs } = await fetchPanamaEvents(Date.now() - 3 * 3600 * 1000);
     const result = await runQuakeCheck(events, Date.now(), catalogs.igc);
+    // Aviso único de aclaración por la alerta falsa del 13 de octubre (se retira después de enviarse; ver lib/clarification-push.ts).
+    // Va DESPUÉS de las alertas de sismos, para no retrasar una real, y sus fallos no afectan al chequeo.
+    try {
+      const supabase = getSupabaseServerClient();
+      const clarification = supabase ? await sendClarificationOnce(supabase) : null;
+      if (clarification && clarification.status !== "skipped") console.log("[push] aclaración Juan Díaz:", JSON.stringify(clarification));
+    } catch (error) {
+      console.error("[push] aclaración Juan Díaz falló:", error);
+    }
     return NextResponse.json(result, { status: result.configured ? 200 : 503 });
   } catch (err: unknown) {
     // El detalle queda en el registro del servidor; a quien llame no se le devuelve (puede revelar la infraestructura).
