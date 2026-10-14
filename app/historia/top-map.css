@@ -1,0 +1,39 @@
+/* Mapa interactivo de los 12 sismos más grandes: el número elegido y su ficha. */
+.hs-pin{cursor:pointer;outline:none}
+.hs-pin.is-picked{transform:scale(1.25)}
+.hs-pin.is-picked circle:not(.hs-hit),.hs-pin:focus-visible circle:not(.hs-hit){stroke:#ffd166;stroke-width:4.5}
+/* Área para tocar, más grande que el número (en el celular el mapa se reduce y el número queda de ~21 px). No se ve. */
+.hs-pin .hs-hit{fill:transparent!important;stroke:none!important}
+@media(max-width:700px){.hs-pin-main .hs-hit{r:36px}.hs-pin-inset .hs-hit{r:22px}}
+
+.tm-hint{margin:10px 0 0;font-size:calc(14px*var(--ts,1));color:#4a5568}
+.tm-card{scroll-margin:130px 0 96px;margin-top:12px;padding:16px 18px;border:1px solid var(--line,#dce2e9);border-radius:14px;background:var(--surface-2,#f7f9fb);color:var(--ink,#121a2a)}
+.tm-empty{margin:0;font-size:calc(15px*var(--ts,1));color:#4a5568}
+.tm-head{display:flex;align-items:center;gap:12px}
+.tm-rank{display:grid;place-items:center;flex:none;width:42px;height:42px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0b2a5b40;font:800 calc(18px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif;color:#0b2a5b}
+.tm-rank.hs-e1{background:#b7c8e4}
+.tm-rank.hs-e2{background:#5fa0f0}
+.tm-rank.hs-e3{background:#ffd166}
+.tm-rank.hs-now{background:#da121a;color:#fff}
+.tm-mag{display:block;font:700 calc(26px*var(--ts,1))/1.1 "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.03em;color:#b4161e}
+.tm-mag small{font:600 calc(14px*var(--ts,1)) "DM Sans",sans-serif;letter-spacing:0;color:#4a5568}
+.tm-when{display:block;font-size:calc(14px*var(--ts,1));color:#4a5568}
+.tm-place{margin:10px 0 8px;font:700 calc(16px*var(--ts,1))/1.35 "DM Sans",sans-serif}
+.tm-facts{margin:0 0 12px}
+.tm-actions{display:flex;flex-wrap:wrap;gap:8px}
+@media(max-width:700px){.tm-actions .hx-btn{flex:1 1 100%}}
+
+html[data-theme="dark"] .tm-hint,html[data-theme="dark"] .tm-empty,html[data-theme="dark"] .tm-when,html[data-theme="dark"] .tm-mag small{color:var(--ink-2,#c3cfdf)}
+html[data-theme="dark"] .tm-mag{color:#ff8a8f}
+html[data-theme="dark"] .tm-card{background:var(--surface,#121b2c);border-color:var(--line,#2a3a55);color:var(--ink,#e8eef8)}
+html[data-theme="dark"] .tm-rank.hs-now{color:#fff}
+
+/* Vista satelital: la imagen de Esri va bajo los números; el contorno del país queda como línea para ubicarse. */
+.tm-view{margin:0 0 12px}
+.tm-credit{margin:8px 0 0;font-size:calc(12px*var(--ts,1));color:#4a5568}
+.tm-sat .hs-land{fill:none;stroke:#ffffffb8}
+.tm-sat .hs-grid line{stroke:#ffffff3d}
+.tm-sat .hs-grid text{fill:#fff;paint-order:stroke;stroke:#0b1a33;stroke-width:3px}
+.tm-sat .hs-group rect{fill:none}
+.tm-sat .hs-pin circle:not(.hs-hit){filter:drop-shadow(0 0 2px #0b1a33)}
+html[data-theme="dark"] .tm-credit{color:var(--ink-2,#c3cfdf)}

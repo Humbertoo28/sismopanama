@@ -107,8 +107,8 @@ function Body({ summary: s, panama, noaa, provinceTexts }: { summary: HistorySum
   const topMap = (
     <section className="hs-card" aria-labelledby="hs-top-map-h">
       <h2 id="hs-top-map-h">Los {s.top.length} más grandes en el mapa</h2>
-      <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo. Los del suroeste caen muy juntos: se ven también en el acercamiento.</p>
-      <TopMap top={s.top} />
+      <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo; toca uno para ver ese sismo. Los del suroeste caen muy juntos: se ven también en el acercamiento.</p>
+      <TopMap top={s.top} total={s.total} provinceTexts={provinceTexts} />
       <ul className="hs-legend" aria-label="Leyenda del mapa de los más grandes">
         <li><i className="hs-sw hs-e1" /> 1900–1949</li>
         <li><i className="hs-sw hs-e2" /> 1950–1999</li>

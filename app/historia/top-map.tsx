@@ -1,10 +1,17 @@
-import type { CSSProperties } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PANAMA_RINGS } from "../../lib/panama";
 import { eraOf, formatDateUTC, formatMag, placeEs, type HistoricQuake } from "../../lib/history";
+import { revealNearest, showExplorer, writeSelection } from "./selection";
+import { SAT_CREDIT, SatTiles } from "./sat-tiles";
+import "./top-map.css";
 
 // Mapa aparte solo con los 12 sismos más grandes, cada uno con su número de la tabla. Varios caen casi en el mismo punto, al
-// suroeste (zona de Burica): sus números se taparían, así que ese grupo se muestra además en un acercamiento. SVG fijo, sin
-// código en el navegador.
+// suroeste (zona de Burica): sus números se taparían, así que ese grupo se muestra además en un acercamiento. Es interactivo: tocar
+// (o con el teclado, Enter) un número abre la ficha de ese sismo debajo del mapa, con los mismos datos del catálogo del USGS que el
+// resto de la página; las flechas pasan de un puesto al siguiente y «Ver ficha completa» lo elige en el explorador de arriba.
 type Bounds = { minLng: number; maxLng: number; minLat: number; maxLat: number };
 
 const MAIN: Bounds = { minLng: -83.8, maxLng: -77, minLat: 6, maxLat: 10.7 };
@@ -90,10 +97,27 @@ function Grid({ f, lngs, lats }: { f: Frame; lngs: number[]; lats: number[] }) {
   );
 }
 
-function Pin({ x, y, rank, quake, size }: { x: number; y: number; rank: number; quake: HistoricQuake; size: "main" | "inset" }) {
+function Pin({ x, y, rank, quake, size, picked, onPick }: { x: number; y: number; rank: number; quake: HistoricQuake; size: "main" | "inset"; picked: boolean; onPick: (id: string, reveal: boolean) => void }) {
+  const title = rankTitle(rank, quake);
   return (
-    <g className={`hs-pin hs-pin-${size} hs-${eraOf(quake)}`} style={{ "--i": rank } as CSSProperties}>
-      <title>{rankTitle(rank, quake)}</title>
+    <g
+      className={`hs-pin hs-pin-${size} hs-${eraOf(quake)}${picked ? " is-picked" : ""}`}
+      style={{ "--i": rank } as CSSProperties}
+      role="button"
+      tabIndex={0}
+      aria-pressed={picked}
+      aria-label={title}
+      data-rank={rank}
+      onClick={() => onPick(quake.id, true)}
+      onKeyDown={event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onPick(quake.id, false);
+        }
+      }}
+    >
+      <title>{title}</title>
+      <circle className="hs-hit" cx={x} cy={y} r="22" />
       <circle cx={x} cy={y} r={size === "main" ? 14 : 16} />
       <text x={x} y={y} textAnchor="middle" dominantBaseline="central">{rank}</text>
     </g>
@@ -107,7 +131,59 @@ const halfDegrees = (min: number, max: number) => {
   return ticks;
 };
 
-export default function TopMap({ top }: { top: HistoricQuake[] }) {
+const kind = (quake: HistoricQuake) => (quake.magType ? quake.magType.charAt(0).toUpperCase() + quake.magType.slice(1).toLowerCase() : "");
+const clock = (time: number) => new Date(time).toISOString().slice(11, 16);
+
+export default function TopMap({ top, total, provinceTexts }: { top: HistoricQuake[]; total: number; provinceTexts: Record<string, string> }) {
+  const root = useRef<HTMLDivElement>(null);
+  const [satellite, setSatellite] = useState(false);
+  // El ancho en pantalla de cada mapa decide cuánto detalle de imagen satelital se pide (el acercamiento pide más que el general).
+  const mainSvg = useRef<SVGSVGElement>(null);
+  const insetSvg = useRef<SVGSVGElement>(null);
+  const [mainPx, setMainPx] = useState(700);
+  const [insetPx, setInsetPx] = useState(460);
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        if (entry.target === mainSvg.current) setMainPx(entry.contentRect.width || 700);
+        else if (entry.target === insetSvg.current) setInsetPx(entry.contentRect.width || 460);
+      }
+    });
+    if (mainSvg.current) observer.observe(mainSvg.current);
+    if (insetSvg.current) observer.observe(insetSvg.current);
+    return () => observer.disconnect();
+  }, [satellite]);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const pickedIndex = top.findIndex(quake => quake.id === pickedId);
+  const picked = pickedIndex >= 0 ? top[pickedIndex] : null;
+  const card = useRef<HTMLDivElement>(null);
+  // Tocar el mismo número otra vez cierra la ficha. Al tocar con el dedo o el ratón, la ficha (que queda debajo de los mapas) se
+  // muestra si no se veía; con el teclado no se mueve la página, el foco ya está en el número.
+  const pick = (id: string, reveal: boolean) => {
+    setPickedId(current => (current === id ? null : id));
+    if (reveal) window.setTimeout(() => revealNearest(card.current), 30);
+  };
+  // Pasa al puesto indicado (1 a 12); con el teclado, además, pasa el foco a ese número.
+  const goTo = (rank: number, focus: boolean) => {
+    const next = top[Math.min(top.length, Math.max(1, rank)) - 1];
+    if (!next) return;
+    setPickedId(next.id);
+    if (focus) root.current?.querySelector<SVGElement>(`[data-rank="${Math.min(top.length, Math.max(1, rank))}"]`)?.focus();
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const current = Number((event.target as Element).closest?.("[data-rank]")?.getAttribute("data-rank"));
+    if (!current) return;
+    const next = event.key === "ArrowRight" || event.key === "ArrowDown" ? current + 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? current - 1 : event.key === "Home" ? 1 : event.key === "End" ? top.length : null;
+    if (next === null) return;
+    event.preventDefault();
+    goTo(next, true);
+  };
+  const openInExplorer = (id: string) => {
+    writeSelection(id);
+    showExplorer();
+  };
+
   const main = frame(MAIN, MAIN_W);
   const crowded = crowdedGroup(top, main);
   const inGroup = new Set(crowded);
@@ -131,12 +207,19 @@ export default function TopMap({ top }: { top: HistoricQuake[] }) {
   const description = top.map((q, i) => `${i + 1}.º, M ${formatMag(q.mag)}, ${formatDateUTC(q.time)}, ${placeEs(q.place)}`).join("; ");
 
   return (
-    <div className={`hs-figure${inset ? " hs-has-inset" : ""}`}>
+    <div ref={root} onKeyDown={onKeyDown}>
+    <div className="hx-group tm-view" role="group" aria-label="Vista del mapa de los 12 más grandes">
+      <span className="hx-label">Vista</span>
+      <button type="button" className="hx-chip" aria-pressed={!satellite} onClick={() => setSatellite(false)}>Plano</button>
+      <button type="button" className="hx-chip" aria-pressed={satellite} aria-label="Imagen satelital" onClick={() => setSatellite(true)}>Satélite</button>
+    </div>
+    <div className={`hs-figure${inset ? " hs-has-inset" : ""}${satellite ? " tm-sat" : ""}`}>
       <figure className="hs-fig-main">
-        <svg className="hs-map" viewBox={`0 0 ${main.W} ${main.H}`} role="img" aria-labelledby="hs-top-title hs-top-desc">
+        <svg ref={mainSvg} className="hs-map" viewBox={`0 0 ${main.W} ${main.H}`} role="group" aria-labelledby="hs-top-title hs-top-desc">
           <title id="hs-top-title">Mapa de los 12 sismos más grandes de Panamá desde 1900</title>
           <desc id="hs-top-desc">{`Cada número es el puesto del sismo en la tabla. ${description}.`}</desc>
           <rect className="hs-sea" width={main.W} height={main.H} rx="14" />
+          {satellite && <SatTiles bounds={MAIN} width={main.W} height={main.H} vx={0} vy={0} vw={main.W} vh={main.H} pxWidth={mainPx} />}
           <Grid f={main} lngs={[-83, -82, -81, -80, -79, -78]} lats={[7, 8, 9, 10]} />
           <path className="hs-land" d={landPath(main)} />
           {box && (
@@ -147,18 +230,20 @@ export default function TopMap({ top }: { top: HistoricQuake[] }) {
             </g>
           )}
           <g>
-            {top.map((q, i) => (inGroup.has(i) ? null : <Pin key={q.id} x={main.x(q.lng)} y={main.y(q.lat)} rank={i + 1} quake={q} size="main" />))}
+            {top.map((q, i) => (inGroup.has(i) ? null : <Pin key={q.id} x={main.x(q.lng)} y={main.y(q.lat)} rank={i + 1} quake={q} size="main" picked={q.id === pickedId} onPick={pick} />))}
           </g>
         </svg>
       </figure>
 
       {inset && bounds && (
         <figure className="hs-fig-inset">
-          <svg className="hs-map" viewBox={`0 0 ${inset.W} ${inset.H}`} role="img" aria-labelledby="hs-inset-title">
+          <svg ref={insetSvg} className="hs-map" viewBox={`0 0 ${inset.W} ${inset.H}`} role="group" aria-labelledby="hs-inset-title">
             <title id="hs-inset-title">{`Acercamiento al suroeste: puestos ${groupRanks.join(", ")}`}</title>
             <rect className="hs-sea" width={inset.W} height={inset.H} rx="14" />
+            {satellite && <SatTiles bounds={bounds} width={inset.W} height={inset.H} vx={0} vy={0} vw={inset.W} vh={inset.H} pxWidth={insetPx} />}
             <Grid f={inset} lngs={halfDegrees(bounds.minLng, bounds.maxLng)} lats={halfDegrees(bounds.minLat, bounds.maxLat)} />
-            <path className="hs-land" d={landPath(inset)} />
+            {/* De cerca, el contorno simplificado del país no coincide con la costa de la imagen: sobre el satélite se omite. */}
+            {!satellite && <path className="hs-land" d={landPath(inset)} />}
             <g>
               {members.map((m, i) => {
                 const trueX = inset.x(m.quake.lng);
@@ -168,7 +253,7 @@ export default function TopMap({ top }: { top: HistoricQuake[] }) {
                   <g key={m.quake.id}>
                     {moved && <line className="hs-leader" x1={trueX} y1={trueY} x2={positions[i].x} y2={positions[i].y} />}
                     {moved && <circle className="hs-truepoint" cx={trueX} cy={trueY} r="3" />}
-                    <Pin x={positions[i].x} y={positions[i].y} rank={m.rank} quake={m.quake} size="inset" />
+                    <Pin x={positions[i].x} y={positions[i].y} rank={m.rank} quake={m.quake} size="inset" picked={m.quake.id === pickedId} onPick={pick} />
                   </g>
                 );
               })}
@@ -177,6 +262,36 @@ export default function TopMap({ top }: { top: HistoricQuake[] }) {
           <figcaption>Acercamiento al suroeste (zona de Burica): puestos {groupRanks.join(", ")}.</figcaption>
         </figure>
       )}
+    </div>
+
+    {satellite && <p className="tm-credit">{SAT_CREDIT}</p>}
+    <p className="tm-hint">Toca un número para ver ese sismo. Con el teclado, Tab llega al mapa y las flechas pasan de un puesto a otro.</p>
+    <div className="tm-card" ref={card} role="status" aria-live="polite">
+      {picked ? (
+        <>
+          <div className="tm-head">
+            <span className={`tm-rank hs-${eraOf(picked)}`} aria-hidden="true">{pickedIndex + 1}</span>
+            <div>
+              <strong className="tm-mag">M {formatMag(picked.mag)}{kind(picked) && <small> {kind(picked)}</small>}</strong>
+              <span className="tm-when">{formatDateUTC(picked.time)} · {clock(picked.time)} UTC</span>
+            </div>
+          </div>
+          <p className="tm-place">{placeEs(picked.place)}</p>
+          <dl className="hx-facts tm-facts">
+            <div><dt>Puesto por magnitud</dt><dd>{pickedIndex + 1} de {total}</dd></div>
+            <div><dt>Profundidad</dt><dd>{picked.depth === null ? "sin dato" : `${Math.round(picked.depth)} km`}</dd></div>
+            <div><dt>Provincia o comarca</dt><dd>{provinceTexts[picked.id] ?? "sin dato"}</dd></div>
+          </dl>
+          <div className="tm-actions">
+            <button type="button" className="hx-btn" onClick={() => goTo(pickedIndex, false)} disabled={pickedIndex === 0}><ChevronLeft size={16} aria-hidden="true" />Puesto anterior</button>
+            <button type="button" className="hx-btn" onClick={() => goTo(pickedIndex + 2, false)} disabled={pickedIndex === top.length - 1}>Puesto siguiente<ChevronRight size={16} aria-hidden="true" /></button>
+            <button type="button" className="hx-btn hx-main" onClick={() => openInExplorer(picked.id)}>Ver ficha completa ↑</button>
+          </div>
+        </>
+      ) : (
+        <p className="tm-empty">Ningún sismo elegido.</p>
+      )}
+    </div>
     </div>
   );
 }

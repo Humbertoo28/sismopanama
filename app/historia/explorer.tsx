@@ -7,9 +7,10 @@ import {
   type HistoricQuake,
 } from "../../lib/history";
 import type { Earthquake } from "../../lib/earthquakes";
-import { mercatorX, mercatorY } from "../satellite-tiles";
 import { computedFacts, usgsFacts, type Fact } from "../../lib/history-facts";
 import { H, MAX_LAT, MAX_LNG, MIN_LAT, MIN_LNG, W, px, py, radiusOf } from "./frame";
+import { writeSelection } from "./selection";
+import { SatTiles } from "./sat-tiles";
 import "./explorer.css";
 
 // La parte interactiva de la historia sísmica: un mapa con zoom, una línea de tiempo con reproducción, el detalle de cada sismo, las
@@ -33,6 +34,7 @@ const ROWS_FIRST = 12;
 const ROWS_MORE = 24;
 const MAX_ZOOM = 8;
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+const BOUNDS = { minLng: MIN_LNG, maxLng: MAX_LNG, minLat: MIN_LAT, maxLat: MAX_LAT };
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const kind = (quake: HistoricQuake) => (quake.magType ? quake.magType.charAt(0).toUpperCase() + quake.magType.slice(1).toLowerCase() : "");
 const clock = (time: number) => new Date(time).toISOString().slice(11, 16);
@@ -51,67 +53,6 @@ const subscribeHash = (notify: () => void) => {
   return () => window.removeEventListener("hashchange", notify);
 };
 const readHash = () => window.location.hash;
-function writeSelection(id: string | null) {
-  const base = window.location.pathname + window.location.search;
-  window.history.replaceState(null, "", id ? `${base}#sismo=${id}` : base);
-  window.dispatchEvent(new Event("hashchange"));
-}
-
-// ---------- imagen satelital del mapa plano ----------
-
-// Mosaicos de Esri World Imagery (los mismos del mapa en vivo y de la vista 3D). Cada mosaico es un rectángulo entre dos longitudes
-// y dos latitudes, y el mapa plano es lineal en las dos: se coloca tal cual (a esta escala la deformación de Mercator dentro de un
-// mosaico es de una fracción de píxel). Siempre hay una capa de fondo con pocos mosaicos y, al acercar, otra con más detalle.
-const IMAGERY = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile";
-const SAT_BASE_Z = 7;
-const SAT_MAX_Z = 11;
-const SAT_MAX_TILES = 30;
-const tileLng = (x: number, z: number) => (x / 2 ** z) * 360 - 180;
-const tileLat = (y: number, z: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
-
-type Tile = { z: number; x: number; y: number };
-function tilesFor(z: number, west: number, east: number, south: number, north: number): Tile[] {
-  const max = 2 ** z - 1;
-  const x0 = clamp(Math.floor(mercatorX(west, z)), 0, max);
-  const x1 = clamp(Math.floor(mercatorX(east, z)), 0, max);
-  const y0 = clamp(Math.floor(mercatorY(north, z)), 0, max);
-  const y1 = clamp(Math.floor(mercatorY(south, z)), 0, max);
-  const list: Tile[] = [];
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) list.push({ z, x, y });
-  return list;
-}
-const BASE_TILES = tilesFor(SAT_BASE_Z, MIN_LNG, MAX_LNG, MIN_LAT, MAX_LAT);
-
-function SatTiles({ vx, vy, vw, vh, pxWidth }: { vx: number; vy: number; vw: number; vh: number; pxWidth: number }) {
-  const west = MIN_LNG + (vx / W) * (MAX_LNG - MIN_LNG);
-  const east = MIN_LNG + ((vx + vw) / W) * (MAX_LNG - MIN_LNG);
-  const north = MAX_LAT - (vy / H) * (MAX_LAT - MIN_LAT);
-  const south = MAX_LAT - ((vy + vh) / H) * (MAX_LAT - MIN_LAT);
-  const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
-  // El zoom de mosaicos cuyo píxel casi iguala al de la pantalla (menos detalle si harían falta demasiados mosaicos).
-  let z = clamp(Math.ceil(Math.log2(((pxWidth * dpr) / Math.max(east - west, 0.01)) * (360 / 256))), SAT_BASE_Z, SAT_MAX_Z);
-  let detail = z > SAT_BASE_Z ? tilesFor(z, west, east, south, north) : [];
-  while (detail.length > SAT_MAX_TILES && z > SAT_BASE_Z) {
-    z -= 1;
-    detail = z > SAT_BASE_Z ? tilesFor(z, west, east, south, north) : [];
-  }
-  const overlap = 0.5 * (vw / W);
-  const image = (tile: Tile) => {
-    const left = px(tileLng(tile.x, tile.z));
-    const right = px(tileLng(tile.x + 1, tile.z));
-    const top = py(tileLat(tile.y, tile.z));
-    const bottom = py(tileLat(tile.y + 1, tile.z));
-    return (
-      <image key={`${tile.z}/${tile.x}/${tile.y}`} href={`${IMAGERY}/${tile.z}/${tile.y}/${tile.x}`} x={left} y={top} width={right - left + overlap} height={bottom - top + overlap} preserveAspectRatio="none" />
-    );
-  };
-  return (
-    <g className="hx-tiles" aria-hidden="true">
-      {BASE_TILES.map(image)}
-      {detail.map(image)}
-    </g>
-  );
-}
 
 // ---------- mapa ----------
 
@@ -217,7 +158,7 @@ function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, 
       <svg ref={svg} className={`hs-map hx-map${satellite ? " is-sat" : ""}`} viewBox={`${vx} ${vy} ${vw} ${vh}`} role="img" style={{ "--k": k } as CSSProperties}
         aria-label="Mapa de los sismos de magnitud 6 o más en Panamá desde 1900. La tabla de abajo trae los mismos datos.">
         <rect className="hs-sea" x="0" y="0" width={W} height={H} rx="14" />
-        {satellite && <SatTiles vx={vx} vy={vy} vw={vw} vh={vh} pxWidth={pxWidth} />}
+        {satellite && <SatTiles bounds={BOUNDS} width={W} height={H} vx={vx} vy={vy} vw={vw} vh={vh} pxWidth={pxWidth} />}
         <g className="hs-grid" aria-hidden="true">
           {lngLines.map(l => (
             <g key={`lng${l}`}>
