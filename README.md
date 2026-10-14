@@ -243,6 +243,22 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## 📣 Aviso único a todos: «síguenos en Instagram» (14 de octubre de 2026)
+
+**Pedido** de quien administra el sitio: «manda una alerta a todos, no importa qué magnitud hayan seleccionado, que diga que nos sigan en Instagram ojopanama507».
+
+**Qué se envió** (una sola vez, **14 de octubre de 2026 a las 3:51 p. m., hora de Panamá**, 20:51 UTC):
+
+> **Ojo Panamá en Instagram** — Síguenos en Instagram: @ojopanama507
+
+**A quién y resultado** (registro de Vercel del cron): **34 316 suscripciones** (todas, sin importar la magnitud mínima que eligió cada persona), **34 113 aceptadas** por los servicios de Google, Apple y los demás, **0 sin enviar**. «Aceptada» quiere decir que el servicio de push la recibió; no se puede saber cuántas personas la vieron o la tocaron.
+
+**Cómo se hizo.** Con el mismo método del aviso de aclaración de Juan Díaz: un archivo temporal (`lib/announcement-push.ts`, en el commit `48c500b`) llamado por el cron de cada minuto, **solo en producción**, que reserva una fila en `notified_quakes` antes de enviar (así no se repite aunque se crucen dos ejecuciones) y envía con el umbral `min_magnitude <= 10` (el tope del ajuste de cada persona es 10, así que entran todas). **Sin sirena ni voz:** el aviso no lleva magnitud y su id empieza por `anuncio-`, que `public/sw.js` excluye de la sirena de la página; sí suena y vibra como cualquier notificación del sistema y queda en pantalla hasta que se descarte (así se muestran todos los avisos de este sitio). Probado antes de subirlo con una base y un envío **simulados** (18 comprobaciones: fuera de producción no envía, una sola vez, carrera de dos ejecuciones, caída del servicio de push con reintento, sin suscriptores). El archivo y su llamada en el cron **se retiraron** después de enviarse; la fila de reserva sigue en la base.
+
+**Lo que no se puede hacer:** al tocar la notificación solo se abre una página de este mismo sitio (`public/sw.js` descarta cualquier otra dirección, para que un push falsificado no pueda abrir un sitio ajeno), así que **no abre Instagram directamente**: abre la portada. El texto lleva el nombre de la cuenta. Si se quiere que de la portada se llegue a Instagram con un toque, hay que poner el enlace `https://www.instagram.com/ojopanama507` en la página (hoy solo está en los datos estructurados para buscadores).
+
+---
+
 ## ⚡ Lista de sismos: la página se «caía» al tocar «Mayor magnitud»
 
 **Reporte (14 de octubre de 2026).** «Cuando alguien toca *Mayor magnitud*, se cae la página.» Ese botón ordena la lista «Sismos registrados» (`app/page.tsx`).
