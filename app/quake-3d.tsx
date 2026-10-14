@@ -65,6 +65,8 @@ type Props = {
   mechanism: Mechanism | null;
   // Interruptores de las capas del USGS, que maneja el mapa.
   layerControls: ReactNode;
+  // false = sin el interruptor «Réplicas» (la historia de Panamá no es una secuencia: son 94 sismos de 122 años; ocultar «réplicas» ahí dejaba solo el principal).
+  aftershockToggle?: boolean;
   onSelect: (id: string) => void;
 };
 
@@ -167,7 +169,7 @@ const moveText = (meters: number) => (meters >= 1 ? `${meters.toFixed(1)} m` : m
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, activeFaults, wave, shakeGrid, mechanism, layerControls, onSelect }: Props) {
+export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, activeFaults, wave, shakeGrid, mechanism, layerControls, aftershockToggle = true, onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -182,7 +184,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   // Las réplicas se ven desde el principio: la secuencia completa a su profundidad es lo que esta vista enseña mejor. Se pueden
   // ocultar en «Ajustes y capas» para mirar solo el sismo principal y su ruptura; esa elección vale mientras no cambie ningún filtro.
   const [aftershockChoice, setAftershockChoice] = useState<{ key: string; show: boolean } | null>(null);
-  const showAftershocks = aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : true;
+  const showAftershocks = !aftershockToggle || (aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : true);
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
   const [ruptureTime, setRuptureTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -1818,7 +1820,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
             <button type="button" aria-pressed={colorBy === "depth"} className={colorBy === "depth" ? "on" : ""} onClick={() => setColorBy("depth")}>Profundidad</button>
             <button type="button" aria-pressed={colorBy === "mag"} className={colorBy === "mag" ? "on" : ""} onClick={() => setColorBy("mag")}>Magnitud</button>
           </div>
-          {mainshock && (
+          {mainshock && aftershockToggle && (
             <div className="q3-seg" role="group" aria-label="Réplicas del sismo principal">
               <span className="q3-cap" aria-hidden="true">Réplicas</span>
               <button type="button" aria-pressed={showAftershocks} className={showAftershocks ? "on" : ""} onClick={() => setAftershockChoice({ key: filtersKey, show: true })}>Sí</button>

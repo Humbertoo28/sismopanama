@@ -645,7 +645,7 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
                 {three ? (
                   <three.Scene
                     events={events3d} filtersKey={filtersKey} fitKey={0} restartKey={0} expanded={full} overlay={full} onToggleExpanded={() => setFull(value => !value)}
-                    mainshock={main3d} selectedId={selected?.id ?? null} replay={null} region={null} fault={null} felt={null} shaking={null}
+                    mainshock={main3d} aftershockToggle={false} selectedId={selected?.id ?? null} replay={null} region={null} fault={null} felt={null} shaking={null}
                     plates={layers.plates} activeFaults={layers.faults} wave={false} shakeGrid={null} mechanism={null}
                     layerControls={(
                       <div className="q3-seg q3-layers" role="group" aria-label="Capas del mapa 3D">
