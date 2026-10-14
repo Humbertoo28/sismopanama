@@ -6,10 +6,10 @@ import {
   decadeSeries, distanceKm, eraOf, filterQuakes, formatDateUTC, formatMag, m7Gaps, placeEs, rankById, sameDay, withinKm, yearOf, yearsBetween,
   type HistoricQuake,
 } from "../../lib/history";
-import type { Earthquake } from "../../lib/earthquakes";
 import { computedFacts, usgsFacts, type Fact } from "../../lib/history-facts";
 import { H, MAX_LAT, MAX_LNG, MIN_LAT, MIN_LNG, W, px, py, radiusOf } from "./frame";
 import { writeSelection } from "./selection";
+import { toEarthquake } from "./adapter";
 import { SatTiles } from "./sat-tiles";
 import "./explorer.css";
 
@@ -39,13 +39,6 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const kind = (quake: HistoricQuake) => (quake.magType ? quake.magType.charAt(0).toUpperCase() + quake.magType.slice(1).toLowerCase() : "");
 const clock = (time: number) => new Date(time).toISOString().slice(11, 16);
 const coords = (quake: HistoricQuake) => `${Math.abs(quake.lat).toFixed(2)}° ${quake.lat >= 0 ? "N" : "S"}, ${Math.abs(quake.lng).toFixed(2)}° ${quake.lng >= 0 ? "E" : "O"}`;
-
-// Un sismo del historial con la forma de los del catálogo en vivo (la escena 3D del sitio la espera así).
-const toEarthquake = (quake: HistoricQuake): Earthquake => ({
-  id: quake.id,
-  properties: { mag: quake.mag, place: placeEs(quake.place), time: quake.time, url: quake.url, source: "usgs", status: "reviewed", magType: quake.magType },
-  geometry: { coordinates: quake.depth === null ? [quake.lng, quake.lat] : [quake.lng, quake.lat, quake.depth] },
-});
 
 // ---- el sismo elegido vive en la dirección (#sismo=<id>): se puede compartir y sobrevive a recargar la página ----
 const subscribeHash = (notify: () => void) => {

@@ -37,3 +37,29 @@ html[data-theme="dark"] .tm-rank.hs-now{color:#fff}
 .tm-sat .hs-group rect{fill:none}
 .tm-sat .hs-pin circle:not(.hs-hit){filter:drop-shadow(0 0 2px #0b1a33)}
 html[data-theme="dark"] .tm-credit{color:var(--ink-2,#c3cfdf)}
+
+/* Filtros por provincia y ciudad, y la lista para elegir uno de los 12 (sobre todo en 3D, donde no hay números en el mapa). */
+.tm-controls{margin-bottom:6px}
+.tm-field{display:inline-flex;align-items:center;gap:8px}
+.tm-field select{min-height:42px;max-width:100%;padding:0 12px;border:1px solid var(--line-strong,#c3ccd7);border-radius:10px;background:var(--surface,#fff);color:var(--ink,#121a2a);font:700 calc(14px*var(--ts,1)) "DM Sans",sans-serif}
+.tm-field select:focus-visible{outline:3px solid var(--focus,#1f5fd1);outline-offset:2px}
+.tm-count{margin:0 0 12px;font-size:calc(13px*var(--ts,1));color:#4a5568}
+.tm-ranks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.tm-rankbtn{gap:8px;padding:0 14px 0 8px}
+.tm-rankbtn b{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;font:800 calc(13px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif;color:#0b2a5b;background:#b7c8e4}
+.tm-rankbtn[data-era="e2"] b{background:#5fa0f0}
+.tm-rankbtn[data-era="e3"] b{background:#ffd166}
+.tm-rankbtn[data-era="now"] b{background:#da121a;color:#fff}
+.tm-wave{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--primary-soft,#e8eef8);font-size:calc(14px*var(--ts,1));line-height:1.45}
+.tm-wave:empty{display:none}
+.tm-wave p{margin:0 0 8px}
+.tm-wave p:last-child{margin-bottom:0}
+@media(max-width:700px){.tm-field{display:flex;width:100%;justify-content:space-between}.tm-field select{flex:1 1 auto}}
+html[data-theme="dark"] .tm-count{color:var(--ink-2,#c3cfdf)}
+html[data-theme="dark"] .tm-field select{background:var(--surface,#121b2c);border-color:var(--line,#2a3a55);color:var(--ink,#e8eef8)}
+html[data-theme="dark"] .tm-wave{background:#16243f;color:var(--ink,#e8eef8)}
+.tm-how{margin:0 0 12px;font-size:calc(14px*var(--ts,1));color:#4a5568}
+.tm-how summary{cursor:pointer;font-weight:700;color:var(--ink,#121a2a)}
+.tm-how p{margin:6px 0 0}
+html[data-theme="dark"] .tm-how{color:var(--ink-2,#c3cfdf)}
+html[data-theme="dark"] .tm-how summary{color:var(--ink,#e8eef8)}

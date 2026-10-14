@@ -78,7 +78,7 @@ async function getJson(url: string): Promise<unknown> {
   return response.json();
 }
 
-function mechanismOf(product: Product | undefined): Mechanism | null {
+export function mechanismOf(product: Product | undefined): Mechanism | null {
   if (!product) return null;
   const p = product.properties;
   const tensor = { rr: num(p["tensor-mrr"]), tt: num(p["tensor-mtt"]), pp: num(p["tensor-mpp"]), rt: num(p["tensor-mrt"]), rp: num(p["tensor-mrp"]), tp: num(p["tensor-mtp"]) };
@@ -97,7 +97,7 @@ function mechanismOf(product: Product | undefined): Mechanism | null {
 
 type Ffm = { features?: { geometry?: { type?: string; coordinates?: number[][][] }; properties?: { slip?: number; trup?: number; rise?: number } }[] };
 
-async function faultOf(product: Product | undefined): Promise<Fault | null> {
+export async function faultOf(product: Product | undefined): Promise<Fault | null> {
   const url = product?.contents["FFM.geojson"]?.url;
   if (!product || !url) return null;
   const ffm = (await getJson(url)) as Ffm;
@@ -170,7 +170,7 @@ type Coverage = {
   ranges?: { MMI?: { values?: (number | null)[]; axisNames?: string[] } };
 };
 
-async function shakeGridOf(product: Product | undefined): Promise<ShakeGrid | null> {
+export async function shakeGridOf(product: Product | undefined): Promise<ShakeGrid | null> {
   const url = product?.contents["download/coverage_mmi_low_res.covjson"]?.url;
   if (!url) return null;
   const coverage = (await getJson(url)) as Coverage;
@@ -222,6 +222,40 @@ export async function fetchMainshockDetail(): Promise<MainshockDetail> {
     felt: value(felt),
     shaking: value(shaking),
     shakeGrid: value(shakeGrid),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+// Lo que hace falta para mostrar cómo se propagó la sacudida de un sismo del historial: la rejilla de intensidad de su ShakeMap y,
+// si el USGS modeló la ruptura (hoy solo el de 2026), su falla y mecanismo. `shakeGrid` es null si el USGS no publica ShakeMap de ese
+// sismo (de los 12 mayores de la historia, dos no lo tienen: no se inventa uno).
+export type WaveData = {
+  id: string;
+  url: string;
+  shakeGrid: ShakeGrid | null;
+  fault: Fault | null;
+  mechanism: Mechanism | null;
+  fetchedAt: string;
+};
+
+export async function fetchWaveData(eventId: string): Promise<WaveData> {
+  const detail = (await queryUsgs({ eventid: eventId })) as Detail | null;
+  const products = detail?.properties.products;
+  if (!detail || !products) throw new Error("Respuesta inválida del catálogo");
+  const [shakeGrid, fault, mechanism] = await Promise.allSettled([
+    shakeGridOf(products["shakemap"]?.[0]),
+    faultOf(products["finite-fault"]?.[0]),
+    Promise.resolve(mechanismOf(products["moment-tensor"]?.[0])),
+  ]);
+  const value = <T,>(result: PromiseSettledResult<T | null>) => (result.status === "fulfilled" ? result.value : null);
+  // Si el producto existe pero no se pudo leer, es un fallo (no «no hay ShakeMap»): se deja pasar el error para no cachear un «no hay» falso.
+  if (products["shakemap"]?.[0] && shakeGrid.status === "rejected") throw shakeGrid.reason;
+  return {
+    id: eventId,
+    url: detail.properties.url ?? `https://earthquake.usgs.gov/earthquakes/eventpage/${eventId}`,
+    shakeGrid: value(shakeGrid),
+    fault: value(fault),
+    mechanism: value(mechanism),
     fetchedAt: new Date().toISOString(),
   };
 }

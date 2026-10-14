@@ -5,14 +5,15 @@ import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatDateUT
 import type { Earthquake } from "../../lib/earthquakes";
 import { loadNoaaFacts, type NoaaFacts } from "../../lib/noaa-history";
 import { PANAMA_CITY, PLACES } from "../../lib/places";
-import { provinceLabel } from "../../lib/province-of";
+import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../../lib/province-of";
+import { placeName, placeOfEvent } from "../../lib/place-of";
 import { PROVINCES } from "../../lib/provinces";
 import { PROVINCE_LABELS } from "../../lib/province-labels";
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import HistoryExplorer from "./explorer";
 import { outlinePath, px, py } from "./frame";
-import TopMap from "./top-map";
+import TopMap, { type QuakeWhere } from "./top-map";
 import "./historia.css";
 
 const TITLE = "Historia sísmica de Panamá: sismos grandes desde 1900";
@@ -104,11 +105,26 @@ function Body({ summary: s, panama, noaa, provinceTexts }: { summary: HistorySum
   const main = s.mainshock;
   const sinceM7 = main && s.previousM7 ? yearsBetween(s.previousM7.time, main.time) : null;
   // El mapa de los 12 más grandes (fijo): el explorador lo coloca entre las décadas y la tabla.
+  // Dónde cae cada uno de los 12 (provincia y ciudad), con las reglas del filtro del mapa en vivo.
+  const where: Record<string, QuakeWhere> = Object.fromEntries(
+    s.top.map(quake => {
+      const event = asEarthquake(quake);
+      const province = provinceKey(event);
+      const city = placeOfEvent(event);
+      return [quake.id, {
+        province,
+        provinceName: province === FAR_OFFSHORE ? "Mar adentro" : PROVINCE_BY_ID.get(province)?.name ?? province,
+        provinceText: provinceLabel(event),
+        city: city?.place.id ?? "",
+        cityName: city ? placeName(city.place) : null,
+      }];
+    }),
+  );
   const topMap = (
     <section className="hs-card" aria-labelledby="hs-top-map-h">
       <h2 id="hs-top-map-h">Los {s.top.length} más grandes en el mapa</h2>
-      <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo; toca uno para ver ese sismo. Los del suroeste caen muy juntos: se ven también en el acercamiento.</p>
-      <TopMap top={s.top} total={s.total} provinceTexts={provinceTexts} />
+      <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo. Toca uno para ver su ficha; cambia entre plano, satélite y 3D (con cómo se propagó su sacudida) y filtra por provincia y ciudad.</p>
+      <TopMap top={s.top} total={s.total} provinceTexts={provinceTexts} where={where} />
       <ul className="hs-legend" aria-label="Leyenda del mapa de los más grandes">
         <li><i className="hs-sw hs-e1" /> 1900–1949</li>
         <li><i className="hs-sw hs-e2" /> 1950–1999</li>
