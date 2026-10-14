@@ -26,6 +26,7 @@ Tras el histórico sismo de **Magnitud 7.7** ocurrido frente a las costas del Pa
    - **United States Geological Survey (USGS):** Monitoreo global de alta precisión.
    - **Centro Sismológico Euromediterráneo (EMSC):** Detección rápida regional.
    - Conmutación automática: si una agencia experimenta caídas, las otras asumen sin interrupción del servicio.
+   - Un sismo que **solo publica el EMSC** se muestra como «Sin confirmar» y no dispara alertas hasta que el IGC o el USGS lo confirmen (ver «🚨 Sismos sin confirmar» más abajo).
 
 2. **Alertas Web Push en Segundo Plano (Sin App Store):**
    - Funciona mediante el estándar **W3C Web Push API** y **VAPID**.
@@ -150,7 +151,7 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 **Selección cruzada.** Solo hay una selección a la vez (un intervalo, una banda de magnitud o una de profundidad). Aparece un aviso «Intervalo / Magnitud / Profundidad: … · N de M sismos resaltados» con *Quitar selección*; cambiar un filtro (periodo, magnitud, fuentes) la quita y deshace el zoom. Las bandas tienen `min` incluido y `max` excluido (`lib/analytics.ts`), la misma regla de las barras, así que lo resaltado coincide exactamente con el número de cada barra.
 
-**Pantalla completa de la línea de tiempo** (la reproducción de la secuencia pasa rápido en una tarjeta pequeña; así se ve grande). Botón **«Pantalla completa»** junto a los controles (en el teléfono, solo el icono). Usa la pantalla completa del navegador y, si no la concede (iPhone, navegadores integrados), la línea de tiempo se amplía sobre toda la página: es el mismo criterio que la pantalla completa del mapa (`app/quake-map.tsx`).
+**Pantalla completa de la línea de tiempo** (publicada el 13 de octubre de 2026 en el commit `4b64d5d`, verificada en producción: el botón existe, la gráfica pasa de 320 a 682 px de alto y Escape la cierra; la reproducción) de la secuencia pasa rápido en una tarjeta pequeña; así se ve grande). Botón **«Pantalla completa»** junto a los controles (en el teléfono, solo el icono). Usa la pantalla completa del navegador y, si no la concede (iPhone, navegadores integrados), la línea de tiempo se amplía sobre toda la página: es el mismo criterio que la pantalla completa del mapa (`app/quake-map.tsx`).
 - La gráfica llena el alto de la pantalla; zoom, arrastre, Ctrl/⌘ + rueda, pausa, seguir y reiniciar funcionan igual porque es el mismo componente con más espacio.
 - La lectura de la reproducción (magnitud, lugar, hora) se hace más grande y pasa a la esquina **superior derecha**, para no tapar el sismo principal, que queda arriba a la izquierda.
 - Al tocar un sismo aparece abajo una barra con su magnitud, lugar, hora, profundidad y fuente; el sismo queda elegido también en la página, así que al salir está el detalle de siempre.
@@ -211,11 +212,17 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 - Con los datos en vivo de ese momento: 12 sismos «sin confirmar» y ninguno con alias (tras retirar el de Juan Díaz, 11 y ninguno en la zona de la capital, ni en la consulta de Panamá ni en la de los alrededores); simulando las 16:37 del 13 de octubre, la regla no habría enviado el aviso del EMSC.
 - En el navegador (servidor local, respuesta de `/api/earthquakes` sustituida solo en esa pestaña; no se llamó a ningún endpoint de push): un sismo nuevo solo-EMSC **no** muestra la alerta de la página; al llegar el mismo sismo confirmado por el IGC (con el id del EMSC como alias) la alerta aparece una sola vez; con el IGC simulado como caído, el solo-EMSC sí alerta. La lista muestra 12 rótulos, la ficha y el globo del mapa su insignia, `/analisis` «· sin confirmar» en la tabla. axe: sin violaciones nuevas (dos que ya existían en la portada: `.now-stats` y `.now-side`).
 
+**Estado: publicado y verificado en producción (13 de octubre de 2026).** Commit `9ac2768` en `main`, despliegue de Vercel listo en `www.ojopanama.com`. Comprobado en vivo después de publicar: la API (`/api/earthquakes`) ya no devuelve `emsc:2074346` (519 eventos); la portada no tiene ninguna fila de M 4.0 cerca de Juan Díaz y muestra **11** rótulos «Sin confirmar · solo EMSC» (antes 12). Antes, el mismo día, se había publicado el commit `4b64d5d` (pantalla completa de la línea de tiempo, optimización de `/analisis` y arreglo del aviso «Nuevo sismo»; ver «📊 Gráficas interactivas y animadas»).
+
+**Cómo retirar otro sismo desmentido.** Agregar su id (por ejemplo `emsc:2074346`, `igc:1791926496` o el del USGS) al conjunto `RETRACTED_EVENTS` de `lib/catalogs.ts`, con un comentario que diga qué institución lo desmintió y qué datos lo respaldan; hoy el filtro se aplica a los registros del EMSC (`fetchEmsc`), que es de donde vino este. Después de publicar, la API tarda hasta ~2 minutos en renovar su caché (30 s en el borde más 90 s de reserva). Los dispositivos que ya tienen la página abierta lo dejan de ver al actualizar. **No se puede deshacer un aviso ya enviado.** Si hiciera falta una aclaración a los suscriptores, hay que decidirla y enviarla aparte; esta vez no se envió ninguna.
+
 **Lo que no se hizo ni se sabe.**
 - **No se puede retirar** una alerta ya enviada, y no se mandó ninguna aclaración a los suscriptores.
 - Los otros 11 sismos de solo EMSC **siguen contando como réplicas** en los conteos de la página (el de Juan Díaz ya no); no se tocaron los conteos por esos 11.
 - No se sabe cuántos de los 11 anteriores del 9 al 12 de octubre llegaron a avisarse (registros fuera de las 24 h).
 - Una alerta de un sismo real que el EMSC publique antes que el IGC sufrirá el retraso que tarde el IGC en listarlo (el IGC suele listar en 1–5 min; 4 min en el ejemplo del IGC de las 16:21).
+- El retiro por `RETRACTED_EVENTS` solo filtra registros del EMSC; si algún día hubiera que retirar uno del IGC o del USGS, habría que aplicar el mismo filtro en sus consultas.
+- Aviso de accesibilidad previo a esto y sin resolver: en la portada `.now-stats` (lista de definiciones) y `.now-side` (región complementaria) tienen cada uno una violación de axe que ya existía.
 
 ---
 
