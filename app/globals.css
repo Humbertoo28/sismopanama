@@ -228,3 +228,4 @@ body:before{content:"";position:fixed;z-index:2000;top:0;left:0;right:0;height:3
 .seq-hour-track i{transform-origin:left center;animation:seq-grow .7s cubic-bezier(.2,.9,.3,1) calc(var(--n,0)*55ms) backwards}
 @keyframes seq-grow{from{transform:scaleX(0)}}
 @media(prefers-reduced-motion:reduce){.seq-hour-track i{animation:none}}
+.events-more{display:flex;justify-content:center;width:100%;margin:12px 0 4px;min-height:44px}

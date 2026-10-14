@@ -243,6 +243,25 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## ⚡ Lista de sismos: la página se «caía» al tocar «Mayor magnitud»
+
+**Reporte (14 de octubre de 2026).** «Cuando alguien toca *Mayor magnitud*, se cae la página.» Ese botón ordena la lista «Sismos registrados» (`app/page.tsx`).
+
+**Lo que se encontró.**
+- **Una captura de un iPhone confirmó que es una caída real.** Se recibió una captura del navegador integrado de **Instagram** en un iPhone con la pantalla en negro y el texto «Ocurrió un problema varias veces en https://www.ojopanama.com/#eventos». Ese mensaje de WebKit sale cuando el proceso que dibuja la página se cierra (casi siempre porque el sistema se queda sin memoria) y vuelve a cerrarse al recargarla. Un navegador integrado tiene menos memoria que Safari, y a la web llega mucha gente desde Instagram. Lo que no se sabe es el modelo del iPhone ni la versión de iOS.
+- **No se pudo reproducir la caída en una computadora** (la falla es de un proceso de iPhone que el sistema cierra, y una computadora tiene mucha más memoria). Se probó en la web publicada, en ventana de escritorio y de teléfono (375 px): ordenar, volver, 12 cambios seguidos, con «Incluir alrededores», con «Solo réplicas», con la ficha abierta y eligiendo una fila después de ordenar. Sin errores en la consola ni pantalla de error; no hay ids repetidos ni magnitudes vacías en los datos.
+- **Sí se midió una página que se congela.** La lista dibujaba **todos** los sismos (540 filas, 7 546 elementos en la página) y cada cambio de orden los volvía a dibujar: en una computadora rápida tardaba entre **0.3 y 1.2 s** (promedio ~380–435 ms) por cambio. El costo crece con las filas (540 filas ≈ 200–400 ms; 343 ≈ 177 ms; 27 ≈ 28 ms) y la lista crece con cada réplica. En un teléfono de gama media o baja eso multiplica varias veces: varios segundos con la página sin responder, que desde fuera parece «caída». **Es la causa más probable, pero no se confirmó en un teléfono real.** Quitar las animaciones (`content-visibility`, «Reducir animaciones») casi no ayudaba: el costo estaba en dibujar tantas filas, no en animarlas.
+
+**Qué cambió.** Solo se dibujan las primeras **60 filas**; al final de la lista hay un botón **«Mostrar más sismos · quedan N»** que agrega 120 cada vez. El orden se calcula sobre todos los sismos (las 60 de «Mayor magnitud» son las 60 mayores de verdad) y al cambiar de orden la lista vuelve a 60. Los conteos de arriba («538 réplicas + 1 sismo principal…»), el mapa y los filtros no cambian: solo cambia cuántas filas se dibujan. Constante `ROW_PAGE` en `app/page.tsx`.
+
+**Resultado** (compilación de producción local en ventana de teléfono, misma computadora y mismo panel que la medición de «antes», que se hizo en la web publicada): cambio de orden **43 ms de promedio (máximo 60 ms)** frente a ~380–435 ms antes; elementos en la página **7 546 → 2 837**. La carga inicial de la portada también dibuja menos.
+
+**Cómo se probó.** Orden correcto con las 540 filas (las 60 primeras de «Mayor magnitud» van de 7.7 a 6.0 sin subir, y la lista completa también), «Mostrar más» (60 → 180 → … → 540, el botón desaparece al llegar al final y el contador baja bien), volver a «Recientes» (vuelve a 60), elegir una fila (se abre la ficha y queda marcada) y sin errores en la consola. No se ejecutó axe en esta compilación.
+
+**Lo que no se sabe ni se probó.** Un teléfono real (ni Safari ni Firefox); si esto era de verdad el origen de la caída. Si vuelve a pasar: modelo de teléfono, navegador y qué se ve (pantalla blanca, mensaje de error, se reinicia o se queda congelada) para buscar otra causa. El texto «quedan N» y los botones leen bien con lectores de pantalla, pero la lista sigue siendo una región `aria-live` y puede anunciar las filas nuevas al pulsar «Mostrar más».
+
+---
+
 ## 🛡️ Seguridad y Buenas Prácticas (OWASP Top 10)
 
 - **Anti-SSRF:** Validación estricta de endpoints push con lista blanca de proveedores oficiales (`fcm.googleapis.com`, `push.apple.com`, `mozilla`, `windows`).
