@@ -1,9 +1,0 @@
-.clar { display: grid; gap: 10px; margin: 0 0 18px; padding: 16px 18px; border-radius: 14px; border: 1.5px solid #8bb0ee; background: #eef4ff; color: #12284a; box-shadow: 0 6px 20px #2a78d626; }
-.clar h2 { margin: 0; font-family: "Space Grotesk", sans-serif; font-size: calc(17px*var(--ts,1)); line-height: 1.25; letter-spacing: 0; }
-.clar p { margin: 0; font-size: calc(14px*var(--ts,1)); line-height: 1.5; max-width: 80ch; }
-.clar b { font-weight: 800; }
-.clar button { justify-self: start; min-height: 44px; padding: 0 20px; border-radius: 10px; border: 1px solid #12284a; background: #12284a; color: #fff; font-weight: 700; font-size: calc(14px*var(--ts,1)); cursor: pointer; }
-.clar button:focus-visible { outline: 3px solid #0a3a8c; outline-offset: 2px; }
-html[data-theme="dark"] .clar { background: #12203a; border-color: #2f4f86; color: #dbe7ff; box-shadow: none; }
-html[data-theme="dark"] .clar button { background: #dbe7ff; border-color: #dbe7ff; color: #12203a; }
-html[data-theme="dark"] .clar button:focus-visible { outline-color: #9cc0ff; }
