@@ -18,6 +18,7 @@ import SequenceChart from "./sequence-chart";
 import AlertModal from "./alert-modal";
 import PwaInstall, { InstallCard } from "./pwa-install";
 import InAppBrowserNotice from "./in-app-browser-notice";
+import ClarificationNotice from "./clarification-notice";
 import {
   ALARM_MAX_AGE_MS,
   broadcastEarthquakeAlert,
@@ -681,6 +682,7 @@ export default function Home() {
         <div className="content-wrap">
           <InAppBrowserNotice />
           <InstallCard />
+          <ClarificationNotice />
           <StatusNow
             latest={hero}
             main={main}
