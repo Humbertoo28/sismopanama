@@ -1,0 +1,119 @@
+/* Explorador interactivo de la historia sísmica (mapa con zoom, línea de tiempo, detalle, décadas, tabla). Usa los colores del sitio
+   (variables de theme.css) para verse bien en tema claro y oscuro; los tamaños de texto multiplican por --ts. */
+
+/* Controles */
+.hx-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;margin:0 0 12px}
+.hx-group{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px}
+.hx-label{font:800 calc(11px*var(--ts,1)) "DM Sans",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted,#566275)}
+.hx-chip,.hx-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 15px;border-radius:999px;border:1px solid var(--line-strong,#c3ccd7);background:var(--surface,#fff);color:var(--ink,#121a2a);font:700 calc(14px*var(--ts,1)) "DM Sans",sans-serif;text-decoration:none;cursor:pointer;transition:background-color .15s,transform .1s}
+.hx-btn{border-radius:10px;padding:8px 14px;line-height:1.25;text-align:center}
+.hx-chip:hover:not(:disabled),.hx-btn:hover:not(:disabled){background:var(--primary-soft,#e8eef8)}
+.hx-chip:active:not(:disabled),.hx-btn:active:not(:disabled){transform:scale(.97)}
+.hx-chip[aria-pressed="true"]{background:var(--primary,#0b2a5b);border-color:var(--primary,#0b2a5b);color:#fff}
+.hx-main{background:var(--primary,#0b2a5b);border-color:var(--primary,#0b2a5b);color:#fff}
+.hx-main:hover:not(:disabled){background:var(--primary-hover,#12397a)}
+.hx-icon{min-width:42px;padding:0}
+.hx-btn:disabled,.hx-chip:disabled{opacity:.5;cursor:default}
+.hx-chip:focus-visible,.hx-btn:focus-visible,.hx-rowbtn:focus-visible,.hx-dec:focus-visible,.hx-gapbtn:focus-visible,.hx-linkbtn:focus-visible,.hx-scrub input:focus-visible{outline:3px solid var(--focus,#1f5fd1);outline-offset:2px}
+
+.hx-scrub{display:grid;gap:4px;margin:0 0 4px;color:var(--ink-2,#364357);font-size:calc(15px*var(--ts,1))}
+.hx-scrub strong{color:var(--ink,#121a2a)}
+.hx-scrub small{color:var(--muted,#566275);font-size:calc(13px*var(--ts,1))}
+.hx-scrub input{width:100%;height:32px;margin:0;accent-color:var(--primary,#0b2a5b);cursor:pointer}
+.hx-count{margin:0 0 12px;color:var(--ink-2,#364357);font-size:calc(14px*var(--ts,1))}
+
+/* Mapa, línea de tiempo y detalle */
+.hx-stage{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);gap:18px;align-items:start}
+.hx-visual{min-width:0}
+.hx-focus{border-radius:14px}
+.hx-focus:focus-visible{outline:3px solid var(--focus,#1f5fd1);outline-offset:3px}
+.hx-map-wrap{position:relative;touch-action:pan-y;cursor:pointer;border-radius:14px;overflow:hidden;-webkit-user-select:none;user-select:none}
+.hx-map-wrap.is-zoomed{touch-action:none;cursor:grab}
+.hx-map-wrap.is-panning{cursor:grabbing}
+.hx-map .hs-land{vector-effect:non-scaling-stroke}
+.hx-map .hs-dot{vector-effect:non-scaling-stroke}
+.hx-map .hs-grid text{font-size:calc(11px*var(--k,1))}
+.hx-map .hs-grid line{vector-effect:non-scaling-stroke}
+.hx-cities rect{fill:#fff;stroke:#0b2a5b;stroke-width:1px;vector-effect:non-scaling-stroke}
+.hx-cities text{fill:#e8f0ff;font:600 calc(11px*var(--k,1)) "DM Sans",sans-serif;paint-order:stroke;stroke:#0b2a5b;stroke-width:calc(3px*var(--k,1));stroke-linejoin:round}
+.hx-selring{fill:none;stroke:#fff;stroke-width:3px;vector-effect:non-scaling-stroke}
+/* El radio de cada círculo llega en --r (unidades del mapa); en celular, donde el mapa se reduce a ~40 %, se agranda con --boost para poder verlos y tocarlos. */
+.hx-map .hs-dot,.hx-map .hs-halo,.hx-map .hx-selring,.hx-strip .hs-dot,.hx-strip .hx-selring{r:calc(var(--r)*var(--boost,1)*1px)}
+.hx-tip{position:absolute;z-index:2;transform:translate(-50%,-135%);padding:4px 9px;border-radius:8px;background:#0b1a33;color:#fff;font:600 calc(13px*var(--ts,1)) "DM Sans",sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px #0006}
+.hx-pick{display:none}
+.hx-hint{margin:8px 0 10px;color:var(--muted,#566275);font-size:calc(13px*var(--ts,1))}
+.hx-strip{display:block;width:100%;height:auto;margin:0 0 4px;border-radius:12px;cursor:pointer}
+.hx-strip .hs-grid text{font-size:11px}
+.hx-strip .hs-dot{stroke-width:1px}
+.hx-window{fill:#ffffff14}
+.hx-cursor{stroke:#ffd166;stroke-width:1.6;stroke-dasharray:4 3}
+.hx-faint circle{opacity:.2}
+
+.hx-detail{min-width:0;padding:16px 18px;border:1px solid var(--line,#dce2e9);border-radius:14px;background:var(--surface-2,#f7f9fb);color:var(--ink,#121a2a)}
+.hx-detail-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.hx-mag{display:block;font:700 calc(30px*var(--ts,1))/1.1 "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.03em;color:var(--red,#b8102b)}
+.hx-mag small{font-size:calc(14px*var(--ts,1));color:var(--muted,#566275);letter-spacing:0;font-weight:600}
+.hx-when{display:block;font-size:calc(14px*var(--ts,1));color:var(--ink-2,#364357)}
+.hx-place{margin:6px 0 10px;font:700 calc(17px*var(--ts,1))/1.3 "DM Sans",sans-serif}
+.hx-facts{display:grid;gap:6px;margin:0 0 10px}
+.hx-facts div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line,#dce2e9);font-size:calc(14px*var(--ts,1))}
+.hx-facts dt{color:var(--muted,#566275)}
+.hx-facts dd{margin:0;font-weight:700;text-align:right}
+.hx-lines{margin:0 0 10px;padding:0;list-style:none;display:grid;gap:8px}
+.hx-lines li{padding:8px 12px;border-radius:10px;background:var(--surface,#fff);border-left:4px solid var(--primary,#0b2a5b);font-size:calc(14.5px*var(--ts,1));line-height:1.45}
+.hx-same{margin:0 0 10px;font-size:calc(14.5px*var(--ts,1))}
+.hx-linkbtn{padding:0;border:0;background:none;color:var(--primary,#0b2a5b);font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.hx-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.hx-note{margin:8px 0 0;color:var(--muted,#566275);font-size:calc(12.5px*var(--ts,1));line-height:1.45}
+.hx-empty{margin:0 0 10px;color:var(--ink-2,#364357);font-size:calc(15px*var(--ts,1))}
+
+/* Décadas como filtro */
+.hs-decades.hx-decades li{display:block}
+.hx-dec{display:grid;grid-template-columns:64px minmax(0,1fr) 34px 120px;align-items:center;gap:12px;width:100%;min-height:42px;padding:4px 8px;border:1px solid transparent;border-radius:10px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.hx-dec:hover:not(:disabled){background:var(--primary-soft,#e8eef8)}
+.hx-dec.is-on{background:var(--primary-soft,#e8eef8);border-color:var(--focus,#1f5fd1)}
+.hx-dec:disabled{opacity:.55;cursor:default}
+
+/* Tabla */
+.hx-sorts{margin:0 0 10px}
+.hx-rowbtn{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap;min-height:36px;padding:2px 0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.hs-table tr.is-selected{background:var(--primary-soft,#e8eef8)}
+.hx-more{margin-top:14px}
+
+/* Los de M 7 o más */
+.hx-gaps{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 10px}
+.hx-gaps li{display:grid;gap:6px;justify-items:center}
+.hx-gap{max-width:110px;text-align:center;font-size:calc(12.5px*var(--ts,1));color:var(--muted,#566275);line-height:1.25}
+.hx-gapbtn{display:grid;gap:2px;justify-items:center;min-width:92px;min-height:64px;padding:8px 12px;border-radius:14px;border:2px solid #fff;box-shadow:0 0 0 1px #17253c44;font:inherit;color:#0b2a5b;cursor:pointer}
+.hx-gapbtn strong{font:800 calc(18px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif}
+.hx-gapbtn span{font-size:calc(13px*var(--ts,1));font-weight:700}
+.hx-gapbtn.hs-e1{background:#b7c8e4}
+.hx-gapbtn.hs-e2{background:#5fa0f0}
+.hx-gapbtn.hs-e3{background:#ffd166}
+.hx-gapbtn.hs-now{background:#da121a;color:#fff}
+
+@media(min-width:901px){.hx-detail{position:sticky;top:calc(var(--header-h,64px) + var(--nav-h,52px) + 14px)}}
+@media(max-width:900px){
+  .hx-stage{grid-template-columns:minmax(0,1fr)}
+  /* Con el detalle debajo del mapa, lo elegido se resume aquí mismo y un toque baja hasta el detalle. */
+  .hx-pick{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;margin:8px 0 0;padding:8px 12px;border-radius:10px;background:var(--primary-soft,#e8eef8);color:var(--ink,#121a2a);font-size:calc(14px*var(--ts,1));line-height:1.35}
+}
+@media(max-width:700px){
+  .hx-map,.hx-strip{--boost:2.1}
+  .hx-controls{gap:10px 14px}
+  .hx-dec{grid-template-columns:56px minmax(0,1fr) 30px;gap:10px}
+  .hx-dec .hs-dec-max{grid-column:2 / -1;margin-top:-4px}
+  /* En celular el mapa se reduce a ~45 %: los rótulos del SVG se agrandan para seguir leyéndose. */
+  .hx-map .hs-grid text{font-size:calc(19px*var(--k,1))}
+  .hx-cities text{font-size:calc(19px*var(--k,1));stroke-width:calc(5px*var(--k,1))}
+  .hx-strip .hs-grid text{font-size:19px}
+  .hx-btn span{display:inline}
+}
+@media(prefers-reduced-motion:reduce){.hx-chip,.hx-btn{transition:none}}
+html[data-a11y-motion="reduce"] :is(.hx-chip,.hx-btn){transition:none}
+html[data-theme="dark"] .hx-gapbtn:not(.hs-now){color:#0b2a5b}
+html[data-theme="dark"] .hx-tip{background:#e8f0ff;color:#0b1a33}
+.hs-table .hx-rowbtn small{color:var(--ink-2,#364357)}
+html[data-theme="dark"] .hx-linkbtn{color:#8fb8ff}
+html[data-theme="dark"] .hx-chip[aria-pressed="true"],html[data-theme="dark"] .hx-main{background:#2f6fe0;border-color:#2f6fe0;color:#fff}
+html[data-theme="dark"] .hx-lines li{background:var(--surface,#121b2c)}

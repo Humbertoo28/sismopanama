@@ -1,7 +1,6 @@
 import type { CSSProperties } from "react";
 import { PANAMA_RINGS } from "../../lib/panama";
-import { formatDateUTC, formatMag, placeEs, type HistoricQuake } from "../../lib/history";
-import { eraOf } from "./history-map";
+import { eraOf, formatDateUTC, formatMag, placeEs, type HistoricQuake } from "../../lib/history";
 
 // Mapa aparte solo con los 12 sismos más grandes, cada uno con su número de la tabla. Varios caen casi en el mismo punto, al
 // suroeste (zona de Burica): sus números se taparían, así que ese grupo se muestra además en un acercamiento. SVG fijo, sin

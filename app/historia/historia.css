@@ -149,3 +149,17 @@ html[data-a11y-contrast="high"] .hs-tiles span{color:#fff}
 @supports (animation-timeline:view()){.hs-dec-bar i{animation:hs-grow linear both;animation-timeline:view();animation-range:entry 0% entry 80%}}
 @keyframes hs-grow{from{transform:scaleX(0)}to{transform:none}}
 @media(prefers-reduced-motion:reduce){.hs-pop,.hs-pin,.hs-halo,.hs-dec-bar i{animation:none;transition:none}.hs-pop:hover,.hs-pin:hover{transform:none}}
+
+/* Tema oscuro: la página usaba colores claros fijos (lista de hechos, fila de 2026, leyendas, botones del final) que quedaban ilegibles. */
+html[data-theme="dark"] .hs-facts li{background:var(--surface-2,#172236);color:var(--ink,#e8eef7);border-left-color:#5fa0f0}
+html[data-theme="dark"] .hs-row-now{background:#2c1a22}
+html[data-theme="dark"] :is(.hs-legend,.hs-dec-max,.hs-table small,.hs-fig-inset figcaption,.hs-source p){color:var(--ink-2,#c3cfdf)}
+html[data-theme="dark"] .hs-table tbody th strong{color:#ff8a92}
+html[data-theme="dark"] .hs-table th,html[data-theme="dark"] .hs-table td{border-bottom-color:var(--line,#24314a)}
+html[data-theme="dark"] .hs-dec-bar{background:var(--surface-2,#172236)}
+html[data-theme="dark"] .hs-dec-bar i{background:#5fa0f0}
+html[data-theme="dark"] .hs-next a{background:var(--surface-2,#172236);border-color:var(--line-strong,#34445f);color:#8fb8ff}
+html[data-theme="dark"] .hs-next a:first-child{background:#2f6fe0;border-color:#2f6fe0;color:#fff}
+html[data-theme="dark"] .hs-note{border-top-color:var(--line,#24314a)}
+html[data-theme="dark"] .hs-sw{border-color:#e8eef7}
+html[data-theme="dark"] .hs-rank{border-color:#121b2c}

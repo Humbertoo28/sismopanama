@@ -262,6 +262,42 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## 🕰️ Historia sísmica (`/historia`): explorador interactivo, solo con datos reales
+
+**Pedido (14 de octubre de 2026):** «el lado de historia mejóralo, que todo lo que pongas sea verídico y cosas interactivas».
+
+**Regla de la página.** Todo sale del catálogo **ComCat del USGS** (sismos de M 6 o más en Panamá desde 1900: **94**, de ellos 6 de M 7 o más y los 4 de la secuencia de 2026). Lo que se muestra son esos registros, conteos, fechas y distancias calculadas con las posiciones que publica el USGS. **No hay estimaciones, pronósticos, textos generados ni cifras de otras fuentes sin citar.** No se agregó ninguna historia contada a mano (muertes, daños, tsunamis…): no viene del catálogo y no se pudo verificar aquí.
+
+**Qué se puede hacer ahora** (`app/historia/explorer.tsx`, `explorer.css`, `frame.ts`):
+- **Mapa interactivo** con los 94 sismos: tocar o pasar el cursor por un círculo (se elige el más cercano al dedo, no hace falta acertar), **acercar y alejar** (hasta ×8) con botones o con `+` y `−`, **arrastrar** para moverlo, y ciudades de referencia (la capital y las capitales de provincia, de GeoNames).
+- **Línea de tiempo** (año × magnitud) enlazada con el mapa: elegir un punto en cualquiera de los dos lo elige en ambos.
+- **Reproducir la historia** año por año (4 a 14 s según el tramo), con pausa y un deslizador «Hasta el año…» para recorrerla a mano; los sismos aparecen en su orden real.
+- **Magnitud mínima** (6.0+, 6.5+, 7.0+) y **década** como filtro: elegir una década (o quitarla) cambia mapa, línea de tiempo y tabla.
+- **Detalle de cada sismo**: magnitud y su tipo (Mw, Mww, Ms…), fecha y hora universal, lugar traducido del USGS, profundidad, posición publicada, puesto por magnitud entre los 94, enlace a su página en el **USGS**, y comparación con el de 2026: **años cumplidos** antes, diferencia de magnitud, **distancia entre epicentros** y cuántos sismos de la lista caen a 100 km; si hubo otros el mismo día, botones para saltar a ellos. Anterior/Siguiente en el tiempo, flechas del teclado, y **«Copiar enlace»** (`#sismo=<id>`: el enlace abre la página ya posicionada en ese sismo).
+- **Tabla completa** (los 94, no solo 12) ordenable por magnitud, más recientes o más antiguos, con «Mostrar más sismos» (12 al inicio, +24).
+- **Los de M 7 o más, uno tras otro**: los años entre cada par seguido (de 1 a 50), con la advertencia de que no sirven para predecir.
+- Se mantuvo el mapa fijo de «Los 12 más grandes» (con su acercamiento al suroeste) y los datos de la sección «Lo que dicen los registros».
+- Se quitó el mapa fijo anterior (`history-map.tsx`) y la tabla de 12 filas, que el explorador reemplaza.
+
+**Cómo se calcula cada cifra** (para que se pueda comprobar):
+- *Años:* años cumplidos entre las dos fechas completas (en hora universal). Del 20 de enero de 1904 al 9 de octubre de 2026 son 122.
+- *Distancia entre epicentros:* fórmula de la distancia sobre la esfera (la misma `kmBetween` del resto del sitio) entre las posiciones publicadas. Es una distancia calculada, no medida; las posiciones de los sismos antiguos son reconstrucciones del USGS y tienen más incertidumbre (la página lo dice).
+- *«A 100 km»:* cuántos sismos **de esta misma lista** (contando el propio) quedan a 100 km o menos de su posición publicada.
+- *Puesto:* orden por magnitud entre los 94; a igual magnitud, primero el más reciente.
+- *Intervalos de M 7:* años cumplidos entre un sismo de M 7 o más y el siguiente de la lista.
+- *Ciudades del mapa:* coordenadas de GeoNames (CC BY 4.0); la capital se toma de su propia ficha (id 3703443: 8.9936° N, 79.5197° O), verificada contra una segunda fuente que cita GeoNames.
+
+**Cómo se probó.**
+- **30 comprobaciones de las funciones** (`lib/history.ts`: décadas, filtros, años cumplidos en los bordes de aniversario, puestos, mismo día, distancias, intervalos de M 7, enlaces del USGS) contra los datos reales: pasan. Tres de las cifras que muestra la ficha se recalcularon aparte con otro programa: 194 km entre el sismo de 1934 y el de 2026, 5 sismos a 100 km del de 2026 y 44 a 100 km del de 1934.
+- **En el navegador** (servidor de desarrollo y compilación de producción con su política de seguridad): elegir con clic real, con el teclado (flechas) y desde la tabla; reproducir, pausar y llegar al final (94 sismos de 1904 a 2026); filtros de magnitud (94, 29 y 6 sismos) y de década (1930: 10; 2020: 12); acercar hasta el tope, arrastrar, «Acercar en el mapa»; ordenar y «Mostrar más»; abrir un enlace `#sismo=…` en una pestaña nueva; en ventana de teléfono (375 px) sin desborde horizontal y con círculos agrandados para verse y tocarse. Sin errores en la consola. La página completa tiene unos 900 elementos (la portada pasaba de 7 000).
+- **Accesibilidad:** axe-core 4.11 con **0 violaciones** en teléfono, en tema claro y en tema oscuro (con las transiciones apagadas: con el panel de pruebas oculto, las transiciones de color se quedan a medias y dan falsos contrastes). Se corrigió de paso el **tema oscuro de toda la página**, que ya estaba mal: la lista «Lo que dicen los registros», la fila del sismo de 2026, las leyendas y los botones del final usaban colores claros fijos y eran ilegibles en oscuro (contraste de 1.4 a 1.5). «Reducir animaciones» deja las animaciones sin efecto.
+
+**Lo que no se probó o no hace.** Un teléfono real, el navegador integrado de Instagram en iPhone, Safari y Firefox, VoiceOver y TalkBack. No hay zoom con dos dedos (se acerca con los botones, y el mapa se mueve arrastrando). El orden de lectura con lector de pantalla del mapa es por la tabla y las flechas, no círculo por círculo. La página se actualiza cada media hora (la caché del USGS).
+
+**Corregido de paso: «Distancia a Ciudad de Panamá» en la ficha de cada sismo.** La ficha de la portada (`lib/quake-facts.ts`) medía la distancia a la capital, y el tiempo de llegada de la sacudida, desde el **centro del distrito** de Panamá de GeoNames (9.244° N, 79.427° O), que queda a unos **30 km** al norte del centro de la ciudad (8.9936° N, 79.5197° O). Ahora usa el punto de la propia ciudad (`PANAMA_CITY` en `lib/places.ts`, GeoNames id 3703443, verificado con una segunda fuente que cita GeoNames), el mismo que usa el mapa de historia. Efecto: para el sismo principal de 2026 (7.59° N, 80.77° O) la ficha pasa de **236 km a 208 km** (comprobado con un cálculo aparte) y los tiempos de llegada a la capital se ajustan en proporción. El punto del distrito se sigue usando solo para ubicar el distrito (filtro por ciudad, localidad más cercana).
+
+---
+
 ## 🛡️ Seguridad y Buenas Prácticas (OWASP Top 10)
 
 - **Anti-SSRF:** Validación estricta de endpoints push con lista blanca de proveedores oficiales (`fcm.googleapis.com`, `push.apple.com`, `mozilla`, `windows`).

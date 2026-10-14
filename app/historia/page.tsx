@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "../page-header";
-import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatDateUTC, formatMag, historyUrl, parseHistory, placeEs, type HistoricQuake, type HistorySummary } from "../../lib/history";
+import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatDateUTC, formatMag, historyUrl, parseHistory, placeEs, yearsBetween, type HistoricQuake, type HistorySummary } from "../../lib/history";
+import { PANAMA_CITY, PLACES } from "../../lib/places";
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
-import HistoryMap, { eraOf } from "./history-map";
+import HistoryExplorer from "./explorer";
+import { outlinePath } from "./frame";
 import TopMap from "./top-map";
 import "./historia.css";
 
@@ -24,16 +26,18 @@ export const revalidate = 1800;
 
 const when = formatDateUTC;
 const year = (time: number) => new Date(time).getUTCFullYear();
-const yearsBetween = (from: number, to: number) => {
-  const a = new Date(from);
-  const b = new Date(to);
-  let years = b.getUTCFullYear() - a.getUTCFullYear();
-  if (b.getUTCMonth() < a.getUTCMonth() || (b.getUTCMonth() === a.getUTCMonth() && b.getUTCDate() < a.getUTCDate())) years -= 1;
-  return years;
-};
 const mag = formatMag;
-// "mww" → "Mww": el tipo de magnitud que publica el USGS para ese sismo.
-const kind = (quake: HistoricQuake) => (quake.magType ? quake.magType.charAt(0).toUpperCase() + quake.magType.slice(1).toLowerCase() : "");
+
+// Ciudades de referencia del mapa (con las coordenadas de GeoNames, CC BY 4.0): la capital y las capitales de provincia más cercanas a donde ocurrieron
+// los sismos. La capital se toma de su propia ficha de GeoNames (PANAMA_CITY en lib/places.ts), no del centro del distrito.
+const CITY_IDS = ["3711668", "3701117", "3712076", "3712384", "3712560", "3707058"];
+const CITIES = [
+  PANAMA_CITY,
+  ...CITY_IDS.flatMap(id => {
+    const place = PLACES.find(item => item.id === id);
+    return place ? [{ name: place.name, lat: place.lat, lng: place.lng }] : [];
+  }),
+];
 
 async function loadHistory(): Promise<{ summary: HistorySummary; panama: HistoricQuake[] } | null> {
   try {
@@ -72,8 +76,21 @@ function Unavailable() {
 
 function Body({ summary: s, panama }: { summary: HistorySummary; panama: HistoricQuake[] }) {
   const main = s.mainshock;
-  const maxDecade = Math.max(1, ...s.decades.map(d => d.count));
   const sinceM7 = main && s.previousM7 ? yearsBetween(s.previousM7.time, main.time) : null;
+  // El mapa de los 12 más grandes (fijo): el explorador lo coloca entre las décadas y la tabla.
+  const topMap = (
+    <section className="hs-card" aria-labelledby="hs-top-map-h">
+      <h2 id="hs-top-map-h">Los {s.top.length} más grandes en el mapa</h2>
+      <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo. Los del suroeste caen muy juntos: se ven también en el acercamiento.</p>
+      <TopMap top={s.top} />
+      <ul className="hs-legend" aria-label="Leyenda del mapa de los más grandes">
+        <li><i className="hs-sw hs-e1" /> 1900–1949</li>
+        <li><i className="hs-sw hs-e2" /> 1950–1999</li>
+        <li><i className="hs-sw hs-e3" /> 2000–2025</li>
+        <li><i className="hs-sw hs-now" /> Secuencia de 2026</li>
+      </ul>
+    </section>
+  );
   return (
     <>
       <p className="hs-lead">
@@ -89,52 +106,7 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
         {sinceM7 !== null && <li><strong>{sinceM7}</strong><span>años desde el anterior de M 7 o más ({year(s.previousM7!.time)})</span></li>}
       </ul>
 
-      <section className="hs-card" aria-labelledby="hs-map-h">
-        <h2 id="hs-map-h">Dónde ocurrieron</h2>
-        <p className="hs-sub">Cada círculo es un sismo de M 6 o más; mientras más grande, mayor la magnitud.</p>
-        <HistoryMap quakes={panama} />
-        <ul className="hs-legend" aria-label="Leyenda del mapa">
-          <li><i className="hs-sw hs-e1" /> 1900–1949</li>
-          <li><i className="hs-sw hs-e2" /> 1950–1999</li>
-          <li><i className="hs-sw hs-e3" /> 2000–2025</li>
-          <li><i className="hs-sw hs-now" /> Secuencia de 2026</li>
-        </ul>
-      </section>
-
-      <section className="hs-card" aria-labelledby="hs-top-map-h">
-        <h2 id="hs-top-map-h">Los {s.top.length} más grandes en el mapa</h2>
-        <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo. Los del suroeste caen muy juntos: se ven también en el acercamiento.</p>
-        <TopMap top={s.top} />
-        <ul className="hs-legend" aria-label="Leyenda del mapa de los más grandes">
-          <li><i className="hs-sw hs-e1" /> 1900–1949</li>
-          <li><i className="hs-sw hs-e2" /> 1950–1999</li>
-          <li><i className="hs-sw hs-e3" /> 2000–2025</li>
-          <li><i className="hs-sw hs-now" /> Secuencia de 2026</li>
-        </ul>
-      </section>
-
-      <section className="hs-card" aria-labelledby="hs-top-h">
-        <h2 id="hs-top-h">Los {s.top.length} sismos más grandes</h2>
-        <div className="hs-scroll" role="region" aria-label="Tabla de los sismos más grandes" tabIndex={0}>
-          <table className="hs-table">
-            <caption className="sr-only">Sismos de Panamá ordenados de mayor a menor magnitud, según el catálogo del USGS</caption>
-            <thead>
-              <tr><th scope="col">Puesto</th><th scope="col">Magnitud</th><th scope="col">Fecha</th><th scope="col">Lugar</th><th scope="col">Profundidad</th></tr>
-            </thead>
-            <tbody>
-              {s.top.map((quake, index) => (
-                <tr key={quake.id} className={quake.current ? "hs-row-now" : undefined}>
-                  <td><span className={`hs-rank hs-${eraOf(quake)}`}>{index + 1}</span></td>
-                  <th scope="row"><strong>M {mag(quake.mag)}</strong>{kind(quake) && <small> {kind(quake)}</small>}</th>
-                  <td>{when(quake.time)}{quake.current && <span className="hs-badge">Secuencia actual</span>}</td>
-                  <td>{placeEs(quake.place)}</td>
-                  <td>{quake.depth === null ? "—" : `${Math.round(quake.depth)} km`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <HistoryExplorer quakes={panama} outline={outlinePath()} cities={CITIES} topMap={topMap} />
 
       <section className="hs-card" aria-labelledby="hs-facts-h">
         <h2 id="hs-facts-h">Lo que dicen los registros</h2>
@@ -165,21 +137,6 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
         </ul>
       </section>
 
-      <section className="hs-card" aria-labelledby="hs-dec-h">
-        <h2 id="hs-dec-h">Sismos de M 6 o más por década</h2>
-        <ol className="hs-decades">
-          {s.decades.map(d => (
-            <li key={d.decade}>
-              <span className="hs-dec-name">{d.decade}s</span>
-              <span className="hs-dec-bar" aria-hidden="true"><i className={d.decade === 2020 ? "hs-bar-now" : undefined} style={{ width: `${(d.count / maxDecade) * 100}%` }} /></span>
-              <span className="hs-dec-n">{d.count}<span className="sr-only"> sismos</span></span>
-              <span className="hs-dec-max">{d.max ? `mayor M ${mag(d.max)}` : ""}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="hs-note">La década de 2020 llega solo hasta hoy. Las décadas antiguas dependen de qué tan completo es el registro histórico: el conteo no mide si hoy hay más o menos sismos.</p>
-      </section>
-
       <section className="hs-card hs-source" aria-labelledby="hs-src-h">
         <h2 id="hs-src-h">De dónde salen estos datos</h2>
         <p>
@@ -187,6 +144,12 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
           recuadro 6° a 10.7° N y 83.8° a 77° O, y se conservan los que el USGS ubica en Panamá. La magnitud es la que publica el USGS para cada sismo.
           Las posiciones y magnitudes de los sismos antiguos son reconstrucciones del USGS y tienen más incertidumbre que las actuales. Las fechas están en hora universal, como las publica el USGS. Todo se calcula directamente
           de esos registros, sin estimaciones; la página se actualiza cada media hora.
+        </p>
+        <p>
+          Lo interactivo (el mapa, la línea de tiempo, las décadas, la tabla y las comparaciones con el sismo de 2026) usa esos mismos registros. Los
+          años son años cumplidos entre dos fechas; las distancias entre epicentros se calculan con las posiciones que publica el USGS (distancia sobre la
+          esfera terrestre), y los conteos «a 100 km» cuentan sismos de esta misma lista. Los nombres de ciudades del mapa son de GeoNames (CC BY 4.0). No hay estimaciones ni
+          pronósticos: los terremotos no se pueden predecir.
         </p>
         <p><a href={historyUrl()} target="_blank" rel="noopener noreferrer">Ver la consulta al USGS (datos originales)</a></p>
       </section>
