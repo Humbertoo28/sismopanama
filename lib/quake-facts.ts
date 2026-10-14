@@ -1,5 +1,5 @@
 import { kmBetween, type Earthquake } from "./earthquakes";
-import { DISTRICTS, PLACES } from "./places";
+import { PANAMA_CITY, PLACES } from "./places";
 import { firstArrival } from "./travel-time";
 
 export const SOURCE_NAMES = { usgs: "USGS", igc: "IGC", emsc: "EMSC" } as const;
@@ -49,8 +49,7 @@ const CITIES = (() => {
     const place = PLACES.find(candidate => candidate.name === item.name && candidate.province === item.province);
     return place ? [{ name: place.name, lat: place.lat, lng: place.lng }] : [];
   });
-  const capital = DISTRICTS["0808"];
-  return { provincial: list, capital: capital ? { name: "Ciudad de Panamá", lat: capital.lat, lng: capital.lng } : null };
+  return { provincial: list, capital: PANAMA_CITY };
 })();
 
 // `seconds`: llegada de la onda S (la sacudida fuerte); `pSeconds`: llegada de la onda P. Ambas con el modelo ak135.

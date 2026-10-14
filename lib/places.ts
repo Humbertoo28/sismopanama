@@ -6,6 +6,10 @@
 export type Place = { id: string; name: string; lat: number; lng: number; province: string; district: string };
 export type District = { name: string; lat: number; lng: number };
 
+// La ciudad de Panamá con su propio punto de GeoNames (id 3703443, CC BY 4.0). No se usa el «centro» del distrito de Panamá (9.244° N,
+// 79.427° O), que queda a unos 30 km al norte de la ciudad: sirve para ubicar el distrito, no para medir distancias a la capital.
+export const PANAMA_CITY = { name: "Ciudad de Panamá", lat: 8.9936, lng: -79.51973 };
+
 export const DISTRICTS: Record<string, District> = {
   "0101": {"name": "Bocas del Toro", "lat": 9.362, "lng": -82.263},
   "0102": {"name": "Changuinola", "lat": 9.367, "lng": -82.683},
