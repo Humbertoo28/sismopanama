@@ -10,6 +10,8 @@ import { computedFacts, usgsFacts, type Fact } from "../../lib/history-facts";
 import { H, MAX_LAT, MAX_LNG, MIN_LAT, MIN_LNG, W, px, py, radiusOf } from "./frame";
 import { writeSelection } from "./selection";
 import { toEarthquake } from "./adapter";
+import { PlaceFilterControls, PlaceFilterNote, usePlaceFilter } from "./place-filter";
+import type { PlaceIndex } from "./place-index";
 import { SatTiles } from "./sat-tiles";
 import "./explorer.css";
 
@@ -318,13 +320,15 @@ function Strip({ shown, faint, selectedId, onPick, first, last, cursor, win }: {
 
 // ---------- la página interactiva ----------
 
-export default function HistoryExplorer({ quakes, outline, cities, provinces, provinceTexts, noaa, noaaFetchedAt, topMap }: {
+export default function HistoryExplorer({ quakes, outline, cities, provinces, provinceTexts, placeIndex, noaa, noaaFetchedAt, topMap }: {
   quakes: HistoricQuake[];
   outline: string;
   cities: City[];
   provinces: ProvinceShape[];
   // En qué provincia o comarca (o mar frente a cuál) cae cada sismo, según sus coordenadas.
   provinceTexts: Record<string, string>;
+  // Provincia y ciudad de cada sismo (ver place-index.ts), para filtrar.
+  placeIndex: PlaceIndex;
   // Las curiosidades que salen de NOAA NCEI para cada sismo (ver lib/noaa-history.ts) y cuándo se consultó. Vacío si NOAA no respondió.
   noaa: Record<string, Fact[]>;
   noaaFetchedAt: string | null;
@@ -334,6 +338,10 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
   const first = all.length ? yearOf(all[0].time) : 1900;
   const last = all.length ? yearOf(all[all.length - 1].time) : first;
   const ranks = useMemo(() => rankById(all), [all]);
+  // Filtro por provincia y ciudad (el mismo del mapa de los 12 más grandes); las opciones cuentan los sismos de toda la lista.
+  const allIds = useMemo(() => all.map(quake => quake.id), [all]);
+  const place = usePlaceFilter(allIds, placeIndex);
+  const placeMatches = place.matches;
   const main = useMemo(() => all.filter(quake => quake.current).sort((a, b) => b.mag - a.mag)[0] ?? null, [all]);
   const previousLargest = useMemo(() => all.filter(quake => !quake.current).sort((a, b) => b.mag - a.mag || b.time - a.time)[0] ?? null, [all]);
 
@@ -379,10 +387,10 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
     };
   }, [full]);
 
-  const windowed = useMemo(() => filterQuakes(all, { minMag, from: win[0], to: win[1] }), [all, minMag, win]);
+  const windowed = useMemo(() => filterQuakes(all, { minMag, from: win[0], to: win[1] }).filter(quake => placeMatches(quake.id)), [all, minMag, win, placeMatches]);
   const shown = useMemo(() => windowed.filter(quake => yearOf(quake.time) <= cursor), [windowed, cursor]);
   const faint = useMemo(() => windowed.filter(quake => yearOf(quake.time) > cursor), [windowed, cursor]);
-  const decades = useMemo(() => decadeSeries(all.filter(quake => quake.mag >= minMag)), [all, minMag]);
+  const decades = useMemo(() => decadeSeries(all.filter(quake => quake.mag >= minMag && placeMatches(quake.id))), [all, minMag, placeMatches]);
   const maxDecade = Math.max(1, ...decades.map(d => d.count));
   const narrowed = win[0] > first || win[1] < last;
 
@@ -417,8 +425,29 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
       return z === 1 ? { z, cx: W / 2, cy: H / 2 } : { z, cx: current.cx, cy: current.cy };
     });
   const resetView = () => setView({ z: 1, cx: W / 2, cy: H / 2 });
+  // Encuadra el mapa plano en los sismos que quedan (con el margen justo para que se vean todos).
+  const fitTo = (list: HistoricQuake[]) => {
+    if (!list.length) return resetView();
+    const xs = list.map(quake => px(quake.lng));
+    const ys = list.map(quake => py(quake.lat));
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const z = clamp(Math.min(W / (x1 - x0 + 90), H / (y1 - y0 + 90)), 1, MAX_ZOOM);
+    setView(z < 1.05 ? { z: 1, cx: W / 2, cy: H / 2 } : { z, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 });
+  };
   const zoomToSelected = () => selected && setView({ z: Math.max(view.z, 4), cx: px(selected.lng), cy: py(selected.lat) });
 
+  // Al cambiar de provincia o ciudad: se detiene la reproducción, la tabla vuelve a sus primeras filas y el mapa se encuadra en lo que queda.
+  const afterPlace = (province: string, city: string) => {
+    stop();
+    setRows(ROWS_FIRST);
+    fitTo(filterQuakes(all, { minMag, from: win[0], to: win[1] }).filter(quake => place.test(province, city, quake.id)));
+  };
+  const placeUi = {
+    ...place,
+    selectProvince: (value: string) => { place.selectProvince(value); afterPlace(value, "all"); },
+    selectCity: (value: string) => { place.selectCity(value); afterPlace(place.province, value); },
+    clear: () => { place.clear(); afterPlace("all", "all"); },
+  };
   const changeMin = (value: number) => {
     setMinMag(value);
     setRows(ROWS_FIRST);
@@ -484,7 +513,7 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
   const events3d = useMemo(() => shown.map(quake => toEarthquake(quake)), [shown]);
   const main3d = useMemo(() => (main && shown.some(quake => quake.id === main.id) ? toEarthquake(main) : null), [main, shown]);
   const roundDepths = useMemo(() => shown.filter(quake => quake.depth !== null && quake.depth % 5 === 0).length, [shown]);
-  const filtersKey = minMag === 6 && !narrowed ? "" : `${minMag}|${win[0]}-${win[1]}`;
+  const filtersKey = minMag === 6 && !narrowed && !place.filtered ? "" : `${minMag}|${win[0]}-${win[1]}|${place.key}`;
   const gaps = useMemo(() => m7Gaps(all), [all]);
   const gapYears = gaps.flatMap(gap => (gap.years === null ? [] : [gap.years]));
 
@@ -529,7 +558,7 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
     <>
       <section className="hs-card" id="hx-explorer" aria-labelledby="hx-h">
         <h2 id="hx-h">Explora los {all.length} sismos</h2>
-        <p className="hs-sub">Mira los sismos en el mapa plano, sobre la imagen satelital o en 3D. Toca un círculo del mapa o de la línea de tiempo para ver ese sismo, cambia la magnitud mínima, elige una década o reproduce la historia año por año.</p>
+        <p className="hs-sub">Mira los sismos en el mapa plano, sobre la imagen satelital o en 3D. Toca un círculo del mapa o de la línea de tiempo para ver ese sismo, cambia la magnitud mínima, filtra por provincia y ciudad, elige una década o reproduce la historia año por año.</p>
 
         <div className="hx-controls">
           <div className="hx-group" role="group" aria-label="Vista del mapa">
@@ -544,6 +573,7 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
               <button key={value} type="button" className="hx-chip" aria-pressed={minMag === value} onClick={() => changeMin(value)}>{value.toFixed(1)}+</button>
             ))}
           </div>
+          <PlaceFilterControls filter={placeUi} />
           <div className="hx-group" role="group" aria-label="Reproducción">
             {playing
               ? <button type="button" className="hx-btn hx-main" onClick={stop}><Pause aria-hidden="true" size={18} /><span>Pausar</span></button>
@@ -562,13 +592,15 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
           </div>}
         </div>
 
+        <PlaceFilterNote />
+
         <label className="hx-scrub">
           <span>Hasta el año <strong>{cursor}</strong>{narrowed ? <small> (desde {win[0]})</small> : null}</span>
           <input type="range" min={win[0]} max={win[1]} step={1} value={cursor} disabled={win[0] === win[1]}
             onChange={event => { stop(); setCursor(Number(event.target.value)); }} aria-valuetext={`Sismos hasta el año ${cursor}`} />
         </label>
         <p className="hx-count" role="status">
-          {plural(shown.length, "sismo", "sismos")} de {windowed.length} en {win[0] === win[1] ? win[0] : `${win[0]}–${win[1]}`}
+          {plural(shown.length, "sismo", "sismos")} de {windowed.length} en {win[0] === win[1] ? win[0] : `${win[0]}–${win[1]}`}{place.filtered ? ` · ${place.label}` : ""}
           {windowed.length ? <> · el mayor, M {formatMag(Math.max(...windowed.map(q => q.mag)))}</> : null}
         </p>
 
@@ -644,6 +676,7 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
                   <div><dt>Profundidad</dt><dd>{selected.depth === null ? "—" : `${Math.round(selected.depth)} km`}</dd></div>
                   <div><dt>Posición publicada</dt><dd>{coords(selected)}</dd></div>
                   <div><dt>Provincia o comarca</dt><dd>{provinceTexts[selected.id] ?? "—"}</dd></div>
+                  <div><dt>Ciudad o localidad</dt><dd>{placeIndex.cities[placeIndex.quakes[selected.id]?.[1] ?? ""] ?? "—"}</dd></div>
                 </dl>
                 <ul className="hx-lines">
                   {info.lines.map((line, index) => <li key={index}>{line}</li>)}
@@ -731,7 +764,7 @@ export default function HistoryExplorer({ quakes, outline, cities, provinces, pr
 
       <section className="hs-card" aria-labelledby="hx-table-h">
         <h2 id="hx-table-h">Todos los sismos de la lista</h2>
-        <p className="hs-sub">{plural(windowed.length, "sismo", "sismos")} con la magnitud y los años elegidos. «Puesto» es el lugar por magnitud entre los {all.length}.</p>
+        <p className="hs-sub">{plural(windowed.length, "sismo", "sismos")} con la magnitud, los años{place.filtered ? " y el lugar" : ""} elegidos. «Puesto» es el lugar por magnitud entre los {all.length}.</p>
         <div className="hx-group hx-sorts" role="group" aria-label="Ordenar la tabla">
           {([["mag", "Mayor magnitud"], ["new", "Más recientes"], ["old", "Más antiguos"]] as const).map(([value, label]) => (
             <button key={value} type="button" className="hx-chip" aria-pressed={sort === value} onClick={() => { setSort(value); setRows(ROWS_FIRST); }}>{label}</button>

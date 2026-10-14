@@ -13,7 +13,8 @@ import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import HistoryExplorer from "./explorer";
 import { outlinePath, px, py } from "./frame";
-import TopMap, { type QuakeWhere } from "./top-map";
+import TopMap from "./top-map";
+import { subsetIndex, type PlaceIndex } from "./place-index";
 import "./historia.css";
 
 const TITLE = "Historia sísmica de Panamá: sismos grandes desde 1900";
@@ -60,7 +61,7 @@ const asEarthquake = (quake: HistoricQuake): Earthquake => ({
   geometry: { coordinates: [quake.lng, quake.lat, quake.depth ?? undefined] },
 });
 
-type Loaded = { summary: HistorySummary; panama: HistoricQuake[]; noaa: NoaaFacts | null; provinceTexts: Record<string, string> };
+type Loaded = { summary: HistorySummary; panama: HistoricQuake[]; noaa: NoaaFacts | null; provinceTexts: Record<string, string>; placeIndex: PlaceIndex };
 
 async function loadHistory(): Promise<Loaded | null> {
   try {
@@ -71,7 +72,17 @@ async function loadHistory(): Promise<Loaded | null> {
     // NOAA es un complemento: si no responde, la página sigue con el USGS.
     const noaa = await loadNoaaFacts(panama).catch(() => null);
     const provinceTexts = Object.fromEntries(panama.map(quake => [quake.id, provinceLabel(asEarthquake(quake))]));
-    return { summary: buildHistory(panama, excluded), panama, noaa, provinceTexts };
+    // Provincia y ciudad de cada sismo, con las mismas reglas del filtro del mapa en vivo: al navegador solo llegan los identificadores.
+    const placeIndex: PlaceIndex = { quakes: {}, provinces: {}, cities: {} };
+    for (const quake of panama) {
+      const event = asEarthquake(quake);
+      const province = provinceKey(event);
+      const city = placeOfEvent(event);
+      placeIndex.quakes[quake.id] = [province, city?.place.id ?? ""];
+      placeIndex.provinces[province] ??= province === FAR_OFFSHORE ? "Mar adentro" : PROVINCE_BY_ID.get(province)?.name ?? province;
+      if (city) placeIndex.cities[city.place.id] ??= placeName(city.place);
+    }
+    return { summary: buildHistory(panama, excluded), panama, noaa, provinceTexts, placeIndex };
   } catch (error) {
     console.error("Historia sísmica no disponible:", error);
     return null;
@@ -86,7 +97,7 @@ export default async function HistoriaPage() {
       <PageHeader current="/historia" />
       <main className="hs-main" id="contenido">
         <h1>Sismos grandes en Panamá desde 1900</h1>
-        {data ? <Body summary={data.summary} panama={data.panama} noaa={data.noaa} provinceTexts={data.provinceTexts} /> : <Unavailable />}
+        {data ? <Body summary={data.summary} panama={data.panama} noaa={data.noaa} provinceTexts={data.provinceTexts} placeIndex={data.placeIndex} /> : <Unavailable />}
       </main>
     </>
   );
@@ -101,30 +112,15 @@ function Unavailable() {
   );
 }
 
-function Body({ summary: s, panama, noaa, provinceTexts }: { summary: HistorySummary; panama: HistoricQuake[]; noaa: NoaaFacts | null; provinceTexts: Record<string, string> }) {
+function Body({ summary: s, panama, noaa, provinceTexts, placeIndex }: { summary: HistorySummary; panama: HistoricQuake[]; noaa: NoaaFacts | null; provinceTexts: Record<string, string>; placeIndex: PlaceIndex }) {
   const main = s.mainshock;
   const sinceM7 = main && s.previousM7 ? yearsBetween(s.previousM7.time, main.time) : null;
   // El mapa de los 12 más grandes (fijo): el explorador lo coloca entre las décadas y la tabla.
-  // Dónde cae cada uno de los 12 (provincia y ciudad), con las reglas del filtro del mapa en vivo.
-  const where: Record<string, QuakeWhere> = Object.fromEntries(
-    s.top.map(quake => {
-      const event = asEarthquake(quake);
-      const province = provinceKey(event);
-      const city = placeOfEvent(event);
-      return [quake.id, {
-        province,
-        provinceName: province === FAR_OFFSHORE ? "Mar adentro" : PROVINCE_BY_ID.get(province)?.name ?? province,
-        provinceText: provinceLabel(event),
-        city: city?.place.id ?? "",
-        cityName: city ? placeName(city.place) : null,
-      }];
-    }),
-  );
   const topMap = (
     <section className="hs-card" aria-labelledby="hs-top-map-h">
       <h2 id="hs-top-map-h">Los {s.top.length} más grandes en el mapa</h2>
       <p className="hs-sub">Cada número es el puesto del sismo en la tabla de abajo. Toca uno para ver su ficha; cambia entre plano, satélite y 3D (con cómo se propagó su sacudida) y filtra por provincia y ciudad.</p>
-      <TopMap top={s.top} total={s.total} provinceTexts={provinceTexts} where={where} />
+      <TopMap top={s.top} total={s.total} provinceTexts={provinceTexts} placeIndex={subsetIndex(placeIndex, s.top.map(quake => quake.id))} />
       <ul className="hs-legend" aria-label="Leyenda del mapa de los más grandes">
         <li><i className="hs-sw hs-e1" /> 1900–1949</li>
         <li><i className="hs-sw hs-e2" /> 1950–1999</li>
@@ -148,7 +144,7 @@ function Body({ summary: s, panama, noaa, provinceTexts }: { summary: HistorySum
         {sinceM7 !== null && <li><strong>{sinceM7}</strong><span>años desde el anterior de M 7 o más ({year(s.previousM7!.time)})</span></li>}
       </ul>
 
-      <HistoryExplorer quakes={panama} outline={outlinePath()} cities={CITIES} provinces={PROVINCE_SHAPES} provinceTexts={provinceTexts} noaa={noaa?.facts ?? {}} noaaFetchedAt={noaa?.fetchedAt ?? null} topMap={topMap} />
+      <HistoryExplorer quakes={panama} outline={outlinePath()} cities={CITIES} provinces={PROVINCE_SHAPES} provinceTexts={provinceTexts} placeIndex={placeIndex} noaa={noaa?.facts ?? {}} noaaFetchedAt={noaa?.fetchedAt ?? null} topMap={topMap} />
 
       <section className="hs-card" aria-labelledby="hs-facts-h">
         <h2 id="hs-facts-h">Lo que dicen los registros</h2>

@@ -8,6 +8,8 @@ import type { WaveData } from "../../lib/usgs-detail";
 import { revealNearest, showExplorer, writeSelection } from "./selection";
 import { SAT_CREDIT, SatTiles } from "./sat-tiles";
 import { toEarthquake } from "./adapter";
+import { PlaceFilterControls, PlaceFilterNote, usePlaceFilter } from "./place-filter";
+import type { PlaceIndex } from "./place-index";
 import "./top-map.css";
 
 // Mapa aparte solo con los 12 sismos más grandes, cada uno con su número de la tabla. Varios caen casi en el mismo punto, al
@@ -138,10 +140,6 @@ const halfDegrees = (min: number, max: number) => {
 const kind = (quake: HistoricQuake) => (quake.magType ? quake.magType.charAt(0).toUpperCase() + quake.magType.slice(1).toLowerCase() : "");
 const clock = (time: number) => new Date(time).toISOString().slice(11, 16);
 
-// Dónde cae cada uno de los 12, con las mismas reglas del filtro del mapa en vivo (lib/province-of.ts y lib/place-of.ts): la provincia o
-// comarca (si cae en el mar, la de la ciudad que cita su título o la costa más cercana) y la ciudad o localidad que cita su título.
-export type QuakeWhere = { province: string; provinceName: string; provinceText: string; city: string; cityName: string | null };
-
 type Mode = "plan" | "sat" | "3d";
 const MODES: { value: Mode; label: string; long: string }[] = [
   { value: "plan", label: "Plano", long: "Mapa plano" },
@@ -152,7 +150,7 @@ const MODES: { value: Mode; label: string; long: string }[] = [
 // La sacudida de cada sismo, tal como la publica el USGS: se pide al servidor solo cuando se elige un sismo en la vista 3D.
 type WaveState = { status: "loading" } | { status: "ready"; data: WaveData } | { status: "none" } | { status: "error" };
 
-export default function TopMap({ top, total, provinceTexts, where }: { top: HistoricQuake[]; total: number; provinceTexts: Record<string, string>; where: Record<string, QuakeWhere> }) {
+export default function TopMap({ top, total, provinceTexts, placeIndex }: { top: HistoricQuake[]; total: number; provinceTexts: Record<string, string>; placeIndex: PlaceIndex }) {
   const root = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>("plan");
   const satellite = mode === "sat";
@@ -187,27 +185,14 @@ export default function TopMap({ top, total, provinceTexts, where }: { top: Hist
     };
   }, [full]);
 
-  // Filtros por provincia y ciudad. Las opciones salen de los propios 12 (con cuántos hay en cada una) y la ciudad depende de la provincia.
-  const [provinceF, setProvinceF] = useState("all");
-  const [cityF, setCityF] = useState("all");
-  const rows = useMemo(() => top.map((quake, index) => ({ quake, rank: index + 1, where: where[quake.id] })), [top, where]);
-  const provinceOptions = useMemo(() => {
-    const counts = new Map<string, { name: string; count: number }>();
-    for (const row of rows) if (row.where) counts.set(row.where.province, { name: row.where.provinceName, count: (counts.get(row.where.province)?.count ?? 0) + 1 });
-    return [...counts.entries()].map(([id, value]) => ({ id, ...value })).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [rows]);
-  const cityOptions = useMemo(() => {
-    const counts = new Map<string, { name: string; count: number }>();
-    for (const row of rows) if (row.where?.city && row.where.cityName && (provinceF === "all" || row.where.province === provinceF)) counts.set(row.where.city, { name: row.where.cityName, count: (counts.get(row.where.city)?.count ?? 0) + 1 });
-    return [...counts.entries()].map(([id, value]) => ({ id, ...value })).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [rows, provinceF]);
-  const visible = useMemo(
-    () => rows.filter(row => (provinceF === "all" || row.where?.province === provinceF) && (cityF === "all" || row.where?.city === cityF)),
-    [rows, provinceF, cityF],
-  );
+  // Filtros por provincia y ciudad (los mismos del explorador de los 94 sismos). Las opciones salen de los propios 12.
+  const rows = useMemo(() => top.map((quake, index) => ({ quake, rank: index + 1 })), [top]);
+  const ids = useMemo(() => top.map(quake => quake.id), [top]);
+  const place = usePlaceFilter(ids, placeIndex);
+  const placeMatches = place.matches;
+  const visible = useMemo(() => rows.filter(row => placeMatches(row.quake.id)), [rows, placeMatches]);
   const visibleQuakes = useMemo(() => visible.map(row => row.quake), [visible]);
-  const filtered = provinceF !== "all" || cityF !== "all";
-  const filtersKey = `${provinceF}|${cityF}`;
+  const filtersKey = place.key;
 
   const [pickedId, setPickedId] = useState<string | null>(null);
   const visibleIndex = visible.findIndex(row => row.quake.id === pickedId);
@@ -313,7 +298,7 @@ export default function TopMap({ top, total, provinceTexts, where }: { top: Hist
   const positions = inset ? spread(members.map(m => ({ x: inset.x(m.quake.lng), y: inset.y(m.quake.lat) })), 44) : [];
   const box = bounds && { x: main.x(bounds.minLng), y: main.y(bounds.maxLat), w: main.x(bounds.maxLng) - main.x(bounds.minLng), h: main.y(bounds.minLat) - main.y(bounds.maxLat) };
   const description = visible.map(row => `${row.rank}.º, M ${formatMag(row.quake.mag)}, ${formatDateUTC(row.quake.time)}, ${placeEs(row.quake.place)}`).join("; ");
-  const pickedWhere = picked ? where[picked.id] : undefined;
+  const pickedCity = picked ? placeIndex.cities[placeIndex.quakes[picked.id]?.[1] ?? ""] : undefined;
 
   return (
     <div ref={root} onKeyDown={onKeyDown}>
@@ -324,29 +309,10 @@ export default function TopMap({ top, total, provinceTexts, where }: { top: Hist
             <button key={item.value} type="button" className="hx-chip" aria-pressed={mode === item.value} aria-label={item.long} onClick={() => chooseMode(item.value)}>{item.label}</button>
           ))}
         </div>
-        <div className="hx-group" role="group" aria-label="Filtros por lugar">
-          <label className="tm-field">
-            <span className="hx-label">Provincia</span>
-            <select aria-label="Filtrar por provincia o comarca" value={provinceF} onChange={event => { setProvinceF(event.target.value); setCityF("all"); }}>
-              <option value="all">Todas · {rows.length}</option>
-              {provinceOptions.map(option => <option key={option.id} value={option.id}>{option.name} · {option.count}</option>)}
-            </select>
-          </label>
-          <label className="tm-field">
-            <span className="hx-label">Ciudad</span>
-            <select aria-label="Filtrar por ciudad o localidad" value={cityF} onChange={event => setCityF(event.target.value)}>
-              <option value="all">Todas</option>
-              {cityOptions.map(option => <option key={option.id} value={option.id}>{option.name} · {option.count}</option>)}
-            </select>
-          </label>
-          {filtered && <button type="button" className="hx-btn" onClick={() => { setProvinceF("all"); setCityF("all"); }}>Quitar filtros</button>}
-        </div>
+        <PlaceFilterControls filter={place} />
       </div>
-      <p className="tm-count" role="status">{filtered ? `Se ven ${visible.length} de los ${rows.length} sismos más grandes.` : `Se ven los ${rows.length} sismos más grandes.`}</p>
-      <details className="tm-how">
-        <summary>Cómo se asignan la provincia y la ciudad</summary>
-        <p>Son las mismas reglas del filtro del mapa en vivo. La provincia o comarca es la del epicentro publicado; si cae en el mar, la de la ciudad que cita el título del USGS (o la costa más cercana). La ciudad es la que cita el título del USGS si está en la lista de GeoNames (CC BY 4.0); si no, la localidad más cercana de su provincia. Los epicentros antiguos son reconstrucciones del USGS: pueden tener varios kilómetros de error.</p>
-      </details>
+      <p className="tm-count" role="status">{place.filtered ? `Se ven ${visible.length} de los ${rows.length} sismos más grandes (${place.label}).` : `Se ven los ${rows.length} sismos más grandes.`}</p>
+      <PlaceFilterNote />
 
       {mode === "3d" ? (
         <div className={`map-frame hx-3d${full ? " is-full" : ""}`}>
@@ -461,7 +427,7 @@ export default function TopMap({ top, total, provinceTexts, where }: { top: Hist
               <div><dt>Puesto por magnitud</dt><dd>{pickedRank} de {total}</dd></div>
               <div><dt>Profundidad</dt><dd>{picked.depth === null ? "sin dato" : `${Math.round(picked.depth)} km`}</dd></div>
               <div><dt>Provincia o comarca</dt><dd>{provinceTexts[picked.id] ?? "sin dato"}</dd></div>
-              <div><dt>Ciudad o localidad</dt><dd>{pickedWhere?.cityName ?? "sin dato"}</dd></div>
+              <div><dt>Ciudad o localidad</dt><dd>{pickedCity ?? "sin dato"}</dd></div>
             </dl>
             <div className="tm-wave" aria-live="polite">
               {wave?.status === "loading" && <p>Cargando la sacudida que estima el USGS… (el USGS a veces tarda unos segundos en responder).</p>}

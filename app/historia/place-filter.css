@@ -1,0 +1,11 @@
+/* Selectores de provincia y ciudad de la historia sísmica. */
+.pf-field{display:inline-flex;align-items:center;gap:8px}
+.pf-field select{min-height:42px;max-width:100%;padding:0 12px;border:1px solid var(--line-strong,#c3ccd7);border-radius:10px;background:var(--surface,#fff);color:var(--ink,#121a2a);font:700 calc(14px*var(--ts,1)) "DM Sans",sans-serif}
+.pf-field select:focus-visible{outline:3px solid var(--focus,#1f5fd1);outline-offset:2px}
+.pf-how{margin:0 0 12px;font-size:calc(14px*var(--ts,1));color:#4a5568}
+.pf-how summary{cursor:pointer;font-weight:700;color:var(--ink,#121a2a)}
+.pf-how p{margin:6px 0 0}
+@media(max-width:700px){.pf-field{display:flex;width:100%;justify-content:space-between}.pf-field select{flex:1 1 auto}}
+html[data-theme="dark"] .pf-field select{background:var(--surface,#121b2c);border-color:var(--line,#2a3a55);color:var(--ink,#e8eef8)}
+html[data-theme="dark"] .pf-how{color:var(--ink-2,#c3cfdf)}
+html[data-theme="dark"] .pf-how summary{color:var(--ink,#e8eef8)}
