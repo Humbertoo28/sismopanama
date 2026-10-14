@@ -401,7 +401,7 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
                   <div>
                     <strong>M {selected.mag.toFixed(1)}</strong>
                     <span>{selected.place}</span>
-                    <small>{fmtFull.format(selected.time)} · {ago(now - selected.time)} · prof. {depthText(selected)} · {SOURCE_NAMES[selected.source]}</small>
+                    <small>{fmtFull.format(selected.time)} · {ago(now - selected.time)} · prof. {depthText(selected)} · {SOURCE_NAMES[selected.source]}{selected.source === "emsc" && <span className="an-unconf"> (sin confirmar: el IGC y el USGS no lo registran)</span>}</small>
                   </div>
                   <div className="an-detail-actions">
                     <button type="button" className="an-btn an-btn-ghost" onClick={() => earlier && select(earlier.id)} disabled={!earlier} aria-label="Sismo anterior en el tiempo"><ChevronLeft aria-hidden="true" size={16} />Anterior</button>
@@ -463,7 +463,7 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
                         <td><b>{quake.mag.toFixed(1)}</b></td>
                         <td><button type="button" className="an-linkbtn" onClick={() => { select(quake.id); document.getElementById("an-tl-title")?.scrollIntoView({ block: "center", behavior: "smooth" }); }}>{quake.place}</button></td>
                         <td className="an-hide-sm">{depthText(quake)}</td>
-                        <td className="an-hide-sm">{SOURCE_NAMES[quake.source]}</td>
+                        <td className="an-hide-sm">{SOURCE_NAMES[quake.source]}{quake.source === "emsc" && <span className="an-unconf" title="Solo lo publica el EMSC: el IGC y el USGS no lo registran"> · sin confirmar</span>}</td>
                       </tr>
                     ))}
                     {!table.length && <tr><td colSpan={5} className="an-empty">No hay sismos con estos filtros.</td></tr>}

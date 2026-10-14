@@ -3,7 +3,7 @@
 
 import Script from "next/script";
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { isAftershock, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
+import { isAftershock, isUnconfirmed, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
 import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
 import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
@@ -499,6 +499,12 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         const badge = document.createElement("div");
         badge.className = "popup-badge-after";
         badge.textContent = "Réplica";
+        popup.appendChild(badge);
+      }
+      if (isUnconfirmed(event)) {
+        const badge = document.createElement("div");
+        badge.className = "popup-badge-unconfirmed";
+        badge.textContent = "Sin confirmar · solo EMSC";
         popup.appendChild(badge);
       }
       const title = document.createElement("div");

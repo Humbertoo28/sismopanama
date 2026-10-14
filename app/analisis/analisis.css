@@ -55,6 +55,7 @@
 .an-chips button { border: 1px solid #d5dce6; background: var(--an-surface); color: var(--an-muted); border-radius: 999px; min-height: 40px; padding: 0 16px; font-weight: 700; font-size:calc(13px*var(--ts,1)); }
 .an-chips button[aria-pressed="true"] { background: #e8f0fc; border-color: var(--an-s1); color: #1c4f94; }
 .an-warn { color: #b45309; font-weight: 800; }
+.an-unconf { color: #8a4b00; font-weight: 700; }
 .an-field select { min-height: 40px; border: 1px solid #d5dce6; border-radius: 10px; background: var(--an-surface); color: var(--an-ink); padding: 0 12px; font-weight: 700; font-size:calc(13px*var(--ts,1)); }
 
 .an-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--an-navy); background: var(--an-navy); color: #fff; font-weight: 700; font-size:calc(13px*var(--ts,1)); text-decoration: none; }

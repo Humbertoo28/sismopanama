@@ -275,6 +275,7 @@ html[data-a11y-motion="reduce"] .q3-live i { animation: none; }
 .qs-head { padding-right: 44px; }
 .qs-badge { display: inline-block; margin-bottom: 8px; padding: 3px 9px; border-radius: 999px; background: #eef2f7; color: #4a5568; font-size: calc(10.5px*var(--ts,1)); font-weight: 800; letter-spacing: .08em; }
 .qs-badge.main { background: #f3e1f7; color: #7a1590; }
+.qs-badge.unconfirmed { background: #fff1d6; color: #7a4300; }
 .qs-mag-row { display: flex; gap: 14px; align-items: center; }
 .qs-mag { display: grid; place-items: center; flex: none; width: 74px; height: 74px; border-radius: 14px; background: #da121a; color: #fff; font-size: calc(32px*var(--ts,1)); letter-spacing: -.03em; }
 .qs-mag-row h3 { margin: 0; font-size: calc(17px*var(--ts,1)); line-height: 1.25; letter-spacing: -.02em; }

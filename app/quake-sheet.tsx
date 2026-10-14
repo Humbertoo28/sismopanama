@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { isAftershock, type Earthquake } from "../lib/earthquakes";
+import { awaitsConfirmation, isAftershock, isUnconfirmed, type Earthquake } from "../lib/earthquakes";
 import { isRoundDepth } from "../lib/depth";
 import { agoLabel, arrivals, depthClass, energyTnt, reportUrl, SOURCE_NAMES } from "../lib/quake-facts";
 import { placeLabel } from "../lib/place-of";
@@ -44,6 +44,7 @@ export function QuakeDetails({
     <>
       <header className="qs-head">
         {isMain && <span className="qs-badge main">Sismo principal</span>}
+        {isUnconfirmed(event) && <span className="qs-badge unconfirmed">SIN CONFIRMAR · SOLO EMSC</span>}
         {!isMain && after && <span className="qs-badge">RÉPLICA DEL SISMO M {mainshock?.properties.mag?.toFixed(1)}</span>}
         <div className="qs-mag-row">
           <strong className="qs-mag" aria-label={`Magnitud ${magnitude}`}>{magnitude}</strong>
@@ -87,7 +88,10 @@ export function QuakeDetails({
         </div>
         <div>
           <dt>Estado</dt>
-          <dd>{reviewed ? `Revisado por ${primary}.` : "Preliminar: la magnitud y la ubicación pueden cambiar."}</dd>
+          <dd>
+            {reviewed ? `Revisado por ${primary}.` : "Preliminar: la magnitud y la ubicación pueden cambiar."}
+            {isUnconfirmed(event) && <small>Solo lo publica el EMSC: el IGC y el USGS no lo registran. Puede ser una detección errónea.{awaitsConfirmation(event) && " No se avisa por alerta hasta que alguno lo confirme."}</small>}
+          </dd>
         </div>
       </dl>
 

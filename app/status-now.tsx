@@ -3,7 +3,7 @@
 import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2 } from "lucide-react";
 import CountUp from "./count-up";
 import { getWhatsAppShareUrl } from "../lib/alert-system";
-import type { Earthquake, EarthquakeResponse, MainshockResponse } from "../lib/earthquakes";
+import { isUnconfirmed, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
 import { provinceLabel } from "../lib/province-of";
 import { SOURCE_NAMES, agoLabel, reportUrl } from "../lib/quake-facts";
 import { placeTitle } from "../lib/quake-summary";
@@ -107,6 +107,7 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
                 <div className="now-place">
                   <h2 id="latest-title">{placeTitle(latest)}</h2>
                   <p>{provinceLabel(latest)}</p>
+                  {isUnconfirmed(latest) && <p className="now-unconfirmed">Sin confirmar: solo lo publica el EMSC; el IGC y el USGS no lo registran.</p>}
                 </div>
               </div>
               <dl className="now-facts">

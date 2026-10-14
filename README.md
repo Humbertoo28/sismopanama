@@ -193,6 +193,32 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## 🚨 Sismos «sin confirmar» (solo EMSC): no se avisan hasta que otro catálogo los confirme
+
+**Qué pasó (13 de octubre de 2026).** A las 16:25 (hora de Panamá) el EMSC publicó un «M 4.0» en el golfo, a ~11 km de Juan Díaz (la web lo rotulaba «Cerca de Juan Díaz» por la localidad más cercana). A las 16:37 el cron lo envió como alerta a **29 198 dispositivos**. Lo traía **un solo catálogo** (el EMSC, con autor «UNA»); el IGC, que según nuestros datos no lo tenía, lo desmintió. Lo que sí se comprobó con los datos: la tabla del IGC no tiene ninguna fila a esa hora, el USGS no tiene nada en la zona y 87 s antes (21:24:21 UTC) hubo un M 4.8 a 162 km de profundidad en el norte de Colombia, así que parece una asociación falsa de las ondas de ese sismo lejano (una hipótesis, no un hecho). No se encontró un desmentido público del IGC: se basa en lo que informó quien administra el sitio.
+
+**Por qué pudo pasar.** `lib/push-check.ts` avisaba cualquier sismo de M 3 o más de **cualquier** catálogo, también de uno solo. Los 12 sismos que solo trae el EMSC entre el 9 y el 13 de octubre son **todos de «UNA»** (de los 97 que UNA publicó en la región, 85 sí están en el IGC); los otros 11 caen en el Pacífico sur, no cerca de la capital. En las últimas 24 horas de registros de Vercel fue el único aviso nacido de un registro EMSC (los registros solo llegan a 24 h, no se pudo mirar antes).
+
+**Qué cambió.**
+- **Alertas.** Un sismo «sin confirmar» (el registro que queda tras fusionar los catálogos es del EMSC: ningún otro lo trae) **no se avisa** —ni push, ni sirena, ni notificación con la página abierta— mientras el IGC esté respondiendo. Cuando el IGC o el USGS lo publican, el registro fusionado ya no es «solo EMSC» y se avisa en ese momento, una sola vez (el id del EMSC queda como alias, así que no se repite).
+- **Excepciones.** M **5.0 o más** se avisa aunque solo lo traiga el EMSC (un sismo así de grande no se puede dejar esperando), y si el **IGC no responde** en esa consulta se avisa como antes (no se puede saber si lo confirmaría y no se quieren perder alertas reales).
+- **Qué se ve.** Sigue apareciendo en la lista, el mapa, la ficha y `/analisis` (los datos son los de los catálogos), pero con el rótulo **«Sin confirmar · solo EMSC»**; en la ficha dice que puede ser una detección errónea y, si es menor de M 5, que no se avisa por alerta hasta que alguien lo confirme.
+- **El de Juan Díaz se retiró por completo.** `RETRACTED_EVENTS` en `lib/catalogs.ts` (`emsc:2074346`, con su motivo): como todo en la web sale de esa consulta, ya no aparece en el mapa, la lista, la ficha, `/analisis`, los conteos de réplicas ni los reportes «¿Lo sentiste?», ni se avisa. Es un retiro editorial de un sismo que la institución local desmintió; no se agrega ninguno sin una razón comprobable. Los otros 11 de solo EMSC se quedan (con su rótulo).
+- **Dónde está.** `isUnconfirmed`, `awaitsConfirmation` y `UNCONFIRMED_ALERT_MAG` en `lib/earthquakes.ts`; `selectQuakesToPush` / `runQuakeCheck` en `lib/push-check.ts` (el cron y `/api/earthquakes` pasan si el IGC respondió); la retención de la alerta de la página en `app/page.tsx` (un sismo retenido tampoco se anota como «visto»: si no, cuando el IGC lo confirmara contaría como ya conocido y nunca sonaría).
+
+**Cómo se probó.**
+- 17 comprobaciones de la regla con el sismo real de ese día y casos de borde (M 4.9 y 5.0, sin magnitud, IGC caído, confirmado por el IGC o por el USGS, ya avisado, «de los alrededores», mezcla de varios): con el IGC activo no se habría avisado; con el IGC caído sí, como antes.
+- Con los datos en vivo de ese momento: 12 sismos «sin confirmar» y ninguno con alias (tras retirar el de Juan Díaz, 11 y ninguno en la zona de la capital, ni en la consulta de Panamá ni en la de los alrededores); simulando las 16:37 del 13 de octubre, la regla no habría enviado el aviso del EMSC.
+- En el navegador (servidor local, respuesta de `/api/earthquakes` sustituida solo en esa pestaña; no se llamó a ningún endpoint de push): un sismo nuevo solo-EMSC **no** muestra la alerta de la página; al llegar el mismo sismo confirmado por el IGC (con el id del EMSC como alias) la alerta aparece una sola vez; con el IGC simulado como caído, el solo-EMSC sí alerta. La lista muestra 12 rótulos, la ficha y el globo del mapa su insignia, `/analisis` «· sin confirmar» en la tabla. axe: sin violaciones nuevas (dos que ya existían en la portada: `.now-stats` y `.now-side`).
+
+**Lo que no se hizo ni se sabe.**
+- **No se puede retirar** una alerta ya enviada, y no se mandó ninguna aclaración a los suscriptores.
+- Los otros 11 sismos de solo EMSC **siguen contando como réplicas** en los conteos de la página (el de Juan Díaz ya no); no se tocaron los conteos por esos 11.
+- No se sabe cuántos de los 11 anteriores del 9 al 12 de octubre llegaron a avisarse (registros fuera de las 24 h).
+- Una alerta de un sismo real que el EMSC publique antes que el IGC sufrirá el retraso que tarde el IGC en listarlo (el IGC suele listar en 1–5 min; 4 min en el ejemplo del IGC de las 16:21).
+
+---
+
 ## 🛡️ Seguridad y Buenas Prácticas (OWASP Top 10)
 
 - **Anti-SSRF:** Validación estricta de endpoints push con lista blanca de proveedores oficiales (`fcm.googleapis.com`, `push.apple.com`, `mozilla`, `windows`).

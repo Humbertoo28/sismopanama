@@ -146,6 +146,12 @@ export async function fetchIgc(since: number, scope: Scope = "panama"): Promise<
   return pick(igcCache);
 }
 
+// Sismos que un catálogo publicó y la institución local desmintió: no se muestran ni se cuentan ni se avisan, en ningún lugar de
+// la web (todo sale de estas consultas). Cada uno lleva su motivo; no se agrega nada sin una razón comprobable.
+//  - emsc:2074346 — «M 4.0» de las 16:25 del 13 de octubre de 2026 cerca de Juan Díaz (solo EMSC, autor UNA). El IGC lo desmintió;
+//    su tabla y la del USGS no lo tienen y 87 s antes hubo un M 4.8 profundo en el norte de Colombia (probable falsa asociación).
+const RETRACTED_EVENTS = new Set(["emsc:2074346"]);
+
 async function fetchEmsc(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
   const query = new URLSearchParams({
     format: "json", orderby: "time", limit: "2000", starttime: new Date(since).toISOString().slice(0, 19), ...REGION,
@@ -163,6 +169,7 @@ async function fetchEmsc(since: number, scope: Scope = "panama"): Promise<Earthq
     const time = Date.parse(p?.time ?? "");
     if (!p?.source_id || !Number.isFinite(time) || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return [];
     if (p.evtype && p.evtype !== "ke") return []; // solo sismos conocidos, no explosiones ni otros eventos
+    if (RETRACTED_EVENTS.has(`emsc:${p.source_id}`)) return [];
     if (isPanamaPlace(p.flynn_region) !== (scope === "panama")) return [];
     const lat = p.lat!;
     const lon = p.lon!;

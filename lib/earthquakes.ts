@@ -107,6 +107,24 @@ export function sameEvent(a: Earthquake, b: Earthquake) {
   return Math.abs(a.properties.time - b.properties.time) <= 60_000 && distanceKm(a, b) <= 120;
 }
 
+// Un sismo «sin confirmar» es el que solo publica el EMSC: el IGC (la red local, que registra casi todo lo que se siente en
+// Panamá) y el USGS no lo tienen. El EMSC reúne soluciones de muchas agencias, entre ellas detecciones automáticas que a veces
+// toman las ondas de un sismo lejano por uno local (el 13 de octubre de 2026, un «M 4.0» cerca de Juan Díaz, 87 s después de
+// un sismo en Colombia, que el IGC desmintió y que llegó a 29 198 teléfonos). Al fusionar los catálogos, `source` solo vale
+// «emsc» si ningún otro catálogo lo trae. Se sigue mostrando, con su rótulo, pero no se avisa hasta que otro lo confirme.
+export function isUnconfirmed(event: Earthquake) {
+  return event.properties.source === "emsc" && !event.properties.nearby;
+}
+
+// Desde esta magnitud un sismo se avisa aunque solo lo traiga el EMSC: uno así de grande no se puede dejar esperando.
+export const UNCONFIRMED_ALERT_MAG = 5;
+
+// ¿Se retiene la alerta (push, sirena y notificación) hasta que el IGC o el USGS lo confirmen? Solo si el IGC está respondiendo:
+// si está caído no se puede saber si lo confirmaría, y se avisa como antes para no perder alertas reales.
+export function awaitsConfirmation(event: Earthquake, igcUp = true) {
+  return igcUp && isUnconfirmed(event) && (event.properties.mag ?? 0) < UNCONFIRMED_ALERT_MAG;
+}
+
 // El sismo principal fue de M 7.7. Una réplica es un sismo posterior a él: los anteriores (hubo uno de M 2.6, doce horas
 // antes y a 5 km del epicentro) no son réplicas aunque la lista arranque el 9 de octubre.
 export function isAftershock(event: Earthquake, mainshock: Earthquake) {
