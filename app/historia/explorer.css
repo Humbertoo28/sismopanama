@@ -117,3 +117,43 @@ html[data-theme="dark"] .hx-tip{background:#e8f0ff;color:#0b1a33}
 html[data-theme="dark"] .hx-linkbtn{color:#8fb8ff}
 html[data-theme="dark"] .hx-chip[aria-pressed="true"],html[data-theme="dark"] .hx-main{background:#2f6fe0;border-color:#2f6fe0;color:#fff}
 html[data-theme="dark"] .hx-lines li{background:var(--surface,#121b2c)}
+
+/* Vista satelital: la imagen de Esri va bajo los círculos; el contorno del país queda como línea para ubicarse. */
+.hx-credit{position:absolute;right:8px;bottom:6px;z-index:2;max-width:75%;padding:2px 7px;border-radius:6px;background:#0b1a33b8;color:#fff;font:600 calc(11px*var(--ts,1)) "DM Sans",sans-serif;pointer-events:none}
+.hx-map.is-sat .hs-land{fill:none;stroke:#ffffffb8}
+.hx-map.is-sat .hs-grid line{stroke:#ffffff3d}
+.hx-map.is-sat .hs-grid text,.hx-map.is-sat .hx-cities text{fill:#fff;paint-order:stroke;stroke:#0b1a33;stroke-width:calc(3px*var(--k,1))}
+.hx-map.is-sat .hs-dot{stroke:#fff;stroke-width:1.6px;fill-opacity:.92}
+.hx-tiles image{image-rendering:auto}
+
+/* Vista 3D: la escena del sitio dentro de la tarjeta (sin el hueco del selector de capas de la portada). */
+.hx-3d{border-radius:14px;overflow:hidden}
+.hx-3d .q3{padding-top:0}
+/* En el celular el crédito no tapa el mapa: va como una franja debajo. */
+@media(max-width:700px){
+  .hx-credit{position:static;display:block;max-width:none;padding:4px 10px;border-radius:0;background:#0b1a33;text-align:right;font-size:calc(10.5px*var(--ts,1))}
+  .hx-map-wrap:has(.hx-credit) .hs-map{border-bottom-left-radius:0;border-bottom-right-radius:0}
+}
+
+/* Provincias y comarcas sobre el mapa */
+.hx-prov-shape{fill:#1a4a8f;stroke:#ffffffcc;stroke-width:1.1px;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.hx-prov-shape.is-comarca{stroke-dasharray:5 3}
+.hx-map.is-sat .hx-prov-shape{fill:none;stroke:#ffffffd9;stroke-width:1.4px}
+.hx-prov-names text{fill:#fff;font:800 calc(9.5px*var(--k,1)) "DM Sans",sans-serif;letter-spacing:.06em;text-anchor:middle;paint-order:stroke;stroke:#0b1a33;stroke-width:calc(3px*var(--k,1));stroke-linejoin:round;pointer-events:none}
+.hx-prov-names text.is-comarca{font-style:italic}
+@media(max-width:700px){.hx-prov-names text{font-size:calc(19px*var(--k,1));stroke-width:calc(5px*var(--k,1))}}
+
+/* Datos curiosos del sismo elegido, cada uno con su fuente */
+@media(min-width:901px){.hx-detail{max-height:calc(100dvh - var(--header-h,64px) - var(--nav-h,52px) - 28px);overflow:auto;overscroll-behavior:contain}}
+.hx-curious{margin:10px 0}
+.hx-curious h3{margin:0 0 8px;font:700 calc(17px*var(--ts,1)) "Space Grotesk","DM Sans",sans-serif;letter-spacing:-.01em}
+.hx-curious ul{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.hx-curious li{padding:10px 12px;border-radius:10px;background:var(--surface,#fff);border-left:4px solid #eb6834}
+.hx-curious li p{margin:0 0 4px;font-size:calc(14.5px*var(--ts,1));line-height:1.45}
+.hx-fact-note{display:block;margin:0 0 4px;color:var(--muted,#566275);font-size:calc(12.5px*var(--ts,1));line-height:1.4}
+.hx-fact-src{display:block;font-size:calc(12.5px*var(--ts,1));line-height:1.4;color:var(--ink-2,#364357)}
+.hx-fact-src a{color:var(--primary,#0b2a5b);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.hx-fact-orig{margin-top:6px;font-size:calc(12.5px*var(--ts,1));color:var(--ink-2,#364357)}
+.hx-fact-orig summary{cursor:pointer;font-weight:700;min-height:28px}
+.hx-fact-orig q{display:block;margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--surface-2,#f7f9fb);font-style:italic;line-height:1.45}
+html[data-theme="dark"] .hx-fact-src a{color:#8fb8ff}

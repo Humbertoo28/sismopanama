@@ -31,7 +31,19 @@ function areaAndCentroid(ring: [number, number][]) {
   return area === 0 ? { area: 0, lng: ring[0][0], lat: ring[0][1] } : { area: Math.abs(area), lng: cx / (6 * area), lat: cy / (6 * area) };
 }
 
+// Cuatro nombres se pisaban o se cortaban con el punto calculado: el de Panamá chocaba con el de Guna Yala (su franja angosta tiene el
+// centro dentro de la provincia vecina) y el de Emberá-Wounaan quedaba pegado al borde este del mapa. Se ponen a mano, dentro de su
+// propio territorio (se comprobó con el contorno de cada uno); Emberá-Wounaan además se rotula en dos líneas (explorer.tsx).
+const LABEL_OVERRIDES: Record<string, { lat: number; lng: number }> = {
+  panama: { lat: 8.9, lng: -78.7 },
+  "guna-yala": { lat: 9.25, lng: -78.4 },
+  "embera-wounaan": { lat: 8.5, lng: -77.6 },
+  darien: { lat: 7.95, lng: -77.7 },
+};
+
 export const PROVINCE_LABELS: MapLabel[] = PROVINCES.map(province => {
+  const override = LABEL_OVERRIDES[province.id];
+  if (override) return { id: province.id, name: province.name, ...override };
   const largest = province.rings.map(ring => ({ ring, ...areaAndCentroid(ring) })).sort((a, b) => b.area - a.area)[0];
   const [[south, west], [north, east]] = province.bounds;
   const center = { lng: (west + east) / 2, lat: (south + north) / 2 };

@@ -2,11 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "../page-header";
 import { HISTORY_MIN_MAG, HISTORY_REVALIDATE_SECONDS, buildHistory, formatDateUTC, formatMag, historyUrl, parseHistory, placeEs, yearsBetween, type HistoricQuake, type HistorySummary } from "../../lib/history";
+import type { Earthquake } from "../../lib/earthquakes";
+import { loadNoaaFacts, type NoaaFacts } from "../../lib/noaa-history";
 import { PANAMA_CITY, PLACES } from "../../lib/places";
+import { provinceLabel } from "../../lib/province-of";
+import { PROVINCES } from "../../lib/provinces";
+import { PROVINCE_LABELS } from "../../lib/province-labels";
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import HistoryExplorer from "./explorer";
-import { outlinePath } from "./frame";
+import { outlinePath, px, py } from "./frame";
 import TopMap from "./top-map";
 import "./historia.css";
 
@@ -39,12 +44,33 @@ const CITIES = [
   }),
 ];
 
-async function loadHistory(): Promise<{ summary: HistorySummary; panama: HistoricQuake[] } | null> {
+// Las provincias y comarcas para el mapa: cada límite ya dibujado en el marco del mapa (geoBoundaries, de OpenStreetMap, ODbL; simplificado a ~900 m)
+// y el punto donde va su nombre. Se resuelven aquí para no mandar al navegador los 39 KB de coordenadas de lib/provinces.ts.
+const PROVINCE_SHAPES = PROVINCES.map(province => {
+  const label = PROVINCE_LABELS.find(item => item.id === province.id);
+  const d = province.rings.map(ring => `M${ring.map(([lng, lat]) => `${px(lng).toFixed(1)},${py(lat).toFixed(1)}`).join("L")}Z`).join("");
+  return { id: province.id, name: province.name, kind: province.kind, d, x: label ? Number(px(label.lng).toFixed(1)) : 0, y: label ? Number(py(label.lat).toFixed(1)) : 0 };
+});
+
+// Un sismo del historial con la forma de los del catálogo en vivo, para decir en qué provincia o comarca (o mar frente a cuál) cae.
+const asEarthquake = (quake: HistoricQuake): Earthquake => ({
+  id: quake.id,
+  properties: { mag: quake.mag, place: quake.place, time: quake.time, url: quake.url, source: "usgs" },
+  geometry: { coordinates: [quake.lng, quake.lat, quake.depth ?? undefined] },
+});
+
+type Loaded = { summary: HistorySummary; panama: HistoricQuake[]; noaa: NoaaFacts | null; provinceTexts: Record<string, string> };
+
+async function loadHistory(): Promise<Loaded | null> {
   try {
     const response = await fetch(historyUrl(), { headers: { Accept: "application/geo+json, application/json" }, next: { revalidate: HISTORY_REVALIDATE_SECONDS } });
     if (!response.ok) throw new Error(`El USGS respondió ${response.status}`);
     const { panama, excluded } = parseHistory(await response.json());
-    return panama.length ? { summary: buildHistory(panama, excluded), panama } : null;
+    if (!panama.length) return null;
+    // NOAA es un complemento: si no responde, la página sigue con el USGS.
+    const noaa = await loadNoaaFacts(panama).catch(() => null);
+    const provinceTexts = Object.fromEntries(panama.map(quake => [quake.id, provinceLabel(asEarthquake(quake))]));
+    return { summary: buildHistory(panama, excluded), panama, noaa, provinceTexts };
   } catch (error) {
     console.error("Historia sísmica no disponible:", error);
     return null;
@@ -59,7 +85,7 @@ export default async function HistoriaPage() {
       <PageHeader current="/historia" />
       <main className="hs-main" id="contenido">
         <h1>Sismos grandes en Panamá desde 1900</h1>
-        {data ? <Body summary={data.summary} panama={data.panama} /> : <Unavailable />}
+        {data ? <Body summary={data.summary} panama={data.panama} noaa={data.noaa} provinceTexts={data.provinceTexts} /> : <Unavailable />}
       </main>
     </>
   );
@@ -74,7 +100,7 @@ function Unavailable() {
   );
 }
 
-function Body({ summary: s, panama }: { summary: HistorySummary; panama: HistoricQuake[] }) {
+function Body({ summary: s, panama, noaa, provinceTexts }: { summary: HistorySummary; panama: HistoricQuake[]; noaa: NoaaFacts | null; provinceTexts: Record<string, string> }) {
   const main = s.mainshock;
   const sinceM7 = main && s.previousM7 ? yearsBetween(s.previousM7.time, main.time) : null;
   // El mapa de los 12 más grandes (fijo): el explorador lo coloca entre las décadas y la tabla.
@@ -106,7 +132,7 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
         {sinceM7 !== null && <li><strong>{sinceM7}</strong><span>años desde el anterior de M 7 o más ({year(s.previousM7!.time)})</span></li>}
       </ul>
 
-      <HistoryExplorer quakes={panama} outline={outlinePath()} cities={CITIES} topMap={topMap} />
+      <HistoryExplorer quakes={panama} outline={outlinePath()} cities={CITIES} provinces={PROVINCE_SHAPES} provinceTexts={provinceTexts} noaa={noaa?.facts ?? {}} noaaFetchedAt={noaa?.fetchedAt ?? null} topMap={topMap} />
 
       <section className="hs-card" aria-labelledby="hs-facts-h">
         <h2 id="hs-facts-h">Lo que dicen los registros</h2>
@@ -150,6 +176,13 @@ function Body({ summary: s, panama }: { summary: HistorySummary; panama: Histori
           años son años cumplidos entre dos fechas; las distancias entre epicentros se calculan con las posiciones que publica el USGS (distancia sobre la
           esfera terrestre), y los conteos «a 100 km» cuentan sismos de esta misma lista. Los nombres de ciudades del mapa son de GeoNames (CC BY 4.0). No hay estimaciones ni
           pronósticos: los terremotos no se pueden predecir.
+        </p>
+        <p>
+          Los <strong>datos curiosos</strong> de cada sismo salen de tres lugares y cada uno dice cuál: el catálogo del USGS (y sus productos ShakeMap y «¿Lo sentiste?»), la
+          <strong> base de datos de sismos significativos de NOAA NCEI</strong> (doi:10.7289/V5TD9V7K) con su <strong>base de datos de tsunamis</strong> (doi:10.7289/V5PN93H7), y cálculos hechos aquí con las
+          fechas y posiciones del catálogo. Los de NOAA se piden a su servicio público cada vez que la página se actualiza y solo se unen a un sismo del USGS si coinciden en
+          hora (hasta 20 minutos) y en lugar (hasta 200 km); las frases de sus descripciones se comprueban contra el texto actual de NOAA antes de mostrarse. Si una fuente no trae un dato, no se muestra.
+          {" "}Los límites de las provincias y comarcas son de geoBoundaries (gbOpen, PAN ADM1), construidos a partir de OpenStreetMap (© colaboradores de OpenStreetMap, ODbL), simplificados a unos 900 m.
         </p>
         <p><a href={historyUrl()} target="_blank" rel="noopener noreferrer">Ver la consulta al USGS (datos originales)</a></p>
       </section>

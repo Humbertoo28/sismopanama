@@ -91,6 +91,9 @@ const clock = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day
 
 
 const depthOf = (event: Earthquake) => event.geometry.coordinates[2];
+// La magnitud con la precisión que publica el catálogo: un decimal, o dos cuando los datos los traen (6.96). Redondear a uno haría
+// que un 6.96 se leyera «7.0» (las magnitudes de un decimal, que son las de siempre, se ven igual que antes).
+const magText = (mag: number) => (Math.abs(mag * 10 - Math.round(mag * 10)) < 1e-9 ? mag.toFixed(1) : mag.toFixed(2));
 // Profundidad con un decimal como máximo (12.647 → 12.6).
 const km = (value: number) => `${Math.round(value * 10) / 10} km`;
 
@@ -906,7 +909,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         },
       });
       hits.current.push({ id: item.event.id, x: q.sx, y: q.sy, r: Math.max(r + 5, 11), depth: q.depth });
-      if (isMain || (item.mag ?? 0) >= 6 || selected) labeled.push({ sx: q.sx, sy: q.sy - r - 7, text: `M ${item.mag === null ? "—" : item.mag.toFixed(1)}${selected ? ` · ${km(item.depth)}` : ""}`, rank: isMain ? 100 : selected ? 99 : item.mag ?? 0, keep: selected });
+      if (isMain || (item.mag ?? 0) >= 6 || selected) labeled.push({ sx: q.sx, sy: q.sy - r - 7, text: `M ${item.mag === null ? "—" : magText(item.mag)}${selected ? ` · ${km(item.depth)}` : ""}`, rank: isMain ? 100 : selected ? 99 : item.mag ?? 0, keep: selected });
     }
 
     // Fondo: lo más lejano primero. El suelo (superficie) se pinta entre lo profundo y los epicentros.
@@ -1746,7 +1749,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
         <div className="q3-panel-heading"><span><SceneIcon name="Compass" size={14} aria-hidden="true" /> Explorar la escena</span><span>Arrastra para girar · Pellizca para acercar</span></div>
         {selectedEvent && (
           <p className="q3-selected" role="status">
-            <strong>M {selectedEvent.properties.mag === null ? "—" : selectedEvent.properties.mag.toFixed(1)}</strong>{" "}
+            <strong>M {selectedEvent.properties.mag === null ? "—" : magText(selectedEvent.properties.mag)}</strong>{" "}
             {selectedEvent.properties.place ?? "lugar no especificado"} · {clock.format(new Date(selectedEvent.properties.time))} ·{" "}
             {depthOf(selectedEvent) === undefined ? "profundidad no disponible" : `${km(depthOf(selectedEvent) as number)} de profundidad${isRoundDepth(depthOf(selectedEvent)) ? " (asignada)" : ""}`}
           </p>

@@ -6,7 +6,10 @@ import {
   decadeSeries, distanceKm, eraOf, filterQuakes, formatDateUTC, formatMag, m7Gaps, placeEs, rankById, sameDay, withinKm, yearOf, yearsBetween,
   type HistoricQuake,
 } from "../../lib/history";
-import { H, W, px, py, radiusOf } from "./frame";
+import type { Earthquake } from "../../lib/earthquakes";
+import { mercatorX, mercatorY } from "../satellite-tiles";
+import { computedFacts, usgsFacts, type Fact } from "../../lib/history-facts";
+import { H, MAX_LAT, MAX_LNG, MIN_LAT, MIN_LNG, W, px, py, radiusOf } from "./frame";
 import "./explorer.css";
 
 // La parte interactiva de la historia sísmica: un mapa con zoom, una línea de tiempo con reproducción, el detalle de cada sismo, las
@@ -15,8 +18,16 @@ import "./explorer.css";
 // USGS. No hay estimaciones ni predicciones.
 
 type City = { name: string; lat: number; lng: number };
+// Un límite provincial ya dibujado en el marco del mapa y el punto de su nombre.
+type ProvinceShape = { id: string; name: string; kind: "provincia" | "comarca"; d: string; x: number; y: number };
 type View = { z: number; cx: number; cy: number };
 
+type Mode = "plan" | "sat" | "3d";
+const MODES: { value: Mode; label: string; long: string }[] = [
+  { value: "plan", label: "Plano", long: "Mapa plano" },
+  { value: "sat", label: "Satélite", long: "Imagen satelital" },
+  { value: "3d", label: "3D", long: "Vista en 3D" },
+];
 const MIN_MAGS = [6, 6.5, 7] as const;
 const ROWS_FIRST = 12;
 const ROWS_MORE = 24;
@@ -26,6 +37,13 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const kind = (quake: HistoricQuake) => (quake.magType ? quake.magType.charAt(0).toUpperCase() + quake.magType.slice(1).toLowerCase() : "");
 const clock = (time: number) => new Date(time).toISOString().slice(11, 16);
 const coords = (quake: HistoricQuake) => `${Math.abs(quake.lat).toFixed(2)}° ${quake.lat >= 0 ? "N" : "S"}, ${Math.abs(quake.lng).toFixed(2)}° ${quake.lng >= 0 ? "E" : "O"}`;
+
+// Un sismo del historial con la forma de los del catálogo en vivo (la escena 3D del sitio la espera así).
+const toEarthquake = (quake: HistoricQuake): Earthquake => ({
+  id: quake.id,
+  properties: { mag: quake.mag, place: placeEs(quake.place), time: quake.time, url: quake.url, source: "usgs", status: "reviewed", magType: quake.magType },
+  geometry: { coordinates: quake.depth === null ? [quake.lng, quake.lat] : [quake.lng, quake.lat, quake.depth] },
+});
 
 // ---- el sismo elegido vive en la dirección (#sismo=<id>): se puede compartir y sobrevive a recargar la página ----
 const subscribeHash = (notify: () => void) => {
@@ -39,9 +57,68 @@ function writeSelection(id: string | null) {
   window.dispatchEvent(new Event("hashchange"));
 }
 
+// ---------- imagen satelital del mapa plano ----------
+
+// Mosaicos de Esri World Imagery (los mismos del mapa en vivo y de la vista 3D). Cada mosaico es un rectángulo entre dos longitudes
+// y dos latitudes, y el mapa plano es lineal en las dos: se coloca tal cual (a esta escala la deformación de Mercator dentro de un
+// mosaico es de una fracción de píxel). Siempre hay una capa de fondo con pocos mosaicos y, al acercar, otra con más detalle.
+const IMAGERY = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile";
+const SAT_BASE_Z = 7;
+const SAT_MAX_Z = 11;
+const SAT_MAX_TILES = 30;
+const tileLng = (x: number, z: number) => (x / 2 ** z) * 360 - 180;
+const tileLat = (y: number, z: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
+
+type Tile = { z: number; x: number; y: number };
+function tilesFor(z: number, west: number, east: number, south: number, north: number): Tile[] {
+  const max = 2 ** z - 1;
+  const x0 = clamp(Math.floor(mercatorX(west, z)), 0, max);
+  const x1 = clamp(Math.floor(mercatorX(east, z)), 0, max);
+  const y0 = clamp(Math.floor(mercatorY(north, z)), 0, max);
+  const y1 = clamp(Math.floor(mercatorY(south, z)), 0, max);
+  const list: Tile[] = [];
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) list.push({ z, x, y });
+  return list;
+}
+const BASE_TILES = tilesFor(SAT_BASE_Z, MIN_LNG, MAX_LNG, MIN_LAT, MAX_LAT);
+
+function SatTiles({ vx, vy, vw, vh, pxWidth }: { vx: number; vy: number; vw: number; vh: number; pxWidth: number }) {
+  const west = MIN_LNG + (vx / W) * (MAX_LNG - MIN_LNG);
+  const east = MIN_LNG + ((vx + vw) / W) * (MAX_LNG - MIN_LNG);
+  const north = MAX_LAT - (vy / H) * (MAX_LAT - MIN_LAT);
+  const south = MAX_LAT - ((vy + vh) / H) * (MAX_LAT - MIN_LAT);
+  const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  // El zoom de mosaicos cuyo píxel casi iguala al de la pantalla (menos detalle si harían falta demasiados mosaicos).
+  let z = clamp(Math.ceil(Math.log2(((pxWidth * dpr) / Math.max(east - west, 0.01)) * (360 / 256))), SAT_BASE_Z, SAT_MAX_Z);
+  let detail = z > SAT_BASE_Z ? tilesFor(z, west, east, south, north) : [];
+  while (detail.length > SAT_MAX_TILES && z > SAT_BASE_Z) {
+    z -= 1;
+    detail = z > SAT_BASE_Z ? tilesFor(z, west, east, south, north) : [];
+  }
+  const overlap = 0.5 * (vw / W);
+  const image = (tile: Tile) => {
+    const left = px(tileLng(tile.x, tile.z));
+    const right = px(tileLng(tile.x + 1, tile.z));
+    const top = py(tileLat(tile.y, tile.z));
+    const bottom = py(tileLat(tile.y + 1, tile.z));
+    return (
+      <image key={`${tile.z}/${tile.x}/${tile.y}`} href={`${IMAGERY}/${tile.z}/${tile.y}/${tile.x}`} x={left} y={top} width={right - left + overlap} height={bottom - top + overlap} preserveAspectRatio="none" />
+    );
+  };
+  return (
+    <g className="hx-tiles" aria-hidden="true">
+      {BASE_TILES.map(image)}
+      {detail.map(image)}
+    </g>
+  );
+}
+
 // ---------- mapa ----------
 
-function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, cities }: {
+function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, cities, satellite, provinces, showProvinces }: {
+  satellite: boolean;
+  provinces: ProvinceShape[];
+  showProvinces: boolean;
   visible: HistoricQuake[];
   selectedId: string | null;
   mainId: string | null;
@@ -56,6 +133,15 @@ function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, 
   const drag = useRef<{ id: number; x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
   const [hover, setHover] = useState<{ quake: HistoricQuake; left: number; top: number } | null>(null);
   const [panning, setPanning] = useState(false);
+  // El ancho del mapa en pantalla decide cuánto detalle de imagen satelital se pide.
+  const [pxWidth, setPxWidth] = useState(700);
+  useEffect(() => {
+    const el = svg.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => setPxWidth(entries[0]?.contentRect.width || 700));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const z = view.z;
   const vw = W / z;
@@ -125,12 +211,13 @@ function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, 
   const latLines = [7, 8, 9, 10];
   const k = 1 / z;
   return (
-    <div ref={wrap} className={`hx-map-wrap${z > 1 ? " is-zoomed" : ""}${panning ? " is-panning" : ""}`}
+    <div ref={wrap} className={`hx-map-wrap${z > 1 ? " is-zoomed" : ""}${panning ? " is-panning" : ""}${satellite ? " is-sat" : ""}`}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       onPointerCancel={() => { drag.current = null; setPanning(false); }} onPointerLeave={() => setHover(null)}>
-      <svg ref={svg} className="hs-map hx-map" viewBox={`${vx} ${vy} ${vw} ${vh}`} role="img" style={{ "--k": k } as CSSProperties}
+      <svg ref={svg} className={`hs-map hx-map${satellite ? " is-sat" : ""}`} viewBox={`${vx} ${vy} ${vw} ${vh}`} role="img" style={{ "--k": k } as CSSProperties}
         aria-label="Mapa de los sismos de magnitud 6 o más en Panamá desde 1900. La tabla de abajo trae los mismos datos.">
         <rect className="hs-sea" x="0" y="0" width={W} height={H} rx="14" />
+        {satellite && <SatTiles vx={vx} vy={vy} vw={vw} vh={vh} pxWidth={pxWidth} />}
         <g className="hs-grid" aria-hidden="true">
           {lngLines.map(l => (
             <g key={`lng${l}`}>
@@ -145,15 +232,37 @@ function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, 
             </g>
           ))}
         </g>
-        <path className="hs-land" d={outline} />
-        <g className="hx-cities" aria-hidden="true">
-          {cities.map(city => (
-            <g key={city.name}>
-              <rect x={px(city.lng) - 3 * k} y={py(city.lat) - 3 * k} width={6 * k} height={6 * k} />
-              <text x={px(city.lng) + 7 * k} y={py(city.lat) + 4 * k}>{city.name}</text>
-            </g>
-          ))}
-        </g>
+        {/* Con las provincias a la vista, sus límites (más finos que el contorno) hacen de costa y de fronteras. Sin ellas, el contorno del país
+            solo sirve de guía al ver todo el país sobre la imagen satelital: al acercar, la propia imagen muestra la costa. */}
+        {showProvinces ? (
+          <g className="hx-prov" aria-hidden="true">
+            {provinces.map(province => <path key={province.id} className={`hx-prov-shape${province.kind === "comarca" ? " is-comarca" : ""}`} d={province.d} />)}
+          </g>
+        ) : !(satellite && z > 2) && <path className="hs-land" d={outline} />}
+        {showProvinces && (
+          <g className="hx-prov-names" aria-hidden="true">
+            {provinces.map(province => {
+              // Un nombre muy largo con guion (Emberá-Wounaan) se parte en dos líneas para que quepa dentro del marco del mapa.
+              const name = province.name.toUpperCase();
+              const lines = name.length > 12 && name.includes("-") ? [name.slice(0, name.indexOf("-") + 1), name.slice(name.indexOf("-") + 1)] : [name];
+              return (
+                <text key={province.id} className={province.kind === "comarca" ? "is-comarca" : undefined} x={province.x} y={province.y} textAnchor="middle">
+                  {lines.length === 1 ? name : lines.map((line, index) => <tspan key={line} x={province.x} dy={index === 0 ? "-0.4em" : "1em"}>{line}</tspan>)}
+                </text>
+              );
+            })}
+          </g>
+        )}
+        {(!showProvinces || z >= 2) && (
+          <g className="hx-cities" aria-hidden="true">
+            {cities.map(city => (
+              <g key={city.name}>
+                <rect x={px(city.lng) - 3 * k} y={py(city.lat) - 3 * k} width={6 * k} height={6 * k} />
+                <text x={px(city.lng) + 7 * k} y={py(city.lat) + 4 * k}>{city.name}</text>
+              </g>
+            ))}
+          </g>
+        )}
         <g>
           {ordered.map(quake => {
             const era = eraOf(quake);
@@ -173,6 +282,13 @@ function QuakeMap({ visible, selectedId, mainId, onPick, view, onView, outline, 
           return quake ? <circle className="hx-selring" cx={px(quake.lng)} cy={py(quake.lat)} r={radiusOf(quake.mag) * shrink + 6 * shrink} style={{ "--r": radiusOf(quake.mag) * shrink + 6 * shrink } as CSSProperties} /> : null;
         })()}
       </svg>
+      {(satellite || showProvinces) && (
+        <span className="hx-credit">
+          {satellite && <>Imagen © Esri, Maxar, Earthstar Geographics</>}
+          {satellite && showProvinces && <br />}
+          {showProvinces && <>Límites: geoBoundaries © OpenStreetMap (ODbL)</>}
+        </span>
+      )}
       {hover && (
         <div className="hx-tip" style={{ left: `${hover.left}%`, top: `${hover.top}%` }} aria-hidden="true">
           <strong>M {formatMag(hover.quake.mag)}</strong> · {yearOf(hover.quake.time)}
@@ -268,7 +384,18 @@ function Strip({ shown, faint, selectedId, onPick, first, last, cursor, win }: {
 
 // ---------- la página interactiva ----------
 
-export default function HistoryExplorer({ quakes, outline, cities, topMap }: { quakes: HistoricQuake[]; outline: string; cities: City[]; topMap: ReactNode }) {
+export default function HistoryExplorer({ quakes, outline, cities, provinces, provinceTexts, noaa, noaaFetchedAt, topMap }: {
+  quakes: HistoricQuake[];
+  outline: string;
+  cities: City[];
+  provinces: ProvinceShape[];
+  // En qué provincia o comarca (o mar frente a cuál) cae cada sismo, según sus coordenadas.
+  provinceTexts: Record<string, string>;
+  // Las curiosidades que salen de NOAA NCEI para cada sismo (ver lib/noaa-history.ts) y cuándo se consultó. Vacío si NOAA no respondió.
+  noaa: Record<string, Fact[]>;
+  noaaFetchedAt: string | null;
+  topMap: ReactNode;
+}) {
   const all = useMemo(() => [...quakes].sort((a, b) => a.time - b.time), [quakes]);
   const first = all.length ? yearOf(all[0].time) : 1900;
   const last = all.length ? yearOf(all[all.length - 1].time) : first;
@@ -285,6 +412,13 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
   const [rows, setRows] = useState(ROWS_FIRST);
   const [announce, setAnnounce] = useState("");
   const [copied, setCopied] = useState(false);
+  // Vista: mapa plano, imagen satelital o 3D (la escena 3D del sitio, que se baja solo al elegirla).
+  const [mode, setMode] = useState<Mode>("plan");
+  const [three, setThree] = useState<{ Scene: typeof import("../quake-3d").default } | null>(null);
+  const [threeFailed, setThreeFailed] = useState(false);
+  const [full, setFull] = useState(false);
+  const [layers, setLayers] = useState({ plates: false, faults: false });
+  const [showProvinces, setShowProvinces] = useState(true);
   const raf = useRef(0);
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
 
@@ -298,6 +432,19 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
     if (id && all.some(quake => quake.id === id)) document.getElementById("hx-explorer")?.scrollIntoView({ block: "start" });
   }, [all]);
 
+  // Con la escena 3D ampliada sobre la página: Escape la cierra y la página de abajo no se desplaza.
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (event: globalThis.KeyboardEvent) => event.key === "Escape" && setFull(false);
+    const previous = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.documentElement.style.overflow = previous;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+
   const windowed = useMemo(() => filterQuakes(all, { minMag, from: win[0], to: win[1] }), [all, minMag, win]);
   const shown = useMemo(() => windowed.filter(quake => yearOf(quake.time) <= cursor), [windowed, cursor]);
   const faint = useMemo(() => windowed.filter(quake => yearOf(quake.time) > cursor), [windowed, cursor]);
@@ -308,6 +455,15 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
   const stop = () => {
     cancelAnimationFrame(raf.current);
     setPlaying(false);
+  };
+  const loadThree = () => {
+    setThreeFailed(false);
+    import("../quake-3d").then(module => setThree({ Scene: module.default })).catch(() => setThreeFailed(true));
+  };
+  const chooseMode = (next: Mode) => {
+    setMode(next);
+    setFull(false);
+    if (next === "3d" && !three) loadThree();
   };
   const choose = (id: string | null) => {
     writeSelection(id);
@@ -390,6 +546,11 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
     else list.sort((a, b) => a.time - b.time);
     return list;
   }, [windowed, sort]);
+  // La escena 3D del sitio recibe los sismos con la misma forma que los del catálogo en vivo (la profundidad es la del USGS).
+  const events3d = useMemo(() => shown.map(quake => toEarthquake(quake)), [shown]);
+  const main3d = useMemo(() => (main && shown.some(quake => quake.id === main.id) ? toEarthquake(main) : null), [main, shown]);
+  const roundDepths = useMemo(() => shown.filter(quake => quake.depth !== null && quake.depth % 5 === 0).length, [shown]);
+  const filtersKey = minMag === 6 && !narrowed ? "" : `${minMag}|${win[0]}-${win[1]}`;
   const gaps = useMemo(() => m7Gaps(all), [all]);
   const gapYears = gaps.flatMap(gap => (gap.years === null ? [] : [gap.years]));
 
@@ -425,15 +586,24 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
     return { rank, sameDate, lines, isMain };
   };
   const info = selected ? detail(selected) : null;
+  // Los datos curiosos del sismo elegido: primero los de NOAA y los productos del USGS, y al final los que se calculan con el catálogo.
+  const capital = cities.find(city => city.name === "Ciudad de Panamá") ?? null;
+  const facts: Fact[] = selected ? [...(noaa[selected.id] ?? []), ...usgsFacts(selected), ...computedFacts(selected, all, { capital })] : [];
   const navIndex = selected ? windowed.findIndex(quake => quake.id === selected.id) : -1;
 
   return (
     <>
       <section className="hs-card" id="hx-explorer" aria-labelledby="hx-h">
         <h2 id="hx-h">Explora los {all.length} sismos</h2>
-        <p className="hs-sub">Toca un círculo del mapa o de la línea de tiempo para ver ese sismo. Cambia la magnitud mínima, elige una década o reproduce la historia año por año.</p>
+        <p className="hs-sub">Mira los sismos en el mapa plano, sobre la imagen satelital o en 3D. Toca un círculo del mapa o de la línea de tiempo para ver ese sismo, cambia la magnitud mínima, elige una década o reproduce la historia año por año.</p>
 
         <div className="hx-controls">
+          <div className="hx-group" role="group" aria-label="Vista del mapa">
+            <span className="hx-label">Vista</span>
+            {MODES.map(item => (
+              <button key={item.value} type="button" className="hx-chip" aria-pressed={mode === item.value} aria-label={item.long} onClick={() => chooseMode(item.value)}>{item.label}</button>
+            ))}
+          </div>
           <div className="hx-group" role="group" aria-label="Magnitud mínima">
             <span className="hx-label">Magnitud</span>
             {MIN_MAGS.map(value => (
@@ -446,11 +616,16 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
               : <button type="button" className="hx-btn hx-main" onClick={play} disabled={win[0] === win[1]}><Play aria-hidden="true" size={18} /><span>Reproducir la historia</span></button>}
             {narrowed && <button type="button" className="hx-btn" onClick={() => setWindow(first, last)}><RotateCcw aria-hidden="true" size={16} /><span>Todos los años</span></button>}
           </div>
-          <div className="hx-group" role="group" aria-label="Acercar el mapa">
+          {mode !== "3d" && (
+            <div className="hx-group" role="group" aria-label="Capas del mapa">
+              <button type="button" className="hx-chip" aria-pressed={showProvinces} onClick={() => setShowProvinces(value => !value)} title="Límites y nombres de las 10 provincias y las 3 comarcas indígenas">Provincias</button>
+            </div>
+          )}
+          {mode !== "3d" && <div className="hx-group" role="group" aria-label="Acercar el mapa">
             <button type="button" className="hx-btn hx-icon" onClick={() => zoomBy(2)} disabled={view.z >= MAX_ZOOM} aria-label="Acercar el mapa"><ZoomIn aria-hidden="true" size={18} /></button>
             <button type="button" className="hx-btn hx-icon" onClick={() => zoomBy(0.5)} disabled={view.z <= 1} aria-label="Alejar el mapa"><ZoomOut aria-hidden="true" size={18} /></button>
             <button type="button" className="hx-btn" onClick={resetView} disabled={view.z === 1}>Ver todo</button>
-          </div>
+          </div>}
         </div>
 
         <label className="hx-scrub">
@@ -465,17 +640,50 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
 
         <div className="hx-stage">
           <div className="hx-visual">
+            {mode === "3d" ? (
+              <div className={`map-frame hx-3d${full ? " is-full" : ""}`}>
+                {three ? (
+                  <three.Scene
+                    events={events3d} filtersKey={filtersKey} fitKey={0} restartKey={0} expanded={full} overlay={full} onToggleExpanded={() => setFull(value => !value)}
+                    mainshock={main3d} selectedId={selected?.id ?? null} replay={null} region={null} fault={null} felt={null} shaking={null}
+                    plates={layers.plates} activeFaults={layers.faults} wave={false} shakeGrid={null} mechanism={null}
+                    layerControls={(
+                      <div className="q3-seg q3-layers" role="group" aria-label="Capas del mapa 3D">
+                        <button type="button" className={`layer-chip${layers.plates ? " on" : ""}`} aria-pressed={layers.plates} onClick={() => setLayers(value => ({ ...value, plates: !value.plates }))}
+                          title="Límites entre las placas tectónicas (modelo PB2002, P. Bird 2003): aproximados"><span className="chip-long">Placas tectónicas</span><span className="chip-short" aria-hidden="true">Placas</span></button>
+                        <button type="button" className={`layer-chip${layers.faults ? " on" : ""}`} aria-pressed={layers.faults} onClick={() => setLayers(value => ({ ...value, faults: !value.faults }))}
+                          title="Fallas activas en tierra en el centro del país: Pedro Miguel, Limón y Gatún (CCAF-DB/GEM; Rockwell et al., 2010; Gath et al.)"><span className="chip-long">Fallas activas</span><span className="chip-short" aria-hidden="true">Fallas</span></button>
+                      </div>
+                    )}
+                    onSelect={choose}
+                  />
+                ) : (
+                  <div className="q3-loading" role="status">
+                    {threeFailed ? <>No se pudo cargar la vista 3D. <button type="button" className="hx-btn" onClick={loadThree}>Reintentar</button></> : "Cargando la vista 3D…"}
+                  </div>
+                )}
+              </div>
+            ) : (
             <div tabIndex={0} role="group" aria-label="Mapa interactivo. Con el teclado: flechas izquierda y derecha para pasar de un sismo al siguiente, más y menos para acercar, cero para ver todo, Escape para quitar la selección."
               onKeyDown={onMapKey} className="hx-focus">
-              <QuakeMap visible={shown} selectedId={selected?.id ?? null} mainId={main?.id ?? null} onPick={choose} view={view} onView={setView} outline={outline} cities={cities} />
+              <QuakeMap satellite={mode === "sat"} provinces={provinces} showProvinces={showProvinces} visible={shown} selectedId={selected?.id ?? null} mainId={main?.id ?? null} onPick={choose} view={view} onView={setView} outline={outline} cities={cities} />
             </div>
+            )}
             {selected && (
               <div className="hx-pick">
                 <span><strong>M {formatMag(selected.mag)}</strong> · {formatDateUTC(selected.time)} · {placeEs(selected.place)}</span>
                 <button type="button" className="hx-linkbtn" onClick={() => document.getElementById("hx-detail")?.scrollIntoView({ block: "start", behavior: "smooth" })}>Ver el detalle ↓</button>
               </div>
             )}
-            <p className="hx-hint">Toca un círculo para ver ese sismo. {view.z > 1 ? "Arrastra el mapa para moverlo." : "Acerca el mapa con los botones o con + y −."} Con el teclado, las flechas recorren los sismos.</p>
+            {mode === "3d" ? (
+              <p className="hx-hint">
+                Cada sismo está a su profundidad bajo la superficie, con la imagen satelital y el relieve de Panamá. Arrastra para girar la escena; la magnitud, las décadas, el deslizador y la reproducción siguen cambiando lo que ves.
+                {roundDepths > 0 && <> De los {shown.length} sismos que ves, {roundDepths} tienen una profundidad exacta en múltiplos de 5 km (10, 15, 25…): es habitual que el catálogo use un valor fijo cuando no logra calcularla, así que esa altura es aproximada.</>}
+                {" "}Ojo: en la escena 3D las horas están en hora de Panamá; en el resto de la página, en hora universal (UTC), como las publica el USGS.
+              </p>
+            ) : (
+              <p className="hx-hint">Toca un círculo para ver ese sismo. {view.z > 1 ? "Arrastra el mapa para moverlo." : "Acerca el mapa con los botones o con + y −."} Con el teclado, las flechas recorren los sismos.</p>
+            )}
             <Strip shown={shown} faint={faint} selectedId={selected?.id ?? null} onPick={choose} first={first} last={last} cursor={cursor} win={win} />
             <ul className="hs-legend" aria-label="Leyenda">
               <li><i className="hs-sw hs-e1" /> 1900–1949</li>
@@ -501,6 +709,7 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
                   <div><dt>Puesto por magnitud</dt><dd>{info.rank} de {all.length}</dd></div>
                   <div><dt>Profundidad</dt><dd>{selected.depth === null ? "—" : `${Math.round(selected.depth)} km`}</dd></div>
                   <div><dt>Posición publicada</dt><dd>{coords(selected)}</dd></div>
+                  <div><dt>Provincia o comarca</dt><dd>{provinceTexts[selected.id] ?? "—"}</dd></div>
                 </dl>
                 <ul className="hx-lines">
                   {info.lines.map((line, index) => <li key={index}>{line}</li>)}
@@ -513,6 +722,31 @@ export default function HistoryExplorer({ quakes, outline, cities, topMap }: { q
                     ))}.
                   </p>
                 )}
+                <section className="hx-curious" aria-labelledby="hx-curious-h">
+                  <h3 id="hx-curious-h">Datos curiosos</h3>
+                  <ul>
+                    {facts.map(fact => (
+                      <li key={fact.id}>
+                        <p>{fact.text}</p>
+                        {fact.note && <small className="hx-fact-note">{fact.note}</small>}
+                        <span className="hx-fact-src">
+                          Fuente: <a href={fact.source.url} target="_blank" rel="noopener noreferrer">{fact.source.label}<span aria-hidden="true"> ↗</span></a>
+                          {fact.source.kind === "noaa" && <> · <a href={fact.source.data} target="_blank" rel="noopener noreferrer">datos originales<span aria-hidden="true"> ↗</span></a></>}
+                        </span>
+                        {fact.original && (
+                          <details className="hx-fact-orig">
+                            <summary>Texto original de la fuente (en inglés)</summary>
+                            <q lang="en">{fact.original}</q>
+                          </details>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="hx-note">
+                    Cada dato dice de dónde sale. Los de NOAA vienen de sus bases de datos de sismos significativos (doi:10.7289/V5TD9V7K) y de tsunamis (doi:10.7289/V5PN93H7){noaaFetchedAt ? `, consultadas el ${formatDateUTC(Date.parse(noaaFetchedAt))}` : ""}, y solo se unen a un sismo del USGS si coinciden en hora (hasta 20 min) y en lugar (hasta 200 km).
+                    {noaaFetchedAt ? "" : " NOAA no respondió en este momento: se muestran solo los datos del USGS y los calculados."} Si una fuente no trae un dato, no se muestra.
+                  </p>
+                </section>
                 <div className="hx-actions">
                   <button type="button" className="hx-btn" onClick={() => step(-1)} disabled={navIndex <= 0 && navIndex !== -1} aria-label="Sismo anterior en el tiempo"><ChevronLeft aria-hidden="true" size={16} />Anterior</button>
                   <button type="button" className="hx-btn" onClick={() => step(1)} disabled={navIndex === windowed.length - 1} aria-label="Sismo siguiente en el tiempo">Siguiente<ChevronRight aria-hidden="true" size={16} /></button>

@@ -20,11 +20,15 @@ export type HistoricQuake = {
   current: boolean;
   // Página del sismo en el USGS (solo si el enlace es del propio sitio del USGS).
   url: string | null;
+  // Lo que el USGS publica de sus productos: intensidad máxima de su ShakeMap (mmi) y reportes del «¿Lo sentiste?» (felt y cdi). null = no hay.
+  mmi: number | null;
+  felt: number | null;
+  cdi: number | null;
 };
 
 type GeoFeature = {
   id?: unknown;
-  properties?: { time?: unknown; mag?: unknown; magType?: unknown; place?: unknown; url?: unknown };
+  properties?: { time?: unknown; mag?: unknown; magType?: unknown; place?: unknown; url?: unknown; mmi?: unknown; felt?: unknown; cdi?: unknown };
   geometry?: { coordinates?: unknown };
 };
 
@@ -68,6 +72,9 @@ export function parseHistory(data: unknown): { panama: HistoricQuake[]; excluded
       depth: isNumber(c[2]) ? c[2] : null,
       current: p.time >= SINCE,
       url: typeof p.url === "string" && p.url.startsWith("https://earthquake.usgs.gov/") ? p.url : null,
+      mmi: isNumber(p.mmi) ? p.mmi : null,
+      felt: isNumber(p.felt) ? p.felt : null,
+      cdi: isNumber(p.cdi) ? p.cdi : null,
     };
     (isPanamaPlace(p.place) ? panama : excluded).push(quake);
   }
