@@ -47,8 +47,8 @@ type Props = {
   onReplay: (step: ReplayStep | null) => void;
   // Sube cuando se pide ver las fallas activas (desde su ficha): se enciende la capa y el mapa las encuadra.
   faultsKey: number;
-  // «Ver réplicas»: la portada arranca solo con el sismo principal y la persona decide cuándo ver las réplicas (`count` = cuántas hay).
-  // null = no hay nada que mostrar u ocultar (sin principal, o un filtro o la reproducción ya las traen).
+  // «Ver réplicas» de la vista 3D: arranca solo con el sismo principal y la persona decide cuándo ver las réplicas (`count` = cuántas hay).
+  // El mapa plano siempre las muestra. null = no hay nada que mostrar u ocultar (sin principal, o un filtro o la reproducción ya las traen).
   aftershockToggle: { shown: boolean; count: number; onToggle: () => void } | null;
 };
 
@@ -213,7 +213,6 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   // Durante una reproducción: sismos que aún no les toca aparecer. Sobrevive si el mapa rehace los marcadores.
   const replayHidden = useRef<Set<string> | null>(null);
   const fresh = useRef<{ id: string; until: number } | null>(null);
-  const hideLatest = !!aftershockToggle && !aftershockToggle.shown;
   const latest = useRef({ events, mainshock, onSelect, onReplay, onPropagationEnd });
   useEffect(() => {
     latest.current = { events, mainshock, onSelect, onReplay, onPropagationEnd };
@@ -379,7 +378,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const now = Date.now();
     // Cada consulta (cada ~25 s) trae una lista nueva aunque no haya nada nuevo. Rehacer entonces todos los
     // marcadores cerraba el popup abierto y, en plena reproducción de la secuencia, los mostraba todos de golpe.
-    const key = `${mainshock?.id ?? ""}|${hideLatest ? "h" : ""}|${events
+    const key = `${mainshock?.id ?? ""}|${events
       .map(event => `${event.id}:${event.properties.mag}:${event.properties.time}${event.id !== mainshock?.id && now - event.properties.time < RECENT_MS ? "r" : ""}`)
       .join(",")}`;
     if (key === builtKey.current) return;
@@ -390,8 +389,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     // anterior: con 400 sismos tardaban más de 30 s en aparecer y parecía una reproducción que nadie había pedido.
     const chronological = [...events].sort((a, b) => a.properties.time - b.properties.time).map(event => event.id);
     const popDelay = new Map(chronological.map((id, index) => [id, Math.round((index / Math.max(1, chronological.length - 1)) * 500)]));
-    // Con las réplicas ocultas no hay «última réplica»: el principal se dibuja como lo que es, no como el último sismo.
-    const latestEvent = hideLatest ? null : events.reduce<Earthquake | null>(
+    const latestEvent = events.reduce<Earthquake | null>(
       (newest, e) => (!newest || e.properties.time > newest.properties.time ? e : newest),
       null,
     );
@@ -536,7 +534,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       markersRef.current.set(event.id, marker);
     }
     if (events.length) popIn.current = false;
-  }, [events, mainshock, ready, hideLatest]);
+  }, [events, mainshock, ready]);
 
   // Capas con datos publicados por el USGS para el sismo principal: la ruptura de la falla (cuánto se deslizó cada
   // tramo) y los reportes de personas («¿Lo sentiste?», cuadros de 10 km). No se calcula nada aquí: se dibuja lo recibido.
@@ -1163,17 +1161,6 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           <span className="layer-text-full">{fullscreen !== "off" ? "Salir" : "Pantalla completa"}</span>
         </button>
       </div>
-      {aftershockToggle && !view3d && (
-        <button
-          type="button"
-          className={`aftershock-reveal${aftershockToggle.shown ? " on" : ""}`}
-          aria-pressed={aftershockToggle.shown}
-          onClick={aftershockToggle.onToggle}
-          title={aftershockToggle.shown ? "Deja en el mapa solo el sismo principal" : "Suma al mapa las réplicas del sismo principal"}
-        >
-          {aftershockToggle.shown ? "Ocultar réplicas" : `Ver réplicas · ${aftershockToggle.count.toLocaleString("es-PA")}`}
-        </button>
-      )}
       {/* Los botones de capas y su leyenda van en una misma columna: la leyenda crece hacia abajo y nunca tapa los botones. */}
       <div className="map-layers-dock">
       {!view3d && (

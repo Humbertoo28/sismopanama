@@ -154,9 +154,10 @@ export default function Home() {
   const [replay, setReplay] = useState<ReplayStep | null>(null);
   // La clave 0 significa "sin reproducción": al volver a ella el mapa corta la secuencia y muestra todos los sismos.
   const stopReplay = () => setReplayKey(0);
-  // El mapa arranca solo con el sismo principal; las réplicas aparecen con «Ver réplicas». La reproducción las necesita todas, así que las enciende.
+  // La vista 3D arranca solo con el sismo principal; las réplicas aparecen con «Ver réplicas». La reproducción las necesita todas, así que las enciende.
+  // El mapa plano (satélite, Esri, callejero) siempre muestra todo.
   const [showAftershocks, setShowAftershocks] = useState(false);
-  const startReplay = () => { setFocus(null); setShowAftershocks(true); setReplayKey(key => key + 1); };
+  const startReplay = () => { setShowAftershocks(true); setReplayKey(key => key + 1); };
   // Cambiar un filtro detiene la reproducción: lo que se reproduce es exactamente lo que el filtro deja ver.
   useEffect(() => { setReplayKey(0); }, [province, city, minimum, timeRange, onlyAftershocks]);
   const navLock = useRef(0);
@@ -514,23 +515,15 @@ export default function Home() {
     () => main ? mapEvents.filter(event => event.id === main.id || isAftershock(event, main)).length : 0,
     [mapEvents, main],
   );
-  // Con un filtro de magnitud, período, provincia, ciudad o «solo réplicas» el mapa enseña lo que ese filtro deja pasar; sin filtros, solo
-  // el principal hasta que se toque «Ver réplicas». Los sismos de los alrededores no son réplicas y se ven siempre que se piden.
-  // El principal también viene en el catálogo: con él el mapa sabe qué ocultar sin esperar a la consulta del sismo principal.
+  // Vista 3D: con un filtro de magnitud, período, provincia, ciudad o «solo réplicas» enseña lo que ese filtro deja pasar; sin filtros, solo el
+  // principal hasta que se toque «Ver réplicas». El principal también viene en el catálogo: así el botón sabe cuántas réplicas hay sin esperar
+  // a la consulta del sismo principal.
   const mainForMap = main ?? allEvents.find(event => event.id === MAINSHOCK_ID || event.properties.aliases?.includes(MAINSHOCK_ID)) ?? null;
   const filtersReveal = minimum > 0 || timeRange !== "all" || province !== "all" || city !== "all" || onlyAftershocks;
-  const aftershocksShown = showAftershocks || filtersReveal;
   const hiddenAftershocks = useMemo(
     () => mainForMap ? mapEvents.filter(event => !event.properties.nearby && isAftershock(event, mainForMap)).length : 0,
     [mapEvents, mainForMap],
   );
-  const mapShownEvents = useMemo(
-    () => !mainForMap || aftershocksShown ? mapEvents : mapEvents.filter(event => event.id === selectedId || event.properties.nearby || !(isAftershock(event, mainForMap) || isBeforeMainshock(event, mainForMap))),
-    [mapEvents, mainForMap, aftershocksShown, selectedId],
-  );
-  // Un enfoque pedido sobre un sismo que el mapa no dibuja (una réplica oculta) se descarta, y «Ver réplicas» y la reproducción lo borran:
-  // si no, al mostrar las réplicas el mapa saltaría de pronto hacia ese sismo.
-  const mapFocus = focus && mapShownEvents.some(event => event.id === focus.id) ? focus : null;
   const replayScope = selectedPlace?.name ?? provinceName;
   // Con una provincia elegida, la tarjeta muestra el último sismo de esa provincia y no el último de todo el país.
   // Hay algún filtro puesto (magnitud, período, provincia, ciudad o «solo réplicas»): el 3D enseña entonces lo que deja pasar.
@@ -722,7 +715,7 @@ export default function Home() {
           <section id="mapa" className="map-section" aria-labelledby="map-title">
             <div className="section-heading"><div><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3">M 3.0+ Sentidos</option><option value="3.5">M 3.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+ Fuertes</option><option value="6">M 6.0+</option><option value="7">M 7.0+</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 h</option><option value="6h">Últimas 6 h</option></select></label><label className="magnitude-filter">Provincia <select aria-label="Filtrar por provincia o comarca" value={province} onChange={event => { setProvince(event.target.value); setCity("all"); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option><optgroup label="Provincias">{PROVINCES.filter(item => item.kind === "provincia").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup><optgroup label="Comarcas indígenas">{PROVINCES.filter(item => item.kind === "comarca").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup>{(provinceCounts.get(FAR_OFFSHORE) ?? 0) > 0 && <option value={FAR_OFFSHORE}>Mar adentro · {provinceCounts.get(FAR_OFFSHORE)}</option>}{includeNearby && outsideCount > 0 && <option value={OUTSIDE}>Fuera de Panamá · {outsideCount}</option>}</select></label><label className="magnitude-filter">Ciudad <select aria-label="Filtrar por ciudad o localidad" value={city} onChange={event => { setCity(event.target.value); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option>{cityGroups.map(group => <optgroup key={group.code} label={province === "all" ? `${PROVINCE_BY_ID.get(group.province)?.name ?? ""} · ${group.name}` : group.name}>{group.options.length > 1 && <option value={`d:${group.code}`}>Todo {group.name} · {group.total}</option>}{group.options.map(({ place, count }) => <option key={place.id} value={place.id}>{place.name} · {count}</option>)}</optgroup>)}</select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}<label className="aftershock-toggle" title="Suma los sismos de Costa Rica, Colombia y el mar abierto cercano. No cuentan como réplicas ni generan alertas."><input type="checkbox" checked={includeNearby} onChange={event => { setIncludeNearby(event.target.checked); setSelectedId(null); setFocus(null); }} /> Incluir alrededores</label>{main && (replay === null
               ? <button type="button" className="replay-button" onClick={startReplay} disabled={replayCount < 2} title={replayCount < 2 ? "Con estos filtros hay menos de 2 sismos para reproducir" : undefined}>▶ Reproducir secuencia · {replayCount}</button>
-              : <div className="replay-pair"><button type="button" className="replay-button stop" onClick={stopReplay}>■ Parar</button><button type="button" className="replay-button" onClick={startReplay}>↻ Reiniciar</button></div>)}{filtersKey !== "" && mapShownEvents.length > 0 && <button type="button" className="replay-button" onClick={() => setFitKey(key => key + 1)} title="Acerca el mapa a los sismos que deja pasar el filtro">⌖ Ver {mapShownEvents.length === 1 ? "el sismo" : `los ${mapShownEvents.length} sismos`} en el mapa</button>}</div></div>
+              : <div className="replay-pair"><button type="button" className="replay-button stop" onClick={stopReplay}>■ Parar</button><button type="button" className="replay-button" onClick={startReplay}>↻ Reiniciar</button></div>)}{filtersKey !== "" && mapEvents.length > 0 && <button type="button" className="replay-button" onClick={() => setFitKey(key => key + 1)} title="Acerca el mapa a los sismos que deja pasar el filtro">⌖ Ver {mapEvents.length === 1 ? "el sismo" : `los ${mapEvents.length} sismos`} en el mapa</button>}</div></div>
             <a
               className="skip-link"
               href="#eventos"
@@ -735,7 +728,7 @@ export default function Home() {
               Saltar el mapa e ir a la lista de sismos
             </a>
             <div className="map-card">
-              <div className="map-frame"><QuakeMap events={mapShownEvents} aftershockToggle={mainForMap && !filtersReveal && replayKey === 0 && hiddenAftershocks > 0 ? { shown: showAftershocks, count: hiddenAftershocks, onToggle: () => { setFocus(null); setShowAftershocks(value => !value); } } : null} filtersKey={filtersKey} fitKey={fitKey} propagation={propagation} onPropagationEnd={() => setPropagation(null)} mainshock={main} focus={mapFocus} alert={alert} replayKey={replayKey} region={province === "all" || province === FAR_OFFSHORE ? null : province} place={selectedPlace} selectedId={selectedId} replay={replay} onSelect={id => { setSelectedId(id); setFocus({ id, quiet: true }); asideRef.current?.scrollTo({ top: 0, behavior: "smooth" }); if (fullscreenHost || document.querySelector(".map-frame .map-overlay-flag")) setSheet({ id, from: "map" }); }} onReplay={setReplay} faultsKey={faultsKey} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo{replayScope ? ` · ${replayScope}` : ""}</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<span className="replay-actions"><button type="button" className="stop" onClick={stopReplay}>■ Parar</button><button type="button" onClick={startReplay}>↻ Reiniciar</button></span><i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>Magnitud</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div>{(!mainForMap || aftershocksShown) && <div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>}{main && <div><i className="legend-circle main" /> Sismo principal</div>}</div></div>
+              <div className="map-frame"><QuakeMap events={mapEvents} aftershockToggle={mainForMap && !filtersReveal && replayKey === 0 && hiddenAftershocks > 0 ? { shown: showAftershocks, count: hiddenAftershocks, onToggle: () => setShowAftershocks(value => !value) } : null} filtersKey={filtersKey} fitKey={fitKey} propagation={propagation} onPropagationEnd={() => setPropagation(null)} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} region={province === "all" || province === FAR_OFFSHORE ? null : province} place={selectedPlace} selectedId={selectedId} replay={replay} onSelect={id => { setSelectedId(id); setFocus({ id, quiet: true }); asideRef.current?.scrollTo({ top: 0, behavior: "smooth" }); if (fullscreenHost || document.querySelector(".map-frame .map-overlay-flag")) setSheet({ id, from: "map" }); }} onReplay={setReplay} faultsKey={faultsKey} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo{replayScope ? ` · ${replayScope}` : ""}</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<span className="replay-actions"><button type="button" className="stop" onClick={stopReplay}>■ Parar</button><button type="button" onClick={startReplay}>↻ Reiniciar</button></span><i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>Magnitud</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>{main && <div><i className="legend-circle main" /> Sismo principal</div>}</div></div>
               <div className="map-aside" ref={asideRef} aria-live="polite">
                 {featured ? (
                   <QuakeDetails
@@ -746,7 +739,7 @@ export default function Home() {
                       setPropagation({ event: featured, key: Date.now() });
                       document.getElementById("mapa")?.scrollIntoView({ behavior: "smooth", block: "start" });
                     }}
-                    onShowOnMap={() => { setSelectedId(featured.id); setFocus({ id: featured.id }); }}
+                    onShowOnMap={() => setFocus({ id: featured.id })}
                     onReport={featured.properties.nearby ? undefined : () => setReportFor(featured)}
                   />
                 ) : (

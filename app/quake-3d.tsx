@@ -75,7 +75,6 @@ type Props = {
   // false = sin el interruptor «Réplicas» (la historia de Panamá no es una secuencia: son 94 sismos de 122 años; ocultar «réplicas» ahí dejaba solo el principal).
   aftershockToggle?: boolean;
   // «Ver réplicas» de la portada: la escena arranca solo con el principal y este botón (en la barra de controles) suma o quita las réplicas.
-  // Las réplicas las filtra quien usa la escena; aquí solo se dibuja el botón.
   aftershockReveal?: { shown: boolean; count: number; onToggle: () => void } | null;
   onSelect: (id: string) => void;
 };
@@ -194,7 +193,9 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   // Las réplicas se ven desde el principio: la secuencia completa a su profundidad es lo que esta vista enseña mejor. Se pueden
   // ocultar en «Ajustes y capas» para mirar solo el sismo principal y su ruptura; esa elección vale mientras no cambie ningún filtro.
   const [aftershockChoice, setAftershockChoice] = useState<{ key: string; show: boolean } | null>(null);
-  const showAftershocks = !aftershockToggle || (aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : true);
+  // «Ver réplicas» de la portada: mientras no se toque, la escena solo dibuja el sismo principal.
+  const revealHidden = !!aftershockReveal && !aftershockReveal.shown;
+  const showAftershocks = !revealHidden && (!aftershockToggle || (aftershockChoice && aftershockChoice.key === filtersKey ? aftershockChoice.show : true));
   // Animación de la ruptura: segundo del modelo que se está mostrando (null = la ruptura ya terminada, completa).
   const [ruptureTime, setRuptureTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -1900,8 +1901,8 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           )}
           <span><i className="q3-dot" style={{ background: COLORS.latest }} />Último</span>
           {mainshock && <span><i className="q3-dot" style={{ background: COLORS.main }} />{mainLabel}</span>}
-          {mainshock && !showAftershocks && replay === null && <span>Réplicas ocultas (se activan en «Ajustes y capas»)</span>}
-          {aftershockReveal && !aftershockReveal.shown && <span>Réplicas ocultas: toca «Ver réplicas»</span>}
+          {mainshock && !showAftershocks && replay === null && !revealHidden && <span>Réplicas ocultas (se activan en «Ajustes y capas»)</span>}
+          {revealHidden && replay === null && <span>Réplicas ocultas: toca «Ver réplicas»</span>}
           <span title="Profundidad de exactamente 10 o 5 km: el catálogo suele asignarla cuando no logra calcularla"><i className="q3-dot faint" />Profundidad asignada{facts.fixed > 0 ? ` (${facts.fixed})` : ""}</span>
           {fault && (
             <span><i className="slip-ramp" aria-hidden="true" style={{ background: SLIP_GRADIENT }} />Ruptura: de poco (amarillo) a mucho deslizamiento (rojo oscuro)</span>
