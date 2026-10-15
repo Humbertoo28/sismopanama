@@ -167,6 +167,7 @@ const REFERENCE_POINTS: Record<string, { lat: number; lng: number }> = {
   "Tonosí": { lat: 7.407, lng: -80.439 },
   "Coiba": { lat: 7.503, lng: -81.695 },
   "Chitré": { lat: 7.96, lng: -80.429 },
+  "Santiago": { lat: 8.1, lng: -80.983 }, // Santiago de Veraguas (GeoNames 3701117)
 };
 type ManualIgc = { local: string; mag: number; depth: number; reviewed: boolean; km: number; dir: keyof typeof COMPASS; from: keyof typeof REFERENCE_POINTS; silent?: boolean; prefix?: string };
 const MANUAL_IGC: ManualIgc[] = [
@@ -176,6 +177,8 @@ const MANUAL_IGC: ManualIgc[] = [
   { local: "2026-10-15T09:02:49-05:00", mag: 3.7, depth: 10, reviewed: false, km: 38, dir: "este", from: "Coiba" },
   // 15 de octubre, 9:10:02 a. m. (publicado en la cuenta @igcpanamaup): PRELIMINAR, M 4.3, 20 km, «a 10km al noroeste de Tonosí». Con aviso.
   { local: "2026-10-15T09:10:02-05:00", mag: 4.3, depth: 20, reviewed: false, km: 10, dir: "noroeste", from: "Tonosí" },
+  // 15 de octubre, 9:33:07 a. m. (cuenta @igcpanamaup): PRELIMINAR, M 3.9, 10 km, «a 44km al sur de Santiago». Con aviso.
+  { local: "2026-10-15T09:33:07-05:00", mag: 3.9, depth: 10, reviewed: false, km: 44, dir: "sur", from: "Santiago" },
   // Publicaciones de la cuenta @igcpanamaup (X) de la noche del 14 de octubre, desde la primera que hizo después de que su tabla se cayera
   // (8:18 p. m.) hasta las 10:19 p. m.; se leyeron el 15 de octubre. Cuando el IGC publica una ACTUALIZACIÓN (9:21:55 p. m.: de M 3.7, 13 km,
   // «26km al suroeste de Chitré» a M 4.5, 5 km, «25km al sur de Chitré») se usa la más reciente. Se agregan sin avisar (tienen horas).
