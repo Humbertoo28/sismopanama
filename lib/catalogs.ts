@@ -153,19 +153,55 @@ export async function fetchIgc(since: number, scope: Scope = "panama"): Promise<
 const RETRACTED_EVENTS = new Set(["emsc:2074346"]);
 
 // Sismos que el IGC publicó por otro medio (su canal oficial de Telegram) mientras su tabla no responde («Estamos en mantenimiento»):
-// se agregan a mano, uno por uno, con lo que el propio IGC publicó y de dónde salió. Si la tabla del IGC ya trae el mismo sismo (menos
-// de un minuto y 120 km de diferencia) se usa el de la tabla y este se descarta; cuando el IGC vuelva a responder se borra esta lista.
-//  - 15 de octubre de 2026, 8:31:37 a. m. (hora local): «Estado PRELIMINAR, magnitud 4.9, profundidad 10 km, localizado en Panamá a 29km
-//    al sureste de Las Tablas». El mensaje no trae coordenadas: la posición es la que sale de ese rumbo y distancia contados desde Las
-//    Tablas (GeoNames 3706208: 7.766° N, 80.278° O), es decir, aproximada (el IGC da el rumbo en ocho direcciones y la distancia redondeada).
-const MANUAL_IGC_EVENTS: Earthquake[] = (() => {
-  const time = Date.parse("2026-10-15T08:31:37-05:00");
-  return [{
+// se agregan a mano, uno por uno, con lo que el propio IGC publicó, que es lo que dicen los mensajes que mostró quien administra el sitio:
+// estado (REVISADO o PRELIMINAR), fecha y hora local, magnitud, profundidad y «localizado en Panamá a N km al <rumbo> de <lugar>».
+// Esos mensajes no traen coordenadas: la posición es la que sale de ese rumbo y esa distancia contados desde el lugar de referencia (su
+// punto de GeoNames), es decir, APROXIMADA: el IGC da el rumbo en ocho direcciones y la distancia redondeada (varios km de diferencia).
+// Si la tabla del IGC ya trae el mismo sismo (menos de un minuto y 120 km de diferencia) se usa el de la tabla y este se descarta;
+// cuando el IGC vuelva a responder se borra esta lista. Con `silent` el sismo se agrega sin avisarlo (ver `noAlert` en earthquakes.ts).
+const COMPASS: Record<string, number> = { norte: 0, noreste: 45, este: 90, sureste: 135, sur: 180, suroeste: 225, oeste: 270, noroeste: 315 };
+// Puntos de referencia (GeoNames; Coiba es el de lib/places.ts).
+const REFERENCE_POINTS: Record<string, { lat: number; lng: number }> = {
+  "Las Tablas": { lat: 7.766, lng: -80.278 },
+  "Soná": { lat: 8.009, lng: -81.317 },
+  "Tonosí": { lat: 7.407, lng: -80.439 },
+  "Coiba": { lat: 7.503, lng: -81.695 },
+};
+type ManualIgc = { local: string; mag: number; depth: number; reviewed: boolean; km: number; dir: keyof typeof COMPASS; from: keyof typeof REFERENCE_POINTS; silent?: boolean };
+const MANUAL_IGC: ManualIgc[] = [
+  // 15 de octubre, 8:31:37 a. m.: PRELIMINAR, M 4.9, 10 km, «a 29km al sureste de Las Tablas». Se avisó (alerta push enviada a las 8:50 a. m.).
+  { local: "2026-10-15T08:31:37-05:00", mag: 4.9, depth: 10, reviewed: false, km: 29, dir: "sureste", from: "Las Tablas" },
+  // Mensajes del canal del IGC del 14 y 15 de octubre mostrados el 15 de octubre a las 9 a. m.; se agregan sin avisar.
+  { local: "2026-10-15T07:48:28-05:00", mag: 3.5, depth: 12, reviewed: true, km: 29, dir: "sur", from: "Soná", silent: true },
+  { local: "2026-10-15T06:59:03-05:00", mag: 3.6, depth: 13, reviewed: true, km: 33, dir: "noreste", from: "Coiba", silent: true },
+  { local: "2026-10-15T06:03:17-05:00", mag: 3.8, depth: 20, reviewed: true, km: 33, dir: "suroeste", from: "Soná", silent: true },
+  { local: "2026-10-15T01:24:40-05:00", mag: 3.7, depth: 10, reviewed: false, km: 34, dir: "noroeste", from: "Tonosí", silent: true },
+  { local: "2026-10-15T00:38:15-05:00", mag: 3.4, depth: 10, reviewed: false, km: 31, dir: "sur", from: "Soná", silent: true },
+  { local: "2026-10-15T00:15:44-05:00", mag: 3.7, depth: 10, reviewed: false, km: 15, dir: "noreste", from: "Tonosí", silent: true },
+  { local: "2026-10-14T23:03:04-05:00", mag: 4.5, depth: 10, reviewed: false, km: 18, dir: "noroeste", from: "Tonosí", silent: true },
+  { local: "2026-10-14T22:58:21-05:00", mag: 3.7, depth: 10, reviewed: false, km: 33, dir: "este", from: "Coiba", silent: true },
+];
+
+export const MANUAL_IGC_EVENTS: Earthquake[] = MANUAL_IGC.map(item => {
+  const time = Date.parse(item.local);
+  const ref = REFERENCE_POINTS[item.from];
+  const bearing = (COMPASS[item.dir] * Math.PI) / 180;
+  const lat = ref.lat + (item.km * Math.cos(bearing)) / 110.57;
+  const lng = ref.lng + (item.km * Math.sin(bearing)) / (111.32 * Math.cos((ref.lat * Math.PI) / 180));
+  return {
     id: `igc:${Math.round(time / 1000)}`,
-    properties: { mag: 4.9, place: "Panamá a 29km al sureste de Las Tablas", time, url: IGC_URL, status: "automatic" as const, source: "igc" as const },
-    geometry: { coordinates: [-80.092, 7.58, 10] as [number, number, number] },
-  }];
-})();
+    properties: {
+      mag: item.mag,
+      place: `Panamá a ${item.km}km al ${item.dir} de ${item.from}`,
+      time,
+      url: IGC_URL,
+      status: item.reviewed ? ("reviewed" as const) : ("automatic" as const),
+      source: "igc" as const,
+      ...(item.silent ? { noAlert: true } : {}),
+    },
+    geometry: { coordinates: [Number(lng.toFixed(3)), Number(lat.toFixed(3)), item.depth] as [number, number, number] },
+  };
+});
 
 export function withManualIgc(fromIgc: Earthquake[], since: number): Earthquake[] {
   const missing = MANUAL_IGC_EVENTS.filter(manual => manual.properties.time >= since && !fromIgc.some(real => sameEvent(real, manual)));
@@ -234,6 +270,8 @@ function merge(primary: Earthquake[], secondary: Earthquake[]) {
         ...event.properties,
         aliases: [...(event.properties.aliases ?? []), secondary[best].id],
         agencies: [...(event.properties.agencies ?? [reportOf(event)]), reportOf(secondary[best])],
+        // Un sismo agregado a mano sin avisar sigue sin avisarse aunque otro catálogo lo publique después.
+        ...(event.properties.noAlert || secondary[best].properties.noAlert ? { noAlert: true } : {}),
       },
     };
   });

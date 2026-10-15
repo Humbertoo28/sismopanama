@@ -244,7 +244,7 @@ export default function Home() {
 
         // Un sismo es "nuevo" si no estaba registrado y ocurrió hace menos de 2 horas
         const fresh = reliable.filter(
-          event => !isSeenQuake(event, known) && !previousEvents.current.some(old => sameEvent(old, event)) && Date.now() - event.properties.time < 2 * 3_600_000,
+          event => !event.properties.noAlert && !isSeenQuake(event, known) && !previousEvents.current.some(old => sameEvent(old, event)) && Date.now() - event.properties.time < 2 * 3_600_000,
         );
 
         // Con un sismo nuevo se actualizan ya los contadores de réplicas y el contraste entre agencias.

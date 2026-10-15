@@ -18,6 +18,9 @@ export type Earthquake = {
     agencies?: { source: "usgs" | "igc" | "emsc"; mag: number | null; magType?: string | null }[];
     // Sismo de los alrededores (fuera de Panamá): solo llega con «Incluir alrededores» y no cuenta como réplica.
     nearby?: boolean;
+    // Sismo agregado a mano a pedido de quien administra el sitio SIN avisarlo: no sale en alertas push ni suena ni se muestra como aviso
+    // en la página (solo aparece en el mapa y la lista). Ver MANUAL_IGC_EVENTS en lib/catalogs.ts.
+    noAlert?: boolean;
   };
   geometry: { coordinates: [number, number, number?] };
 };

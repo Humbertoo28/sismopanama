@@ -32,6 +32,8 @@ export function selectQuakesToPush(events: Earthquake[], notified: NotifiedRow[]
   for (const event of events) {
     const mag = event.properties.mag ?? 0;
     if (mag < MIN_MAGNITUDE || now - event.properties.time > PUSH_MAX_AGE_MS) continue;
+    // Agregado a mano sin avisar (ver MANUAL_IGC_EVENTS): nunca sale como alerta.
+    if (event.properties.noAlert) continue;
     if (awaitsConfirmation(event, igcUp)) continue;
     if ([event.id, ...(event.properties.aliases ?? [])].some(id => ids.has(id))) continue;
     const current = { time: event.properties.time, mag };
