@@ -269,6 +269,24 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 - **Alerta (enviada).** Como cualquier sismo del IGC de M 3 o más hecho hace menos de una hora, se avisó **una sola vez a las 8:50 a. m. (13:50 UTC)**: **30 534 de 30 704** suscripciones aceptadas (las de quienes eligieron una magnitud mínima de 4.9 o menos; las 170 restantes fueron rechazadas por Google/Apple, casi todas suscripciones caducadas), con el «hace N min» en el texto. Probado antes de subirlo con datos simulados (13 comprobaciones: aparece solo si falta, se descarta si la tabla lo trae, ~29 km al sureste de Las Tablas, se alerta una vez y no más de una hora después).
 - **Lo que no se puede comprobar:** el dato viene de una captura de un mensaje reenviado; no se pudo abrir el canal ni la tabla del IGC.
 
+**Ocho sismos más, agregados SIN avisar (15 de octubre de 2026, 9 a. m.).** Con ocho capturas del mismo canal, y la orden «añade estos sin mandar notificaciones», se agregaron (hora local; todos «Panamá a N km al <rumbo> de <lugar>»):
+
+| Hora local | M | Prof. | Estado | Lugar |
+|---|---|---|---|---|
+| 14 oct, 10:58:21 p. m. | 3.7 | 10 km | preliminar | 33 km al este de Coiba |
+| 14 oct, 11:03:04 p. m. | 4.5 | 10 km | preliminar | 18 km al noroeste de Tonosí |
+| 15 oct, 12:15:44 a. m. | 3.7 | 10 km | preliminar | 15 km al noreste de Tonosí |
+| 15 oct, 12:38:15 a. m. | 3.4 | 10 km | preliminar | 31 km al sur de Soná |
+| 15 oct, 1:24:40 a. m. | 3.7 | 10 km | preliminar | 34 km al noroeste de Tonosí |
+| 15 oct, 6:03:17 a. m. | 3.8 | 20 km | revisado | 33 km al suroeste de Soná |
+| 15 oct, 6:59:03 a. m. | 3.6 | 13 km | revisado | 33 km al noreste de Coiba |
+| 15 oct, 7:48:28 a. m. | 3.5 | 12 km | revisado | 29 km al sur de Soná |
+
+- **Sin avisar, de tres maneras.** Cada uno lleva `noAlert` (`lib/earthquakes.ts`): `selectQuakesToPush` (`lib/push-check.ts`) lo salta, la página no lo trata como sismo nuevo (no suena, no sale el aviso en pantalla: `app/page.tsx`) y `merge` (`lib/catalogs.ts`) conserva la marca si EMSC o USGS publican el mismo sismo. Probado con los catálogos reales: los 8 quedan en la lista final con la marca y el cron no eligió ninguno; **se comprobó en los registros de Vercel que, después de subirlo, no salió ninguna alerta**. Aparecen solo en el mapa y en la lista.
+- **Fusión con el EMSC:** dos coinciden con sismos que el EMSC ya tenía y que ya se habían avisado en su momento: el M 3.8 de las 6:03 a. m. (EMSC M 3.6) y el M 4.5 de las 11:03 p. m. (EMSC M 4.1). Ahora se ven como un solo sismo con las dos agencias.
+- **Posición aproximada**, como la del M 4.9: sale del lugar de referencia (GeoNames), el rumbo y la distancia que dice el IGC (los mensajes no traen coordenadas); la lista pasó a una tabla de datos (`MANUAL_IGC` en `lib/catalogs.ts`) que calcula la posición, y se comprobó que cada una queda a la distancia y en el rumbo indicados (±1 km, ±2°). El rumbo del IGC es de ocho direcciones: la posición real puede estar hasta ~13 km al lado.
+- **Pendiente: borrar la lista cuando el IGC vuelva a responder.**
+
 ---
 
 ## ⚡ Lista de sismos: la página se «caía» al tocar «Mayor magnitud»
