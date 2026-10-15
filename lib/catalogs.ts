@@ -152,6 +152,26 @@ export async function fetchIgc(since: number, scope: Scope = "panama"): Promise<
 //    su tabla y la del USGS no lo tienen y 87 s antes hubo un M 4.8 profundo en el norte de Colombia (probable falsa asociación).
 const RETRACTED_EVENTS = new Set(["emsc:2074346"]);
 
+// Sismos que el IGC publicó por otro medio (su canal oficial de Telegram) mientras su tabla no responde («Estamos en mantenimiento»):
+// se agregan a mano, uno por uno, con lo que el propio IGC publicó y de dónde salió. Si la tabla del IGC ya trae el mismo sismo (menos
+// de un minuto y 120 km de diferencia) se usa el de la tabla y este se descarta; cuando el IGC vuelva a responder se borra esta lista.
+//  - 15 de octubre de 2026, 8:31:37 a. m. (hora local): «Estado PRELIMINAR, magnitud 4.9, profundidad 10 km, localizado en Panamá a 29km
+//    al sureste de Las Tablas». El mensaje no trae coordenadas: la posición es la que sale de ese rumbo y distancia contados desde Las
+//    Tablas (GeoNames 3706208: 7.766° N, 80.278° O), es decir, aproximada (el IGC da el rumbo en ocho direcciones y la distancia redondeada).
+const MANUAL_IGC_EVENTS: Earthquake[] = (() => {
+  const time = Date.parse("2026-10-15T08:31:37-05:00");
+  return [{
+    id: `igc:${Math.round(time / 1000)}`,
+    properties: { mag: 4.9, place: "Panamá a 29km al sureste de Las Tablas", time, url: IGC_URL, status: "automatic" as const, source: "igc" as const },
+    geometry: { coordinates: [-80.092, 7.58, 10] as [number, number, number] },
+  }];
+})();
+
+export function withManualIgc(fromIgc: Earthquake[], since: number): Earthquake[] {
+  const missing = MANUAL_IGC_EVENTS.filter(manual => manual.properties.time >= since && !fromIgc.some(real => sameEvent(real, manual)));
+  return missing.length ? [...fromIgc, ...missing] : fromIgc;
+}
+
 async function fetchEmsc(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
   const query = new URLSearchParams({
     format: "json", orderby: "time", limit: "2000", starttime: new Date(since).toISOString().slice(0, 19), ...REGION,
@@ -226,7 +246,8 @@ export async function fetchPanamaEvents(since: number): Promise<{ events: Earthq
   if (usgs.status === "rejected") console.error("USGS no disponible:", usgs.reason);
   if (igc.status === "rejected") console.error("IGC no disponible:", igc.reason);
   if (emsc.status === "rejected") console.error("EMSC no disponible:", emsc.reason);
-  const [fromUsgs, fromIgc, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
+  const [fromUsgs, igcRows, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
+  const fromIgc = withManualIgc(igcRows, since);
   if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
   // Prioridad al elegir qué registro mostrar de un mismo sismo: USGS (revisión y datos adicionales), luego
   // IGC (red local, etiqueta del lugar) y por último EMSC.
