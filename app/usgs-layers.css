@@ -384,3 +384,16 @@ html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdro
 .q3-scene-meta span { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: none; }
 .q3-scene-meta .q3-live { color: #fff4be; }
 @media (max-width: 700px) { .q3-scene-meta { left: 12px; right: 12px; top: 8px; font-size: calc(13px*var(--ts,1)); } }
+
+/* «Ver réplicas»: el mapa de la portada arranca solo con el sismo principal. El botón va sobre la leyenda, a la izquierda. */
+.aftershock-reveal { position: absolute; z-index: 520; left: 14px; bottom: 62px; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 1px solid #ffffff55; border-radius: 999px; background: #da121a; color: #fff; font: 800 calc(13px*var(--ts,1))/1 inherit; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 18px #00000055; }
+.aftershock-reveal:hover { filter: brightness(1.1); }
+.aftershock-reveal.on { background: #072357; border-color: #ffffff40; }
+.map-frame:has(.q3-overlay) .aftershock-reveal { z-index: 1400; }
+/* En 3D el mismo botón va en la barra de controles de la escena, bajo el mapa. */
+.q3-reveal:not(.on) { background: #da121a; border-color: #ffffff55; color: #fff; }
+.q3-reveal:not(.on):hover { background: #e32a32; }
+@media (max-width: 700px) {
+  /* En el celular el marco del mapa crece hacia abajo (mapa, capas y leyenda en fila): el botón va en fila, justo debajo del mapa. */
+  .aftershock-reveal { position: static; transform: none; display: flex; justify-content: center; width: calc(100% - 24px); margin: 10px 12px 2px; min-height: 44px; }
+}

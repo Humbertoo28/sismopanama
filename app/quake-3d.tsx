@@ -74,6 +74,9 @@ type Props = {
   mainLabel?: string;
   // false = sin el interruptor «Réplicas» (la historia de Panamá no es una secuencia: son 94 sismos de 122 años; ocultar «réplicas» ahí dejaba solo el principal).
   aftershockToggle?: boolean;
+  // «Ver réplicas» de la portada: la escena arranca solo con el principal y este botón (en la barra de controles) suma o quita las réplicas.
+  // Las réplicas las filtra quien usa la escena; aquí solo se dibuja el botón.
+  aftershockReveal?: { shown: boolean; count: number; onToggle: () => void } | null;
   onSelect: (id: string) => void;
 };
 
@@ -176,7 +179,7 @@ const moveText = (meters: number) => (meters >= 1 ? `${meters.toFixed(1)} m` : m
 
 // Vista tridimensional: la superficie (costa de Panamá) arriba y cada sismo a su profundidad. Se dibuja con un
 // lienzo y proyección propia: son unos cientos de puntos y evita cargar una librería 3D para esto.
-export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, activeFaults, wave, shakeGrid, mechanism, layerControls, aftershockToggle = true, pointSource = null, autoPlay = false, mainLabel = "Principal", onSelect }: Props) {
+export default function Quake3D({ events, filtersKey, fitKey, restartKey, expanded, overlay, onToggleExpanded, mainshock, selectedId, replay, region, fault, felt, shaking, plates, activeFaults, wave, shakeGrid, mechanism, layerControls, aftershockToggle = true, aftershockReveal = null, pointSource = null, autoPlay = false, mainLabel = "Principal", onSelect }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -1835,6 +1838,11 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
             ))}
             {fault && <button type="button" aria-label="Vista de frente de la ruptura de la falla" title="Mira la falla de frente, a escala real: así se ve cuánto se deslizó cada tramo" onClick={showRupture}>Ruptura</button>}
           </div>
+          {aftershockReveal && (
+            <button type="button" className={`q3-action q3-reveal${aftershockReveal.shown ? " on" : ""}`} aria-pressed={aftershockReveal.shown} onClick={aftershockReveal.onToggle}>
+              {aftershockReveal.shown ? "Ocultar réplicas" : `Ver réplicas · ${aftershockReveal.count.toLocaleString("es-PA")}`}
+            </button>
+          )}
           <button type="button" className="q3-action" onClick={focusActivity} disabled={!events.length}><SceneIcon name="Focus" size={15} />{selectedEvent ? "Centrar selección" : mainshock ? "Acercar al sismo principal" : "Acercar al último sismo"}</button>
           <button type="button" className={`q3-action q3-settings-toggle${settingsOpen ? " on" : ""}`} aria-expanded={settingsOpen} aria-controls="q3-settings" onClick={() => setSettingsOpen(value => !value)}>Ajustes y capas <span aria-hidden="true">{settingsOpen ? "−" : "+"}</span></button>
         </div>
@@ -1893,6 +1901,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
           <span><i className="q3-dot" style={{ background: COLORS.latest }} />Último</span>
           {mainshock && <span><i className="q3-dot" style={{ background: COLORS.main }} />{mainLabel}</span>}
           {mainshock && !showAftershocks && replay === null && <span>Réplicas ocultas (se activan en «Ajustes y capas»)</span>}
+          {aftershockReveal && !aftershockReveal.shown && <span>Réplicas ocultas: toca «Ver réplicas»</span>}
           <span title="Profundidad de exactamente 10 o 5 km: el catálogo suele asignarla cuando no logra calcularla"><i className="q3-dot faint" />Profundidad asignada{facts.fixed > 0 ? ` (${facts.fixed})` : ""}</span>
           {fault && (
             <span><i className="slip-ramp" aria-hidden="true" style={{ background: SLIP_GRADIENT }} />Ruptura: de poco (amarillo) a mucho deslizamiento (rojo oscuro)</span>
