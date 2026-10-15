@@ -177,6 +177,8 @@ const MANUAL_IGC: ManualIgc[] = [
   { local: "2026-10-15T09:02:49-05:00", mag: 3.7, depth: 10, reviewed: false, km: 38, dir: "este", from: "Coiba" },
   // 15 de octubre, 9:10:02 a. m. (publicado en la cuenta @igcpanamaup): PRELIMINAR, M 4.3, 20 km, «a 10km al noroeste de Tonosí». Con aviso.
   { local: "2026-10-15T09:10:02-05:00", mag: 4.3, depth: 20, reviewed: false, km: 10, dir: "noroeste", from: "Tonosí" },
+  // 15 de octubre, 9:51:45 a. m. (cuenta @igcpanamaup): REVISADO, M 3.7, 5 km, «a 23km al este de Tonosí». Con aviso.
+  { local: "2026-10-15T09:51:45-05:00", mag: 3.7, depth: 5, reviewed: true, km: 23, dir: "este", from: "Tonosí" },
   // 15 de octubre, 9:33:07 a. m. (cuenta @igcpanamaup): PRELIMINAR, M 3.9, 10 km, «a 44km al sur de Santiago». Con aviso.
   { local: "2026-10-15T09:33:07-05:00", mag: 3.9, depth: 10, reviewed: false, km: 44, dir: "sur", from: "Santiago" },
   // Publicaciones de la cuenta @igcpanamaup (X) de la noche del 14 de octubre, desde la primera que hizo después de que su tabla se cayera
