@@ -173,6 +173,8 @@ const MANUAL_IGC: ManualIgc[] = [
   { local: "2026-10-15T08:31:37-05:00", mag: 4.9, depth: 10, reviewed: false, km: 29, dir: "sureste", from: "Las Tablas" },
   // 15 de octubre, 9:02:49 a. m.: PRELIMINAR, M 3.7, 10 km, «a 38km al este de Coiba». Se agrega CON aviso (a pedido de quien administra el sitio).
   { local: "2026-10-15T09:02:49-05:00", mag: 3.7, depth: 10, reviewed: false, km: 38, dir: "este", from: "Coiba" },
+  // 15 de octubre, 9:10:02 a. m. (publicado en la cuenta @igcpanamaup): PRELIMINAR, M 4.3, 20 km, «a 10km al noroeste de Tonosí». Con aviso.
+  { local: "2026-10-15T09:10:02-05:00", mag: 4.3, depth: 20, reviewed: false, km: 10, dir: "noroeste", from: "Tonosí" },
   // Mensajes del canal del IGC del 14 y 15 de octubre mostrados el 15 de octubre a las 9 a. m.; se agregan sin avisar.
   { local: "2026-10-15T07:48:28-05:00", mag: 3.5, depth: 12, reviewed: true, km: 29, dir: "sur", from: "Soná", silent: true },
   { local: "2026-10-15T06:59:03-05:00", mag: 3.6, depth: 13, reviewed: true, km: 33, dir: "noreste", from: "Coiba", silent: true },
