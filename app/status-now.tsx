@@ -3,7 +3,7 @@
 import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2 } from "lucide-react";
 import CountUp from "./count-up";
 import { getWhatsAppShareUrl } from "../lib/alert-system";
-import { isUnconfirmed, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
+import { isAftershock, isUnconfirmed, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
 import { provinceLabel } from "../lib/province-of";
 import { SOURCE_NAMES, agoLabel, reportUrl } from "../lib/quake-facts";
 import { placeTitle } from "../lib/quake-summary";
@@ -62,6 +62,8 @@ type Props = {
 
 export default function StatusNow({ latest, main, mainshock, status, lastUpdate, catalogs, shared, onShowOnMap, onShare, onRefresh, onReport }: Props) {
   const isMain = Boolean(latest && main && latest.id === main.id);
+  // Si el último sismo es posterior al sismo principal, es la última réplica (igual que en los gráficos y en la lista).
+  const isAfter = Boolean(latest && main && !isMain && !latest.properties.nearby && isAftershock(latest, main));
   const source = SOURCE_NAMES[latest?.properties.source ?? "usgs"];
   const preliminary = latest?.properties.status !== "reviewed";
   const down = catalogs ? (Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]) : [];
@@ -98,7 +100,7 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
         <article className="now-card now-latest" aria-labelledby="latest-title">
           {latest ? (
             <div className="now-latest-body" key={latest.id}>
-              <p className="now-label">{isMain ? "Sismo principal" : "Último sismo registrado"} · <strong>{agoLabel(latest.properties.time)}</strong></p>
+              <p className="now-label">{isMain ? "Sismo principal" : isAfter ? "Última réplica registrada" : "Último sismo registrado"} · <strong>{agoLabel(latest.properties.time)}</strong></p>
               <div className="now-quake">
                 <div className={`now-mag ${magLevel(latest.properties.mag)}${isFresh(latest.properties.time) ? " fresh" : ""}`}>
                   <strong>{latest.properties.mag === null ? "—" : <CountUp value={latest.properties.mag} from={0} decimals={1} duration={900} />}</strong>

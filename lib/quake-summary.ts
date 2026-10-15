@@ -118,7 +118,8 @@ export function buildSummary(events: Earthquake[], now: number, options: Summary
     : [];
 
   const sections: SummarySection[] = [];
-  if (recent[0]) sections.push({ heading: "Último sismo registrado", lines: [quakeSentence(recent[0])] });
+  // Si el último sismo es posterior al sismo principal, es la última réplica (igual que en la portada y en los gráficos).
+  if (recent[0]) sections.push({ heading: main && recent[0].id !== main.id && recent[0].properties.time > main.properties.time ? "Última réplica registrada" : "Último sismo registrado", lines: [quakeSentence(recent[0])] });
   if (main) sections.push({ heading: "Sismo principal", lines: [quakeSentence(main)] });
   const figures = [
     main
