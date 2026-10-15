@@ -166,8 +166,9 @@ const REFERENCE_POINTS: Record<string, { lat: number; lng: number }> = {
   "Soná": { lat: 8.009, lng: -81.317 },
   "Tonosí": { lat: 7.407, lng: -80.439 },
   "Coiba": { lat: 7.503, lng: -81.695 },
+  "Chitré": { lat: 7.96, lng: -80.429 },
 };
-type ManualIgc = { local: string; mag: number; depth: number; reviewed: boolean; km: number; dir: keyof typeof COMPASS; from: keyof typeof REFERENCE_POINTS; silent?: boolean };
+type ManualIgc = { local: string; mag: number; depth: number; reviewed: boolean; km: number; dir: keyof typeof COMPASS; from: keyof typeof REFERENCE_POINTS; silent?: boolean; prefix?: string };
 const MANUAL_IGC: ManualIgc[] = [
   // 15 de octubre, 8:31:37 a. m.: PRELIMINAR, M 4.9, 10 km, «a 29km al sureste de Las Tablas». Se avisó (alerta push enviada a las 8:50 a. m.).
   { local: "2026-10-15T08:31:37-05:00", mag: 4.9, depth: 10, reviewed: false, km: 29, dir: "sureste", from: "Las Tablas" },
@@ -175,6 +176,19 @@ const MANUAL_IGC: ManualIgc[] = [
   { local: "2026-10-15T09:02:49-05:00", mag: 3.7, depth: 10, reviewed: false, km: 38, dir: "este", from: "Coiba" },
   // 15 de octubre, 9:10:02 a. m. (publicado en la cuenta @igcpanamaup): PRELIMINAR, M 4.3, 20 km, «a 10km al noroeste de Tonosí». Con aviso.
   { local: "2026-10-15T09:10:02-05:00", mag: 4.3, depth: 20, reviewed: false, km: 10, dir: "noroeste", from: "Tonosí" },
+  // Publicaciones de la cuenta @igcpanamaup (X) de la noche del 14 de octubre, desde la primera que hizo después de que su tabla se cayera
+  // (8:18 p. m.) hasta las 10:19 p. m.; se leyeron el 15 de octubre. Cuando el IGC publica una ACTUALIZACIÓN (9:21:55 p. m.: de M 3.7, 13 km,
+  // «26km al suroeste de Chitré» a M 4.5, 5 km, «25km al sur de Chitré») se usa la más reciente. Se agregan sin avisar (tienen horas).
+  { local: "2026-10-14T20:18:06-05:00", mag: 3.5, depth: 10, reviewed: false, km: 21, dir: "noreste", from: "Coiba", silent: true },
+  { local: "2026-10-14T20:32:20-05:00", mag: 3.9, depth: 10, reviewed: false, km: 80, dir: "suroeste", from: "Tonosí", silent: true, prefix: "Al sur de Panamá" },
+  { local: "2026-10-14T20:40:07-05:00", mag: 3.4, depth: 10, reviewed: false, km: 17, dir: "noroeste", from: "Tonosí", silent: true },
+  { local: "2026-10-14T21:21:55-05:00", mag: 4.5, depth: 5, reviewed: false, km: 25, dir: "sur", from: "Chitré", silent: true },
+  { local: "2026-10-14T21:35:20-05:00", mag: 3.9, depth: 10, reviewed: false, km: 31, dir: "este", from: "Tonosí", silent: true },
+  { local: "2026-10-14T21:38:22-05:00", mag: 3.5, depth: 14, reviewed: false, km: 31, dir: "noroeste", from: "Tonosí", silent: true },
+  { local: "2026-10-14T21:53:48-05:00", mag: 3.9, depth: 10, reviewed: false, km: 60, dir: "sureste", from: "Coiba", silent: true },
+  { local: "2026-10-14T22:02:10-05:00", mag: 4.2, depth: 10, reviewed: false, km: 6, dir: "noroeste", from: "Tonosí", silent: true },
+  { local: "2026-10-14T22:05:05-05:00", mag: 3.5, depth: 10, reviewed: false, km: 12, dir: "noreste", from: "Tonosí", silent: true },
+  { local: "2026-10-14T22:19:32-05:00", mag: 4.1, depth: 6, reviewed: true, km: 6, dir: "noroeste", from: "Tonosí", silent: true },
   // Mensajes del canal del IGC del 14 y 15 de octubre mostrados el 15 de octubre a las 9 a. m.; se agregan sin avisar.
   { local: "2026-10-15T07:48:28-05:00", mag: 3.5, depth: 12, reviewed: true, km: 29, dir: "sur", from: "Soná", silent: true },
   { local: "2026-10-15T06:59:03-05:00", mag: 3.6, depth: 13, reviewed: true, km: 33, dir: "noreste", from: "Coiba", silent: true },
@@ -196,7 +210,7 @@ export const MANUAL_IGC_EVENTS: Earthquake[] = MANUAL_IGC.map(item => {
     id: `igc:${Math.round(time / 1000)}`,
     properties: {
       mag: item.mag,
-      place: `Panamá a ${item.km}km al ${item.dir} de ${item.from}`,
+      place: `${item.prefix ?? "Panamá"} a ${item.km}km al ${item.dir} de ${item.from}`,
       time,
       url: IGC_URL,
       status: item.reviewed ? ("reviewed" as const) : ("automatic" as const),
