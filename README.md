@@ -259,6 +259,18 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## 🛰️ IGC en mantenimiento: sismos que el IGC publica por su canal oficial (15 de octubre de 2026)
+
+**Situación.** Desde el 14 de octubre a las 6:04 p. m. (hora de Panamá) la tabla del IGC-UP (`sismosgeociencias.up.ac.pa`, la que lee la web) devuelve una página de 255 bytes que dice «Estamos en mantenimiento». La web sigue funcionando con el USGS y el EMSC, muestra «IGC-UP no responde en este momento: puede haber retraso en los datos» y, por diseño, **mientras el IGC no responde no se retienen las alertas de sismos de menos de M 5 que solo trae el EMSC** (sin el IGC no hay con qué confirmarlos; ver «Sismos sin confirmar»). Se probaron otras direcciones del IGC y no hay otra vía de datos.
+
+**Sismo agregado a mano.** El 15 de octubre, a las 8:37 a. m., quien administra el sitio mostró un mensaje del canal oficial de Telegram del IGC-UP: *«Estado: PRELIMINAR · Fecha 2026-10-15 · Hora 8:31:37 AM hora local · Magnitud 4.9 · Profundidad 10 km · Localizado en Panamá a 29km al sureste de Las Tablas»*. A esa hora ni el EMSC, ni el USGS, ni el GFZ GEOFON lo tenían, y la tabla del IGC no respondía. Se agregó a `lib/catalogs.ts` (`MANUAL_IGC_EVENTS` y `withManualIgc`) con exactamente esos datos, como sismo del IGC, estado «automático» (preliminar) y el mismo formato del lugar que usa la tabla («Panamá a 29km al sureste de Las Tablas»).
+- **Posición aproximada.** El mensaje no trae coordenadas. La posición del mapa (7.58° N, 80.09° O) sale de contar **29 km hacia el sureste desde Las Tablas** (GeoNames 3706208: 7.766° N, 80.278° O): el IGC da el rumbo en ocho direcciones y la distancia redondeada, así que puede haber varios kilómetros de diferencia. La profundidad de 10 km es la que dice el IGC (el valor que suele asignar).
+- **Cómo se evita duplicarlo.** Si la tabla del IGC ya trae el mismo sismo (menos de un minuto y 120 km de diferencia) se usa el de la tabla y el manual se descarta; si EMSC o USGS lo publican, se fusionan como cualquier otro sismo. La alerta (`notified_quakes`) no se repite si luego llega el registro revisado. **Cuando el IGC vuelva a responder se borra esta lista.**
+- **Alerta.** Como cualquier sismo del IGC de M 3 o más hecho hace menos de una hora, el cron lo avisó (con el «hace N min» en el texto). Probado antes de subirlo con datos simulados (13 comprobaciones: aparece solo si falta, se descarta si la tabla lo trae, ~29 km al sureste de Las Tablas, se alerta una vez y no más de una hora después).
+- **Lo que no se puede comprobar:** el dato viene de una captura de un mensaje reenviado; no se pudo abrir el canal ni la tabla del IGC.
+
+---
+
 ## ⚡ Lista de sismos: la página se «caía» al tocar «Mayor magnitud»
 
 **Reporte (14 de octubre de 2026).** «Cuando alguien toca *Mayor magnitud*, se cae la página.» Ese botón ordena la lista «Sismos registrados» (`app/page.tsx`).
