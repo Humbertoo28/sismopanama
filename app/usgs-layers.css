@@ -388,3 +388,10 @@ html[data-a11y-motion="reduce"] .qs, html[data-a11y-motion="reduce"] .qs-backdro
 /* «Ver réplicas» de la vista 3D: va en la barra de controles de la escena, bajo el mapa. */
 .q3-reveal:not(.on) { background: #da121a; border-color: #ffffff55; color: #fff; }
 .q3-reveal:not(.on):hover { background: #e32a32; }
+
+/* Réplicas de hace más de un día: con opacidad .32 y fondo al 45 % apenas pesaban un 14 % y, sobre el satélite, parecían manchas. Ahora se ven
+   (más con zoom); las capas del USGS siguen atenuándolas como antes. El sismo tocado se ve siempre completo. */
+#leaflet-map:not(.layers-on) .quake-marker.aged { opacity: .72; background: rgba(var(--c), .75); border: 1px solid rgba(255,255,255,.8); }
+#leaflet-map[data-zoomed]:not(.layers-on) .quake-marker.aged { opacity: .95; }
+#leaflet-map .quake-marker.selected { opacity: 1; }
+.map-layer-selector { background: #fffffff5; }

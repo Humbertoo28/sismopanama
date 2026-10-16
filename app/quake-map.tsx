@@ -256,6 +256,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       minZoom: 6, maxBounds: PANAMA_MAP_BOUNDS, maxBoundsViscosity: 0.9,
     }).setView([8.46, -80.4], window.innerWidth < 760 ? 6 : 7);
     L.control.zoom({ position: "topright" }).addTo(map);
+    // Con zoom (10 o más) los puntos de más de un día se dibujan casi sólidos: son pocos en pantalla y, tan tenues, parecían manchas sobre el satélite.
+    map.on("zoomend", () => map.getContainer().toggleAttribute("data-zoomed", map.getZoom() >= 10));
     // Los datos del USGS van por debajo de los marcadores pero sobre el sombreado de fuera de Panamá.
     map.createPane("felt").style.zIndex = "405";
     map.createPane("rupture").style.zIndex = "410";
