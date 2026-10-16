@@ -196,6 +196,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   const [layers, setLayers] = useState({ rupture: false, felt: false, shaking: false, plates: false, wave: false, faults: false });
   const usgs = useMainshockDetail();
   const usgsLayerRef = useRef<any>(null);
+  // Cuadro (sur, oeste, norte, este) de la ruptura dibujada: «Ver cómo se rompió» lleva el mapa hasta ahí antes de animarla.
+  const ruptureBounds = useRef<[[number, number], [number, number]] | null>(null);
   const platesLayerRef = useRef<any>(null);
   const faultsLayerRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
@@ -570,6 +572,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         // El deslizamiento interpolado se pinta en un lienzo y se pone sobre el mapa como imagen: una mancha continua, más
         // intensa donde más se movió la falla. El contorno es el plano de falla del modelo proyectado en la superficie.
         const [[south, west], [north, east]] = raster.bounds;
+        ruptureBounds.current = raster.bounds;
         const canvas = document.createElement("canvas");
         canvas.width = 520;
         canvas.height = Math.max(60, Math.round(520 * ((north - south) / ((east - west) * Math.cos(((south + north) / 2) * Math.PI / 180)))));
@@ -610,6 +613,32 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     usgsLayerRef.current = group;
     return () => cancelAnimationFrame(frame);
   }, [layers, usgsDetail, ready, ruptureRun]);
+
+  // «Ver cómo se rompió»: la ruptura está mar adentro y, con el mapa acercado a otra zona, la animación pasaba fuera de pantalla y parecía que
+  // el botón no hacía nada. Primero se lleva el mapa hasta la ruptura (dejando libre lo que tapan las capas, que en el celular ocupan media
+  // pantalla) y al llegar se anima.
+  const playRupture = () => {
+    const map = mapRef.current;
+    const L = (window as any).L;
+    const bounds = ruptureBounds.current;
+    if (!map || !L || !bounds) { setRuptureRun(run => run + 1); return; }
+    const box = L.latLngBounds(bounds);
+    const mapRect = map.getContainer().getBoundingClientRect();
+    let right = 0;
+    for (const panel of document.querySelectorAll(".map-layers, .map-layers-legend")) {
+      const rect = panel.getBoundingClientRect();
+      // En el celular fuera de la pantalla completa las capas van en filas bajo el mapa (el contenedor no genera caja): no tapan nada.
+      const parent = getComputedStyle(panel.parentElement ?? panel);
+      const floating = getComputedStyle(panel).position !== "static" || (parent.display !== "contents" && parent.position !== "static");
+      if (floating && rect.width > 0 && rect.left < mapRect.right && rect.bottom > mapRect.top && rect.top < mapRect.bottom) right = Math.max(right, mapRect.right - rect.left + 12);
+    }
+    right = Math.min(right, mapRect.width * 0.6);
+    // La ruptura ya se ve entera en la parte del mapa que no tapan las capas: solo se repite la animación.
+    const free = L.latLngBounds(map.containerPointToLatLng([0, 70]), map.containerPointToLatLng([mapRect.width - right, mapRect.height - 40]));
+    if (free.contains(box)) { setRuptureRun(run => run + 1); return; }
+    map.once("moveend", () => setRuptureRun(run => run + 1));
+    map.flyToBounds(box, { paddingTopLeft: [40, 70], paddingBottomRight: [right + 20, 40], maxZoom: 9, duration: reducedMotion() ? 0 : 1.1 });
+  };
 
   // Placas tectónicas: límites del modelo PB2002 (datos estáticos, no pasan por el servidor).
   useEffect(() => {
@@ -1180,7 +1209,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
                 <i className="slip-ramp" aria-hidden="true" style={{ background: SLIP_GRADIENT }} />
                 <span>Ruptura de la falla: cuánto se deslizó, de poco (amarillo) a {fault.maxSlipM.toFixed(1)} m (rojo oscuro). Las curvas van cada 2 m; la línea blanca gruesa es el borde superior de la falla.</span>
                 {fault.durationS && (
-                  <button type="button" className="legend-action" onClick={() => setRuptureRun(run => run + 1)}>
+                  <button type="button" className="legend-action" onClick={playRupture}>
                     ▶ Ver cómo se rompió ({Math.round(fault.durationS)} s)
                   </button>
                 )}
