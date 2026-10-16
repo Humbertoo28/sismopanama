@@ -30,7 +30,7 @@ export function QuakeDetails({
   const [, , depthRaw] = event.geometry.coordinates;
   const depth = Number.isFinite(depthRaw) ? depthRaw! : null;
   const isMain = event.id === mainshock?.id;
-  const after = !!mainshock && isAftershock(event, mainshock);
+  const after = !!mainshock && !properties.nearby && isAftershock(event, mainshock);
   const facts = useMemo(() => arrivals(event), [event]);
   const { status: phaseStatus, phases } = useEventPhases(event.id);
   const agencies = properties.agencies ?? [{ source: properties.source ?? "usgs", mag: properties.mag, magType: properties.magType ?? null }];

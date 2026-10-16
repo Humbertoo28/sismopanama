@@ -996,7 +996,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     const map = mapRef.current;
     if (!replayKey || !map) return;
     const { events: all, mainshock: main } = latest.current;
-    const sequence = (main ? all.filter(event => event.id === main.id || isAftershock(event, main)) : all)
+    const sequence = (main ? all.filter(event => event.id === main.id || (!event.properties.nearby && isAftershock(event, main))) : all)
       .slice()
       .sort((a, b) => a.properties.time - b.properties.time);
     if (sequence.length < 2) return;

@@ -261,7 +261,7 @@ export default function Quake3D({ events, filtersKey, fitKey, restartKey, expand
   }, []);
 
   const baseEvents = useMemo(
-    () => (showAftershocks || replay !== null || !mainshock ? events : events.filter(event => !isAftershock(event, mainshock) && !isBeforeMainshock(event, mainshock))),
+    () => (showAftershocks || replay !== null || !mainshock ? events : events.filter(event => event.properties.nearby || (!isAftershock(event, mainshock) && !isBeforeMainshock(event, mainshock)))),
     [events, mainshock, showAftershocks, replay],
   );
   const visibleEvents = useMemo(() => {
