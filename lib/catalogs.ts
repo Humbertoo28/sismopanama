@@ -104,9 +104,7 @@ export function parseIgcAll(html: string): { panama: Earthquake[]; nearby: Earth
     if (/^a\s+\d/i.test(place)) place = `Panamá ${place}`;
     const id = `igc:${Math.round(time / 1000)}`;
     const reviewed = /^REVISADO$/i.test(state);
-    // El IGC a veces repite la misma fila: se conserva una, y la revisada si una de las dos lo está.
-    if (target.has(id) && target.get(id)!.properties.status === "reviewed" && !reviewed) continue;
-    target.set(id, {
+    const candidate: Earthquake = {
       id,
       properties: {
         mag,
@@ -118,7 +116,23 @@ export function parseIgcAll(html: string): { panama: Earthquake[]; nearby: Earth
         ...(isPanama ? {} : { nearby: true }),
       },
       geometry: { coordinates: [lon, lat, depth ? Number(depth[1]) : undefined] },
-    });
+    };
+    // El IGC a veces repite la misma fila o publica primero una preliminar automática y luego la revisada
+    // con un leve desfase de segundos o kilómetros (como a las 12:05 del 20 de octubre). Se conserva una sola,
+    // priorizando siempre la solución revisada.
+    let duplicateKey: string | null = null;
+    for (const [existingId, existing] of target) {
+      if (existingId === id || sameEvent(existing, candidate)) {
+        duplicateKey = existingId;
+        break;
+      }
+    }
+    if (duplicateKey) {
+      const existing = target.get(duplicateKey)!;
+      if (existing.properties.status === "reviewed" && !reviewed) continue;
+      target.delete(duplicateKey);
+    }
+    target.set(id, candidate);
   }
   return { panama: [...events.values()], nearby: [...nearby.values()] };
 }
