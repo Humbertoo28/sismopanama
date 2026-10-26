@@ -55,10 +55,6 @@ const SLOW_POLL_MS = 300_000;
 const date = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
 });
-const dateTime = new Intl.DateTimeFormat("es-PA", {
-  timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric",
-  hour: "2-digit", minute: "2-digit", hour12: true,
-});
 const clockFormat = new Intl.DateTimeFormat("es-PA", {
   timeZone: "America/Panama", hour: "numeric", minute: "2-digit", hour12: true,
 });
@@ -179,6 +175,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
   const permStatus = useSyncExternalStore(subscribePushChange, getNotificationPermissionStatus, () => "default" as const);
   const seen = useRef<SeenQuake[] | null>(null);
   const previousEvents = useRef<Earthquake[]>([]);
+  const hasLoadedEvents = useRef(Boolean(initial?.features.length));
   const introFocused = useRef(false);
 
   useEffect(() => {
@@ -267,6 +264,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
         const remembered = rememberQuakes(known, reliable);
         seen.current = remembered;
         previousEvents.current = reliable;
+        hasLoadedEvents.current = true;
         saveSeenQuakes(remembered);
 
         if (!isFirstRun && qualifying.length > 0) {
@@ -307,7 +305,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
       } catch (error) {
         if (controller.signal.aborted && !timedOut) return;
         console.error("No se pudo cargar el catálogo sísmico:", error);
-        setStatus(prev => (allEvents.length > 0 ? "ready" : "error"));
+        setStatus(hasLoadedEvents.current ? "ready" : "error");
       } finally {
         window.clearTimeout(timeout);
       }
