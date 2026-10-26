@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2 } from "lucide-react";
+import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2, WifiOff } from "lucide-react";
 import CountUp from "./count-up";
 import { getWhatsAppShareUrl } from "../lib/alert-system";
 import { isAftershock, isUnconfirmed, type Earthquake, type EarthquakeResponse, type MainshockResponse } from "../lib/earthquakes";
@@ -77,16 +77,12 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
     <section className="now" aria-labelledby="now-title">
       <div className="now-head">
         <h1 id="now-title">Sismos en Panamá</h1>
-        <p className="now-updated" role="status" aria-live="polite">
-          {status === "error" && !lastUpdate ? (
-            <span className="error">No se pudieron consultar los datos. Revisa tu conexión.</span>
-          ) : (
-            <>
-              <i className={`now-dot${status === "loading" ? " busy" : ""}`} aria-hidden="true" />
-              {status === "loading" && !lastUpdate ? "Consultando los datos…" : `Actualizado ${lastUpdate ? atTime(Date.parse(lastUpdate)) : ""} · se actualiza solo`}
-            </>
-          )}
-        </p>
+        {!(status === "error" && !lastUpdate) && (
+          <p className="now-updated" role="status" aria-live="polite">
+            <i className={`now-dot${status === "loading" ? " busy" : ""}`} aria-hidden="true" />
+            {status === "loading" && !lastUpdate ? "Consultando los datos…" : `Actualizado ${lastUpdate ? atTime(Date.parse(lastUpdate)) : ""} · se actualiza solo`}
+          </p>
+        )}
         <button type="button" className="now-refresh" onClick={onRefresh} disabled={status === "loading"} aria-label="Actualizar ahora">
           <RefreshCw aria-hidden="true" size={18} className={status === "loading" ? "spin" : undefined} />
           <span>Actualizar</span>
@@ -134,6 +130,15 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
                   <Share2 aria-hidden="true" size={18} /> {shared ? "Enlace copiado" : "Compartir"}
                 </button>
               </div>
+            </div>
+          ) : status === "error" ? (
+            <div className="now-error" role="alert">
+              <span className="now-error-icon" aria-hidden="true"><WifiOff size={34} /></span>
+              <h2>No se pudieron consultar los datos.</h2>
+              <p>Revisa tu conexión.</p>
+              <button type="button" className="btn btn-primary" onClick={onRefresh}>
+                <RefreshCw aria-hidden="true" size={20} /> Volver a intentar
+              </button>
             </div>
           ) : (
             <div className="now-skeleton" aria-label="Cargando el último sismo"><i /><span /><span /></div>
