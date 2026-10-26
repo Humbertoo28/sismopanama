@@ -5,7 +5,7 @@ import Home from "./home";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_EVENTS = 60;
+const INITIAL_EVENTS = 10;
 const FRESH_MS = 30_000;
 const STALE_OK_MS = 120_000;
 const MAX_WAIT_MS = 1_500;
