@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { ImageResponse } from "next/og";
+import faviconSvg from "../public/favicon.svg?raw";
 import { SITE_URL } from "../lib/site";
 
 // Imagen que se ve al compartir el enlace en WhatsApp, LinkedIn, X, Telegram... Es fija y no promete nada en vivo:
@@ -13,7 +12,7 @@ const NAVY = "#072357";
 const RED = "#da121a";
 
 // El logo (ojo con ondas que salen de un epicentro rojo), el mismo archivo que el ícono de la pestaña.
-const LOGO = `data:image/svg+xml;base64,${readFileSync(join(process.cwd(), "public/favicon.svg")).toString("base64")}`;
+const LOGO = `data:image/svg+xml;base64,${btoa(faviconSvg)}`;
 
 export default function Image() {
   const chip = { display: "flex", padding: "10px 26px", borderRadius: 999, border: "2px solid #ffffff59", fontSize: 30, color: "#dbe6f7" } as const;
