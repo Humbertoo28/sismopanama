@@ -78,8 +78,8 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
       <div className="now-head">
         <h1 id="now-title">Sismos en Panamá</h1>
         {!(status === "error" && !lastUpdate) && (
-          <p className="now-updated" role="status" aria-live="polite">
-            <i className={`now-dot${status === "loading" ? " busy" : ""}`} aria-hidden="true" />
+          <p className="now-updated" role="status" aria-live="polite" suppressHydrationWarning>
+            <i className={`now-dot${status === "loading" ? " busy" : ""}`} aria-hidden="true" suppressHydrationWarning />
             {status === "loading" && !lastUpdate ? "Consultando los datos…" : `Actualizado ${lastUpdate ? atTime(Date.parse(lastUpdate)) : ""} · se actualiza solo`}
           </p>
         )}
@@ -109,7 +109,7 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
                 </div>
               </div>
               <dl className="now-facts">
-                <div><dt>Fecha y hora</dt><dd>{dateTime.format(new Date(latest.properties.time))}</dd></div>
+                <div><dt>Fecha y hora</dt><dd suppressHydrationWarning>{dateTime.format(new Date(latest.properties.time))}</dd></div>
                 <div><dt>Profundidad</dt><dd>{depthText(latest)}</dd></div>
                 <div>
                   <dt>Fuente</dt>
@@ -168,7 +168,7 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
           <div className="now-sequence-head">
             <div>
               <h2 id="sequence-title">El terremoto de magnitud {magText(main)} del 9 de octubre</h2>
-              <p>
+              <p suppressHydrationWarning>
                 {dateTime.format(new Date(main.properties.time))} ({agoLabel(main.properties.time)}). {placeTitle(main)}, a {depthText(main)} de profundidad.
               </p>
             </div>
