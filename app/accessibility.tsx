@@ -30,6 +30,38 @@ function readSaved(): Settings | null {
   }
 }
 
+let currentSettings: Settings | null = null;
+const settingsListeners = new Set<() => void>();
+
+function getSettings() {
+  currentSettings ??= readSaved() ?? {
+    ...DEFAULTS,
+    contrast: window.matchMedia("(prefers-contrast: more)").matches,
+    motion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  };
+  return currentSettings;
+}
+
+function subscribeSettings(listener: () => void) {
+  settingsListeners.add(listener);
+  return () => {
+    settingsListeners.delete(listener);
+  };
+}
+
+function updateSettings(patch: Partial<Settings>) {
+  const next = { ...getSettings(), ...patch };
+  currentSettings = next;
+  try {
+    localStorage.setItem(A11Y_KEY, JSON.stringify(next));
+  } catch {
+    // Sin almacenamiento la opción vale solo para esta visita.
+  }
+  settingsListeners.forEach(listener => listener());
+}
+
+const subscribeNothing = () => () => {};
+
 function applySettings(settings: Settings) {
   const root = document.documentElement;
   root.style.setProperty("--ts", String(settings.scale));
@@ -49,20 +81,21 @@ function lastQuakeSpeech(event: Earthquake) {
 
 // Primer elemento al que llega el teclado: salta el menú y lleva directo al contenido de la página.
 export function SkipLink() {
-  const [target, setTarget] = useState("#contenido");
+  const link = useRef<HTMLAnchorElement>(null);
   // El destino es el <main> de la página (la principal ya lo tiene con id="inicio"; a las demás se les da uno).
   useEffect(() => {
     const main = document.querySelector<HTMLElement>("main");
     if (!main) return;
     if (!main.id) main.id = "contenido";
     main.setAttribute("tabindex", "-1");
-    setTarget(`#${main.id}`);
+    link.current?.setAttribute("href", `#${main.id}`);
   }, []);
   return (
     <nav aria-label="Saltar al contenido">
       <a
+        ref={link}
         className="skip-link"
-        href={target}
+        href="#contenido"
         onClick={event => {
           event.preventDefault();
           const main = document.querySelector<HTMLElement>("main");
@@ -79,38 +112,19 @@ export function SkipLink() {
 
 export default function Accessibility() {
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] = useState<Settings>(DEFAULTS);
-  const [ready, setReady] = useState(false);
+  const settings = useSyncExternalStore(subscribeSettings, getSettings, () => DEFAULTS);
+  const ready = useSyncExternalStore(subscribeNothing, () => true, () => false);
   const [speaking, setSpeaking] = useState(false);
   const latest = useSyncExternalStore(subscribeLatestQuake, getLatestQuake, () => null);
   const themeChoice = useSyncExternalStore(subscribeTheme, getThemeChoice, (): ThemeChoice => "light");
   const fab = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
 
-  // Sin nada guardado se parte de lo que pide el dispositivo (más contraste, menos movimiento).
-  useEffect(() => {
-    const saved = readSaved();
-    setSettings(saved ?? {
-      ...DEFAULTS,
-      contrast: window.matchMedia("(prefers-contrast: more)").matches,
-      motion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    });
-    setReady(true);
-  }, []);
   useEffect(() => {
     if (ready) applySettings(settings);
   }, [settings, ready]);
 
-  const change = (patch: Partial<Settings>) =>
-    setSettings(previous => {
-      const next = { ...previous, ...patch };
-      try {
-        localStorage.setItem(A11Y_KEY, JSON.stringify(next));
-      } catch {
-        // Sin almacenamiento la opción vale solo para esta visita.
-      }
-      return next;
-    });
+  const change = updateSettings;
 
   // Escape cierra el panel y devuelve el foco al botón; al abrirse el foco entra en el panel.
   useEffect(() => {

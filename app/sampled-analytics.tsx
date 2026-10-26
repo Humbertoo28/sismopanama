@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Analytics } from "@vercel/analytics/next";
 
 // Vercel cobra cada evento de Analytics y el sitio recibe cientos de miles de visitas al día. Solo se mide una de cada
@@ -8,7 +8,9 @@ import { Analytics } from "@vercel/analytics/next";
 // Las cifras del panel de Vercel son una muestra: multiplícalas por 10. Para medir todo, pon SAMPLE_RATE en 1.
 const SAMPLE_RATE = 0.1;
 
-function isSampled() {
+let sampled: boolean | null = null;
+
+function computeSampled() {
   try {
     const saved = sessionStorage.getItem("sismo_panama_va_sample");
     if (saved !== null) return saved === "1";
@@ -20,8 +22,14 @@ function isSampled() {
   }
 }
 
+function isSampled() {
+  sampled ??= computeSampled();
+  return sampled;
+}
+
+const subscribeNothing = () => () => {};
+
 export default function SampledAnalytics() {
-  const [on, setOn] = useState(false);
-  useEffect(() => setOn(isSampled()), []);
+  const on = useSyncExternalStore(subscribeNothing, isSampled, () => false);
   return on ? <Analytics /> : null;
 }
