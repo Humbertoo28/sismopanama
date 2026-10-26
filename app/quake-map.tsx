@@ -399,6 +399,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     );
     const pop = popIn.current && !reducedMotion();
     const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    const narrow = window.innerWidth <= 700;
     for (const event of events) {
       const [lng, lat, depth] = event.geometry.coordinates;
       const mag = event.properties.mag;
@@ -489,44 +490,45 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
           return tip;
         }, { direction: "top", offset: [0, -size / 2 - 4], className: "quake-tip", opacity: 1 });
       }
-      const popup = document.createElement("div");
-      if (isLatest) {
-        const badge = document.createElement("div");
-        badge.className = "popup-badge-latest";
-        badge.textContent = after
-          ? "Última réplica"
-          : "Último sismo registrado";
-        popup.appendChild(badge);
-      } else if (isMain) {
-        const badge = document.createElement("div");
-        badge.className = "popup-badge-main";
-        badge.textContent = "Sismo principal";
-        popup.appendChild(badge);
-      } else if (after) {
-        const badge = document.createElement("div");
-        badge.className = "popup-badge-after";
-        badge.textContent = "Réplica";
-        popup.appendChild(badge);
-      }
-      if (isUnconfirmed(event)) {
-        const badge = document.createElement("div");
-        badge.className = "popup-badge-unconfirmed";
-        badge.textContent = "Sin confirmar · solo EMSC";
-        popup.appendChild(badge);
-      }
-      const title = document.createElement("div");
-      title.className = "popup-title";
-      title.textContent = `M ${mag === null ? "—" : mag.toFixed(1)} · ${event.properties.place || "Ubicación no especificada"}`;
-      const meta = document.createElement("div");
-      meta.className = "popup-meta";
-      meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"} · ${provinceLabel(event)} · cerca de ${placeLabel(event)}${event.properties.source === "emsc" ? " · Fuente: EMSC" : event.properties.source === "igc" ? " · Fuente: IGC" : ""}`;
-      // appendChild y no append: los tipos de workers-types pisan Element.append.
-      popup.appendChild(title);
-      popup.appendChild(meta);
+      const buildPopup = () => {
+        const popup = document.createElement("div");
+        if (isLatest) {
+          const badge = document.createElement("div");
+          badge.className = "popup-badge-latest";
+          badge.textContent = after
+            ? "Última réplica"
+            : "Último sismo registrado";
+          popup.appendChild(badge);
+        } else if (isMain) {
+          const badge = document.createElement("div");
+          badge.className = "popup-badge-main";
+          badge.textContent = "Sismo principal";
+          popup.appendChild(badge);
+        } else if (after) {
+          const badge = document.createElement("div");
+          badge.className = "popup-badge-after";
+          badge.textContent = "Réplica";
+          popup.appendChild(badge);
+        }
+        if (isUnconfirmed(event)) {
+          const badge = document.createElement("div");
+          badge.className = "popup-badge-unconfirmed";
+          badge.textContent = "Sin confirmar · solo EMSC";
+          popup.appendChild(badge);
+        }
+        const title = document.createElement("div");
+        title.className = "popup-title";
+        title.textContent = `M ${mag === null ? "—" : mag.toFixed(1)} · ${event.properties.place || "Ubicación no especificada"}`;
+        const meta = document.createElement("div");
+        meta.className = "popup-meta";
+        meta.textContent = `${dateTime.format(new Date(event.properties.time))} · ${Number.isFinite(depth) ? `${Math.round(depth!)} km` : "Profundidad no disponible"} · ${provinceLabel(event)} · cerca de ${placeLabel(event)}${event.properties.source === "emsc" ? " · Fuente: EMSC" : event.properties.source === "igc" ? " · Fuente: IGC" : ""}`;
+        popup.appendChild(title);
+        popup.appendChild(meta);
+        return popup;
+      };
       // Al abrirse el globo, Leaflet mueve el mapa para que quepa; se le reserva el espacio de los botones que lo
       // cubren (marca y selector de capas arriba, leyenda y atribución abajo) para que no lo tapen.
-      const narrow = window.innerWidth <= 700;
-      marker.bindPopup(popup, { autoPanPaddingTopLeft: [12, narrow ? 100 : 64], autoPanPaddingBottomRight: [56, 16] });
+      marker.bindPopup(buildPopup, { autoPanPaddingTopLeft: [12, narrow ? 100 : 64], autoPanPaddingBottomRight: [56, 16] });
       // Al tocar un sismo se abre su ficha completa, no el globo: el globo solo se abre cuando la página lleva el mapa a un sismo
       // (por ejemplo desde «Ver en el mapa»). Enter, con el teclado, hace lo mismo que tocar.
       marker.off("click", (marker as any)._openPopup, marker);
