@@ -215,9 +215,9 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
   // Durante una reproducción: sismos que aún no les toca aparecer. Sobrevive si el mapa rehace los marcadores.
   const replayHidden = useRef<Set<string> | null>(null);
   const fresh = useRef<{ id: string; until: number } | null>(null);
-  const latest = useRef({ events, mainshock, onSelect, onReplay, onPropagationEnd });
+  const latest = useRef({ events, mainshock, focus, onSelect, onReplay, onPropagationEnd });
   useEffect(() => {
-    latest.current = { events, mainshock, onSelect, onReplay, onPropagationEnd };
+    latest.current = { events, mainshock, focus, onSelect, onReplay, onPropagationEnd };
   });
 
   // Al entrar o salir de la pantalla completa el marco cambia de tamaño: Leaflet lo mide de nuevo.
@@ -936,7 +936,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     };
   });
   useEffect(() => {
-    if (ready && (!focus || focusedRef.current === focus)) fitRef.current(true);
+    const currentFocus = latest.current.focus;
+    if (ready && (!currentFocus || focusedRef.current === currentFocus)) fitRef.current(true);
   }, [filtersKey, region, placeLat, placeLng, ready]);
   useEffect(() => {
     if (ready && fitKey > 0) fitRef.current(true);
@@ -946,7 +947,8 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
     if (view3d || !ready) return;
     const timer = window.setTimeout(() => {
       mapRef.current?.invalidateSize({ animate: false });
-      if (!focus || focusedRef.current === focus) fitRef.current(false);
+      const currentFocus = latest.current.focus;
+      if (!currentFocus || focusedRef.current === currentFocus) fitRef.current(false);
     }, 80);
     return () => window.clearTimeout(timer);
   }, [view3d, ready]);

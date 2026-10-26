@@ -157,7 +157,12 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
   const [showAftershocks, setShowAftershocks] = useState(false);
   const startReplay = () => { setShowAftershocks(true); setReplayKey(key => key + 1); };
   // Cambiar un filtro detiene la reproducción: lo que se reproduce es exactamente lo que el filtro deja ver.
-  useEffect(() => { setReplayKey(0); }, [province, city, minimum, timeRange, onlyAftershocks]);
+  const filterSignature = `${province}|${city}|${minimum}|${timeRange}|${onlyAftershocks}`;
+  const [appliedFilters, setAppliedFilters] = useState(filterSignature);
+  if (appliedFilters !== filterSignature) {
+    setAppliedFilters(filterSignature);
+    setReplayKey(0);
+  }
   const navLock = useRef(0);
   const [alert, setAlert] = useState<LiveAlert | null>(null);
   const [dismissedKey, setDismissedKey] = useState(0);
@@ -426,7 +431,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
   const main = mainshock?.mainshock ?? null;
   const events = useMemo(
     () => {
-      const now = Date.now();
+      const now = lastUpdate ? Date.parse(lastUpdate) : 0;
       return shownEvents.filter(event => {
         const magOk = event.properties.mag === null ? minimum === 0 : event.properties.mag >= minimum;
         const afterOk = !onlyAftershocks || !main || (!event.properties.nearby && isAftershock(event, main));
@@ -441,7 +446,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
         return magOk && afterOk && timeOk && provinceOk && cityOk;
       });
     },
-    [shownEvents, minimum, onlyAftershocks, main, timeRange, province, city],
+    [shownEvents, minimum, onlyAftershocks, main, timeRange, province, city, lastUpdate],
   );
   const listEvents = useMemo(
     () => sort === "magnitude" ? [...events].sort((a, b) => (b.properties.mag ?? -10) - (a.properties.mag ?? -10)) : events,
@@ -576,7 +581,6 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
       // Compartir cancelado o sin permiso para copiar: no hay nada que corregir.
     }
   };
-  const asideRef = useRef<HTMLDivElement>(null);
   const chooseEvent = (event: Earthquake) => {
     if (event.properties.nearby && !includeNearby) {
       setIncludeNearby(true);
@@ -593,7 +597,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
     setSheet(null);
     setSelectedId(event.id);
     setFocus({ id: event.id });
-    asideRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    document.querySelector(".map-aside")?.scrollTo({ top: 0, behavior: "smooth" });
     document.getElementById("mapa")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -735,7 +739,7 @@ export default function Home({ initial }: { initial: EarthquakeResponse | null }
             </a>
             <div className="map-card">
               <div className="map-frame"><QuakeMap events={mapEvents} aftershockToggle={mainForMap && !filtersReveal && replayKey === 0 && hiddenAftershocks > 0 ? { shown: showAftershocks, count: hiddenAftershocks, onToggle: () => setShowAftershocks(value => !value) } : null} filtersKey={filtersKey} fitKey={fitKey} propagation={propagation} onPropagationEnd={() => setPropagation(null)} mainshock={main} focus={focus} alert={alert} replayKey={replayKey} region={province === "all" || province === FAR_OFFSHORE ? null : province} place={selectedPlace} selectedId={selectedId} replay={replay} onSelect={id => { setSelectedId(id); setFocus({ id, quiet: true }); asideRef.current?.scrollTo({ top: 0, behavior: "smooth" }); if (fullscreenHost || document.querySelector(".map-frame .map-overlay-flag")) setSheet({ id, from: "map" }); }} onReplay={setReplay} faultsKey={faultsKey} /><div className="map-label"><span className="mini-dot" /> PANAMÁ</div>{replay && <div className="replay-hud" role="status"><span className="replay-live" aria-hidden="true" /><strong>Reproduciendo{replayScope ? ` · ${replayScope}` : ""}</strong><span>{replay.index} de {replay.total}</span>{replay.index > 0 && <span>M {replay.mag === null ? "—" : replay.mag.toFixed(1)} · {clockFormat.format(new Date(replay.time))}</span>}<span className="replay-actions"><button type="button" className="stop" onClick={stopReplay}>■ Parar</button><button type="button" onClick={startReplay}>↻ Reiniciar</button></span><i style={{ width: `${(replay.index / replay.total) * 100}%` }} /></div>}<div className="map-legend"><span>Magnitud</span><div><i className="legend-circle small" /> Menor a 3</div><div><i className="legend-circle medium" /> 3 a 4.9</div><div><i className="legend-circle large" /> 5 o más</div><div><i className="legend-circle latest" /> {main ? "Última réplica" : "Último sismo"}</div>{main && <div><i className="legend-circle main" /> Sismo principal</div>}</div></div>
-              <div className="map-aside" ref={asideRef} aria-live="polite">
+              <div className="map-aside" aria-live="polite">
                 {featured ? (
                   <QuakeDetails
                     event={featured}
