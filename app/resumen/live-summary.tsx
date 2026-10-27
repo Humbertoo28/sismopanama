@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { EarthquakeResponse } from "../../lib/earthquakes";
 import { buildSummary, summaryToText, type QuakeSummary } from "../../lib/quake-summary";
 import Downloads from "./downloads";
@@ -21,18 +21,26 @@ function ago(ms: number) {
   return `hace ${hours} ${hours === 1 ? "hora" : "horas"}`;
 }
 
+let clockNow: number | null = null;
+
+function subscribeClock(onChange: () => void) {
+  clockNow = Date.now();
+  const tick = window.setInterval(() => {
+    clockNow = Date.now();
+    onChange();
+  }, 5_000);
+  return () => window.clearInterval(tick);
+}
+
+const getClock = () => clockNow;
+const getServerClock = () => null;
+
 export default function LiveSummary({ initial }: { initial: QuakeSummary | null }) {
   const [summary, setSummary] = useState(initial);
   const [failed, setFailed] = useState(false);
   // Instante actual y de la última comprobación: se fijan en el navegador (no en el servidor) para que "hace N segundos" sea cierto.
-  const [now, setNow] = useState<number | null>(null);
+  const now = useSyncExternalStore(subscribeClock, getClock, getServerClock);
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const tick = window.setInterval(() => setNow(Date.now()), 5_000);
-    return () => window.clearInterval(tick);
-  }, []);
 
   useEffect(() => {
     let stopped = false;

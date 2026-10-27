@@ -27,7 +27,7 @@ function magnitudeSummary(values: number[]) {
   return low === high ? `Las ${values.length} agencias coinciden: magnitud ${low}.` : `Las ${values.length} agencias reportan entre M ${low} y M ${high}.`;
 }
 
-export default function Sources({ refreshKey }: { refreshKey?: number } = {}) {
+export default function Sources() {
   const [data, setData] = useState<SourcesResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
