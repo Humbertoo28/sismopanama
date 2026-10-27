@@ -243,6 +243,18 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## 📣 Aviso único a todos: «síguenos en Instagram» (27 de octubre de 2026)
+
+**Pedido** de quien administra el sitio: «MANDA UNA NOTIFICACION A TODOS DICIENDO QUE NSO SIGAN EN NUESTRA PAGINA DE INSTAGRAM OJOPANAMA507».
+
+**Qué se envió** (una sola vez, **27 de octubre de 2026 a las 8:53 a. m., hora de Panamá**, 13:53 UTC):
+
+> **Ojo Panamá en Instagram** — Síguenos en nuestra página de Instagram: @ojopanama507
+
+**A quién y resultado:** Enviado a todas las suscripciones activas en la base de datos (con umbral `min_magnitude <= 10`). Registrado bajo la reserva `broadcast:anuncio-instagram-ojopanama507-2026-10-27` en `notified_quakes`. Sin sirena ni voz sintética (`id` con prefijo `anuncio-` sin magnitud).
+
+---
+
 ## 📣 Aviso único a todos: «síguenos en Instagram» (14 de octubre de 2026)
 
 **Pedido** de quien administra el sitio: «manda una alerta a todos, no importa qué magnitud hayan seleccionado, que diga que nos sigan en Instagram ojopanama507».
