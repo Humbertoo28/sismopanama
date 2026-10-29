@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2 } from "lucide-react";
 import CountUp from "./count-up";
@@ -221,6 +222,7 @@ export default function StatusNow({ fallback, latest, main, mainshock, status, l
         <a href="/analisis">Gráficos de la secuencia <ChevronRight aria-hidden="true" size={18} /></a>
         <a href="/noticias">Noticias oficiales <ChevronRight aria-hidden="true" size={18} /></a>
         <a href="/reportes">Reportes de quienes lo sintieron <ChevronRight aria-hidden="true" size={18} /></a>
+        <Link href="/sismos" prefetch={false}>Sismos por provincia <ChevronRight aria-hidden="true" size={18} /></Link>
         <a href="/historia">Sismos históricos en Panamá <ChevronRight aria-hidden="true" size={18} /></a>
         <a href="/resumen">Resumen en texto sencillo <ChevronRight aria-hidden="true" size={18} /></a>
       </nav>

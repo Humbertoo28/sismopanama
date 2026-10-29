@@ -1,6 +1,6 @@
 "use client";
 
-import { ChartColumn, ChevronRight, History, Info, MessageSquareText, Newspaper, X } from "lucide-react";
+import { ChartColumn, ChevronRight, History, Info, MapPin, MessageSquareText, Newspaper, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { InstallRow } from "./pwa-install";
 
@@ -10,6 +10,7 @@ const LINKS = [
   ["/reportes", MessageSquareText, "Reportes", "Lo que sintió la gente en cada sismo"],
   ["/analisis", ChartColumn, "Gráficos", "Réplicas por hora, magnitudes y profundidad"],
   ["/noticias", Newspaper, "Noticias", "Titulares y comunicados oficiales"],
+  ["/sismos", MapPin, "Por provincia", "Sismos de cada provincia y comarca"],
   ["/historia", History, "Historia", "Sismos grandes en Panamá desde 1900"],
   ["#fuentes", Info, "Fuentes de datos", "De dónde salen los datos y si están al día"],
 ] as const;

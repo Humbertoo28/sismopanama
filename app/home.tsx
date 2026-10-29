@@ -42,6 +42,7 @@ import { INSTAGRAM_URL } from "../lib/site";
 import { SOURCE_NAMES, reportUrl } from "../lib/quake-facts";
 import QuakeSheet, { QuakeDetails } from "./quake-sheet";
 import FeltReport from "./felt-report";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import { FAR_OFFSHORE, OUTSIDE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
@@ -805,6 +806,7 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
             </span>
             <span><a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer me">Instagram @ojopanama507</a></span>
             <span>Datos: <a href="https://sismosgeociencias.up.ac.pa/" target="_blank" rel="noopener noreferrer">Instituto de Geociencias (IGC - UP)</a>, contrastado con <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener noreferrer">USGS</a>, <a href="https://www.emsc-csem.org/" target="_blank" rel="noopener noreferrer">EMSC</a> y <a href="https://geofon.gfz.de/" target="_blank" rel="noopener noreferrer">GFZ GEOFON</a> · No sustituye avisos oficiales de SINAPROC ni predice sismos.</span>
+            <span><Link href="/sismos" prefetch={false}>Sismos por provincia</Link></span>
             <span><a href="/resumen">Resumen en texto sencillo</a></span>
             <span><a href="/acerca">Acerca de Ojo Panamá</a></span>
             <span><a href="/privacidad">Privacidad</a></span>
