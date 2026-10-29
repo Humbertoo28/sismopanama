@@ -47,6 +47,9 @@ Tras el histórico sismo de **Magnitud 7.7** ocurrido frente a las costas del Pa
    - **Edge Caching:** La red CDN de Vercel absorbe las visitas sin saturar el backend.
    - **Apagado en segundo plano:** Si el usuario minimiza la pestaña, el navegador suspende las peticiones para no agotar la batería del usuario ni la cuota del servidor.
 
+6. **Sismos por provincia y comarca (`/sismos`):**
+   - Una página por cada una de las 13 divisiones de Panamá con su último sismo, sus cifras y sus sismos grandes desde 1900, solo con datos de los catálogos (ver «🔎 SEO» más abajo).
+
 ---
 
 ## 🛠️ Stack Tecnológico
@@ -426,6 +429,60 @@ El USGS da la física del sismo (dónde, cuándo y qué tan grande); NOAA agrega
 **Lo que no se probó o no hace.** En la leyenda del 3D, el punto del sismo de 2026 (M 7.7) se llama «Principal»: es el mayor y el principal de la secuencia de 2026, pero en una historia de 122 años puede leerse raro (se puede cambiar a «El mayor»). La redacción de las frases de NOAA del sismo de 2026 puede cambiar con el tiempo (si cambia, la frase se oculta sola). No se probó un teléfono real ni el navegador de Instagram con las provincias y los datos curiosos nuevos (el trabajo extra es un SVG de 13 trazados y texto). Un teléfono real, el navegador integrado de Instagram en iPhone (ahí ya hubo una caída por memoria: el satélite pide hasta 30 imágenes y el 3D usa un lienzo grande, por eso el 3D solo se carga al elegirlo, pero **no se probó en un iPhone**), Safari y Firefox, VoiceOver y TalkBack. El 3D se maneja con ratón, dedos o teclado como el del resto del sitio; el mapa satelital plano no tiene zoom con dos dedos. No hay zoom con dos dedos (se acerca con los botones, y el mapa se mueve arrastrando). El orden de lectura con lector de pantalla del mapa es por la tabla y las flechas, no círculo por círculo. La página se actualiza cada media hora (la caché del USGS).
 
 **Corregido de paso: «Distancia a Ciudad de Panamá» en la ficha de cada sismo.** La ficha de la portada (`lib/quake-facts.ts`) medía la distancia a la capital, y el tiempo de llegada de la sacudida, desde el **centro del distrito** de Panamá de GeoNames (9.244° N, 79.427° O), que queda a unos **30 km** al norte del centro de la ciudad (8.9936° N, 79.5197° O). Ahora usa el punto de la propia ciudad (`PANAMA_CITY` en `lib/places.ts`, GeoNames id 3703443, verificado con una segunda fuente que cita GeoNames), el mismo que usa el mapa de historia. Efecto: para el sismo principal de 2026 (7.59° N, 80.77° O) la ficha pasa de **236 km a 208 km** (comprobado con un cálculo aparte) y los tiempos de llegada a la capital se ajustan en proporción. El punto del distrito se sigue usando solo para ubicar el distrito (filtro por ciudad, localidad más cercana).
+
+---
+
+## 🔎 SEO: cómo se presenta el sitio a Google (28 de octubre de 2026)
+
+**Pedido (28 de octubre de 2026):** «arreglalo todo, que cuando la gente lo busque en google salga de primero» y, después, «Crea las páginas por provincia con datos reales de los catálogos». Con una condición que se repitió: **«no inventes nada»**.
+
+**Lo que esto hace y lo que no.** Quita obstáculos para que Google lea y entienda el sitio. No garantiza un puesto: el orden de los resultados depende también de los enlaces que otros sitios le hagan y del tiempo, y desde el código no se puede medir. Las posiciones se ven en Google Search Console o buscando a mano en Google.
+
+**Regla de los textos.** Todo título, descripción y frase debe poder cotejarse con el código o con los catálogos. Los títulos y las descripciones solo prometen lo que la página trae (por eso, en una provincia sin sismos grandes desde 1900, no se anuncian). Los datos estructurados no llevan valoraciones, reseñas ni preguntas frecuentes.
+
+**Qué hay y dónde está:**
+- **Metadatos** (`lib/site.ts`, `app/layout.tsx`): el título de la portada tiene 55 caracteres y la descripción 139. Dice «avisos» y no «alertas tempranas»: el sitio avisa cuando las agencias publican el sismo, no antes. No hay etiqueta `keywords`. `app/layout.tsx` solo añade a mano `apple-mobile-web-app-capable` y la precarga de las dos fuentes (con `preload` de `react-dom`; como `<link>` en el `<head>` salían dos veces); el manifiesto, los íconos y el color del tema salen de `metadata` y `viewport`. La dirección del sitio es `NEXT_PUBLIC_SITE_URL` (por omisión, `https://www.ojopanama.com`).
+- **Datos estructurados** (`app/structured-data.tsx`): WebSite, Organization y WebApplication en un `@graph`; BreadcrumbList en todas las páginas internas menos `/privacidad`, ItemList en `/sismos` y AboutPage en `/acerca`. Sin FAQPage: sus preguntas no estaban visibles en la página.
+- **Portada con el último sismo ya en el HTML** (`app/page.tsx`, `app/home.tsx`, `app/latest-quake-ssr.tsx`, `lib/load-quakes.ts`): `page.tsx` es un componente de servidor que se regenera como mucho cada minuto (`revalidate = 60`, igual que `/resumen`) y pasa a `home.tsx` (el componente de cliente de siempre) el último sismo ya dibujado, que ocupa su tarjeta mientras el navegador consulta los datos en vivo, en lugar del esqueleto vacío. Si esa consulta falla, la página sale sin él y el navegador lo pide después.
+- **`/acerca`** (`app/acerca/page.tsx`): quién lo creó, de dónde salen los datos, cada cuánto se actualizan, lo que no hace y cómo contactar (por Instagram, `@ojopanama507`). Cada frase describe lo que hace el código o lo que dicen las otras páginas del sitio.
+- **Sitemap y robots** (`app/sitemap.ts`, `app/robots.ts`): el sitemap incluye la portada, `/analisis`, `/noticias`, `/historia`, `/reportes`, `/resumen`, `/acerca`, `/privacidad`, `/sismos` y las provincias con contenido. La fecha de cada provincia es la de su último sismo; la de las demás es la de la generación del sitemap. `robots` solo bloquea `/api/cron/` y `/api/push/`: las APIs de datos quedan abiertas para que Google pueda dibujar la página.
+- **Vista previa al compartir:** todas las páginas secundarias llevan `og:image` (antes, `/reportes`, `/resumen` y `/privacidad` no la tenían).
+
+### Páginas por provincia y comarca (`/sismos` y `/sismos/[provincia]`)
+
+**Qué son.** Un índice (`/sismos`) y una página por cada una de las 13 divisiones de `lib/provinces.ts` (10 provincias y 3 comarcas): `bocas-del-toro`, `chiriqui`, `cocle`, `colon`, `darien`, `embera-wounaan`, `guna-yala`, `herrera`, `los-santos`, `ngabe-bugle`, `panama`, `panama-oeste` y `veraguas`. Se regeneran como mucho cada minuto y cualquier otra dirección da 404 (`dynamicParams = false`). Los archivos son `app/sismos/page.tsx`, `app/sismos/[provincia]/page.tsx`, `app/sismos/format.ts`, `app/sismos/sismos.css` y `lib/province-pages.ts`.
+
+**De dónde sale cada dato** (nada estimado ni escrito a mano):
+- **La secuencia actual** (desde el 9 de octubre de 2026): `/api/earthquakes`, que ya combina el IGC, el USGS y el EMSC sin duplicados.
+- **Los sismos grandes desde 1900:** los de M 6 o más del USGS que ya usa `/historia`, anteriores a la secuencia actual (los de la secuencia salen en la lista en vivo). Se muestran los 10 mayores y el total.
+- **A qué provincia va cada sismo:** las mismas reglas del filtro del mapa (`lib/province-of.ts`). Si cae dentro del límite, a esa provincia o comarca. Si ocurre en el mar, a la de la localidad que cita el catálogo (por ejemplo, «al sur de Tonosí» es Los Santos) y, si no cita ninguna, a la de la costa más cercana (hasta 90 km). Los que quedan más lejos de toda costa no se cuentan en ninguna provincia, y los de «Incluir alrededores» (fuera de Panamá) tampoco.
+
+**Qué muestra cada página:** el último sismo de la provincia (magnitud, lugar, hora, profundidad, fuente y si el dato es preliminar o revisado); las cifras (sismos registrados, últimas 24 horas, última hora, de M 4 o más, de M 5 o más y el más fuerte); las localidades con más sismos (la que cita el catálogo para cada sismo y, si no cita ninguna, la más cercana dentro de la provincia); los 20 más recientes; y los sismos grandes desde 1900. Si la provincia no tiene sismos en la secuencia, lo dice y no rellena. Las cifras de 24 horas y de 1 hora se miden desde la hora de los datos que la propia página indica, no desde que alguien la abre.
+
+**Títulos y descripciones.** Llevan las cifras reales de esa provincia (cambian con cada sismo). Si no hay sismos en la secuencia, el título no promete un «último temblor» y pasa a «Sismos grandes en … desde 1900» (o «Sismos en … desde 1900» si el nombre es largo); la descripción solo menciona los sismos grandes si la página los trae. Los títulos se acortan en los nombres largos para no pasar de unos 65 caracteres con el «| Ojo Panamá».
+
+**Qué se ofrece a Google y qué no.** Una provincia con menos de 3 datos (sismos de la secuencia más sismos grandes desde 1900) sigue existiendo y enlazada desde `/sismos`, pero lleva `noindex` y no va en el sitemap (`MIN_ITEMS` en `lib/province-pages.ts`): sería casi solo texto fijo. Al 28 de octubre de 2026 eran Panamá, Panamá Oeste y Emberá-Wounaan. Si no se pueden consultar los sismos en vivo, no se retira nada por ese fallo pasajero.
+
+**Enlaces.** Desde el pie de la portada, desde su lista de enlaces «Más información» y desde el panel «Más» del celular; cada provincia enlaza al índice y a las demás.
+
+**Cómo se probó** (compilación de producción con `next build` y `next start -p 3055`, y después en `www.ojopanama.com`):
+- Las 13 páginas responden 200; una provincia que no existe da 404; el sitemap en vivo trae `/sismos` y las 10 provincias indexables.
+- **Conteos de la secuencia, contra `/resumen`** (28 de octubre): Veraguas 484, Los Santos 350, Herrera 123, Chiriquí 11 y Ngäbe-Buglé 7, los mismos que da «Dónde ha temblado más».
+- **Sismos grandes desde 1900, contra `/historia`:** Bocas del Toro 3, Chiriquí 37, Colón 2, Darién 4, Guna Yala 7 y Ngäbe-Buglé 1 coinciden. Las únicas diferencias son los sismos de la secuencia actual, que `/historia` cuenta y estas páginas no por diseño: Veraguas 18 (en `/historia`, 20), Los Santos 3 (4) y Herrera ninguno (1, el sismo principal).
+- Cada título y descripción se cotejó con el contenido de su propia página (sin promesas que la página no cumpla).
+- Se vio en claro en escritorio (sin desborde horizontal) y en oscuro en un ancho de 375 px (el índice y la lista de sismos de Veraguas).
+- **Lint:** los archivos nuevos pasan sin errores. `app/home.tsx` ya tenía 3 errores de lint (`react-hooks/set-state-in-effect`, `purity` y `refs`) antes de este trabajo y siguen igual.
+
+**Trampas.**
+- En `generateMetadata`, `robots` **reemplaza** al del sitio completo (también `openGraph` y `twitter`): solo se pone para ocultar una página, y cada página repite sus `openGraph`/`twitter` con `pageSocial()`.
+- Un `<a href="/sismos">` falla el lint `@next/next/no-html-link-for-pages`: se usa `Link` de `next/link` (con `prefetch={false}` en los enlaces repetidos).
+- `Date.now()` dentro de un componente de página falla `react-hooks/purity`: va en una función auxiliar o en `lib/`.
+
+**Lo que falta o no se midió.**
+- **Search Console:** registrar el sitio y enviar `https://www.ojopanama.com/sitemap.xml` lo tiene que hacer quien administra la cuenta de Google. Sin eso no hay forma de ver posiciones ni qué búsquedas traen visitas.
+- **Costo en Vercel:** no se midió lo que cuesta regenerar cada minuto la portada, `/resumen`, `/sismos`, las 13 provincias y el sitemap. Conviene mirarlo con tráfico real.
+- **Velocidad en el celular:** no se midió; PageSpeed Insights rechazó la consulta pública por cuota (error 429).
+- Tampoco se sabe cuándo ni en qué puesto saldrá cada página: depende de Google.
 
 ---
 
