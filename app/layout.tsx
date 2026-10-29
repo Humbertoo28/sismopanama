@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { preload } from "react-dom";
 import Accessibility, { SkipLink } from "./accessibility";
 import SampledAnalytics from "./sampled-analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, pageSocial } from "../lib/site";
@@ -17,26 +18,9 @@ export const metadata: Metadata = {
   title: { default: SITE_TITLE, template: `%s | ${SITE_NAME}` },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
-  keywords: [
-    "sismo panama",
-    "temblor panama",
-    "ojo panama",
-    "sismo panama hoy",
-    "temblor panama hoy",
-    "ultimo sismo panama",
-    "alerta sismica panama",
-    "terremoto panama",
-    "instituto de geociencias panama",
-    "igc up",
-    "sinaproc panama",
-    "ojopanama",
-    "ojopanama.com",
-    "ojopanama507",
-  ],
   authors: [{ name: "Ojo Panamá", url: "https://www.ojopanama.com" }],
   creator: "Ojo Panamá",
   publisher: "Ojo Panamá",
-  category: "weather",
   manifest: "/manifest.json?v=2",
   icons: {
     icon: "/favicon.svg?v=2",
@@ -65,17 +49,15 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Las dos fuentes se precargan con react-dom (una sola etiqueta cada una): como <link> en el <head>, React las dejaba dos veces.
+  preload("/fonts/dm-sans-latin.woff2", { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
+  preload("/fonts/space-grotesk-latin.woff2", { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
   return (
     <html lang="es-PA" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json?v=2" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+        {/* El manifiesto, el ícono, el título y la barra de estado de la app salen de `metadata` y `viewport`; aquí solo va lo que Next
+            no emite: la marca antigua de Safari para instalar la web como app. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Ojo Panamá" />
-        <meta name="theme-color" content="#ffffff" />
-        <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
-        <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <SiteStructuredData />
         {/* Aplica el tema (claro u oscuro, ver lib/theme.ts) y las opciones de accesibilidad guardadas antes de pintar la página
             (ver accessibility.tsx). Texto fijo. */}

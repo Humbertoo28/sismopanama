@@ -5,9 +5,12 @@ import type { Metadata } from "next";
 // NEXT_PUBLIC_SITE_URL en Vercel.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.ojopanama.com").replace(/\/$/, "");
 export const SITE_NAME = "Ojo Panamá";
-export const SITE_TITLE = "Ojo Panamá | Sismos y temblores en vivo, mapa y alertas en tiempo real";
+// El título cabe en los ~60 caracteres que muestra Google; la descripción, en ~160. «Avisos» y no «alertas tempranas»: el sitio avisa
+// cuando las agencias publican el sismo, no antes de que ocurra.
+export const SITE_TITLE = "Ojo Panamá: sismos y temblores en vivo | Mapa y alertas";
 export const SITE_DESCRIPTION =
-  "Monitoreo de sismos y temblores en Panamá en tiempo real. Mapa en vivo, magnitud, réplicas y alertas tempranas al celular con datos oficiales de IGC-UP, USGS y EMSC.";
+  "Sismos y temblores en Panamá en tiempo real: mapa en vivo, magnitud, réplicas y avisos al celular, con datos del IGC-UP, el USGS y el EMSC.";
+export const INSTAGRAM_URL = "https://www.instagram.com/ojopanama507";
 
 const OG_IMAGE = { url: "/opengraph-image", width: 1200, height: 630, alt: "Ojo Panamá: sismos y réplicas en vivo, mapa y avisos al celular" };
 

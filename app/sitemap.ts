@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "../lib/site";
 
-// Las dos páginas cambian con cada sismo nuevo. La fecha es la de la compilación, no una inventada.
+// Las páginas con datos cambian con cada sismo nuevo. La fecha es la de la compilación, no una inventada.
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
   return [
@@ -9,7 +9,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/analisis`, lastModified, changeFrequency: "hourly", priority: 0.7 },
     { url: `${SITE_URL}/noticias`, lastModified, changeFrequency: "hourly", priority: 0.6 },
     { url: `${SITE_URL}/historia`, lastModified, changeFrequency: "daily", priority: 0.6 },
+    { url: `${SITE_URL}/reportes`, lastModified, changeFrequency: "hourly", priority: 0.5 },
     { url: `${SITE_URL}/resumen`, lastModified, changeFrequency: "hourly", priority: 0.5 },
+    { url: `${SITE_URL}/acerca`, lastModified, changeFrequency: "monthly", priority: 0.4 },
     { url: `${SITE_URL}/privacidad`, lastModified, changeFrequency: "yearly", priority: 0.2 },
   ];
 }

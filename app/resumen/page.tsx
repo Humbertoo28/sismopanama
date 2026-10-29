@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "../page-header";
-import type { EarthquakeResponse } from "../../lib/earthquakes";
+import { loadQuakeData } from "../../lib/load-quakes";
 import { buildSummary, type QuakeSummary } from "../../lib/quake-summary";
-import { SITE_URL, pageSocial } from "../../lib/site";
+import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import LiveSummary from "./live-summary";
 import "./resumen.css";
@@ -13,26 +13,15 @@ const DESCRIPTION = "Los sismos y réplicas de Panamá en frases cortas y sin s�
 export const metadata: Metadata = {
   title: TITLE, // el sitio añade "| Ojo Panamá"
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/resumen"),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/resumen", true),
 };
 
 // La primera versión se regenera como mucho cada minuto (para que cargue ya con datos); después la página se actualiza sola.
 export const revalidate = 60;
 
-// Se lee la propia API del sitio (que ya viene en caché de la red) y no los catálogos directamente: sus consultas van sin
-// caché y volverían dinámica esta página, que debe regenerarse como mucho cada minuto.
 async function loadSummary(): Promise<QuakeSummary | null> {
-  try {
-    const response = await fetch(`${SITE_URL}/api/earthquakes`, { next: { revalidate: 60 } });
-    if (!response.ok) throw new Error(`La API de sismos respondió ${response.status}`);
-    const data = (await response.json()) as EarthquakeResponse;
-    return Array.isArray(data.features) && data.features.length
-      ? buildSummary(data.features, Date.now(), { dataTime: Date.parse(data.fetchedAt) || Date.now(), catalogs: data.catalogs })
-      : null;
-  } catch (error) {
-    console.error("Resumen de sismos no disponible:", error);
-    return null;
-  }
+  const data = await loadQuakeData();
+  return data ? buildSummary(data.features, Date.now(), { dataTime: Date.parse(data.fetchedAt) || Date.now(), catalogs: data.catalogs }) : null;
 }
 
 export default async function ResumenPage() {

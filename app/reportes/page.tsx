@@ -11,7 +11,7 @@ const DESCRIPTION = "Reportes de las personas que sintieron (o no) cada sismo y 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/reportes"),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/reportes", true),
 };
 
 export default function ReportesPage() {

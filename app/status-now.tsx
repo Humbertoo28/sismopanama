@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ChevronRight, ExternalLink, MapPin, MessageCircle, MessageSquareText, Phone, RefreshCw, Share2 } from "lucide-react";
 import CountUp from "./count-up";
 import { getWhatsAppShareUrl } from "../lib/alert-system";
@@ -47,6 +48,8 @@ function magLevel(mag: number | null) {
 }
 
 type Props = {
+  /** El último sismo dibujado en el servidor: se ve en lugar del esqueleto hasta que llega el dato en vivo. */
+  fallback?: ReactNode;
   latest: Earthquake | null;
   main: Earthquake | null;
   mainshock: MainshockResponse | null;
@@ -60,7 +63,7 @@ type Props = {
   onReport: (event: Earthquake) => void;
 };
 
-export default function StatusNow({ latest, main, mainshock, status, lastUpdate, catalogs, shared, onShowOnMap, onShare, onRefresh, onReport }: Props) {
+export default function StatusNow({ fallback, latest, main, mainshock, status, lastUpdate, catalogs, shared, onShowOnMap, onShare, onRefresh, onReport }: Props) {
   const isMain = Boolean(latest && main && latest.id === main.id);
   // Si el último sismo es posterior al sismo principal, es la última réplica (igual que en los gráficos y en la lista).
   const isAfter = Boolean(latest && main && !isMain && !latest.properties.nearby && isAftershock(latest, main));
@@ -136,7 +139,7 @@ export default function StatusNow({ latest, main, mainshock, status, lastUpdate,
               </div>
             </div>
           ) : (
-            <div className="now-skeleton" aria-label="Cargando el último sismo"><i /><span /><span /></div>
+            fallback ?? <div className="now-skeleton" aria-label="Cargando el último sismo"><i /><span /><span /></div>
           )}
         </article>
 

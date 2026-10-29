@@ -10,7 +10,7 @@ const CONTACT = "soporte@ojopanama.com";
 export const metadata: Metadata = {
   title: TITLE, // el sitio añade "| Ojo Panamá"
   description: DESCRIPTION,
-  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/privacidad"),
+  ...pageSocial(`${TITLE} | Ojo Panamá`, DESCRIPTION, "/privacidad", true),
 };
 
 // Política de privacidad de la web y de las apps (Google Play la exige). Describe lo que hace el código: si cambia lo que se
