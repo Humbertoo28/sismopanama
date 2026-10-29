@@ -72,14 +72,14 @@ export default function AcercaPage() {
         <h2>Cada cuánto se actualiza</h2>
         <p>
           Con la página abierta, la lista de sismos se vuelve a consultar cada 35 segundos. Las alertas al celular se envían cuando los
-          catálogos publican un sismo nuevo; por eso no son un sistema de alerta temprana, que avisaría antes de que llegue la sacudida.
+          catálogos publican un sismo nuevo; por eso no son un sistema de alerta temprana.
         </p>
 
         <h2>Lo que Ojo Panamá no hace</h2>
         <ul>
-          <li>No predice sismos: nadie puede hacerlo con fecha y lugar.</li>
+          <li>No predice sismos.</li>
           <li>No reemplaza los avisos oficiales: ante una emergencia, sigue las indicaciones de <a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC</a> y llama al 911 si hay peligro para la vida.</li>
-          <li>No presenta cálculos como mediciones: lo que se calcula (por ejemplo, la energía liberada o lo que tarda la onda en llegar a una ciudad) se rotula como cálculo.</li>
+          <li>No presenta cálculos como mediciones: lo que se calcula o se aproxima (la energía liberada, el tiempo de llegada de la sacudida) lleva su aviso en la ficha del sismo.</li>
         </ul>
 
         <h2>Más páginas</h2>
