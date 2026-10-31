@@ -13,6 +13,9 @@ export type Earthquake = {
     status?: string | null;
     // Catálogo del que viene el registro (por omisión, el USGS) y los id de la misma ocurrencia en otros.
     source?: "usgs" | "igc" | "emsc";
+    // De qué catálogo salen la magnitud, el estado y el enlace que se muestran, si no son los de `source`: el IGC manda en la magnitud
+    // de los sismos que publica (ver preferIgc en lib/catalogs.ts); el id y los datos propios del USGS se conservan.
+    magSource?: "usgs" | "igc" | "emsc";
     aliases?: string[];
     // Qué catálogos publicaron este sismo y qué magnitud puso cada uno (solo si hay más de uno; si no, vale `source`).
     agencies?: { source: "usgs" | "igc" | "emsc"; mag: number | null; magType?: string | null }[];

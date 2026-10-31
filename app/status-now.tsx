@@ -68,7 +68,7 @@ export default function StatusNow({ fallback, latest, main, mainshock, status, l
   const isMain = Boolean(latest && main && latest.id === main.id);
   // Si el último sismo es posterior al sismo principal, es la última réplica (igual que en los gráficos y en la lista).
   const isAfter = Boolean(latest && main && !isMain && !latest.properties.nearby && isAftershock(latest, main));
-  const source = SOURCE_NAMES[latest?.properties.source ?? "usgs"];
+  const source = SOURCE_NAMES[latest?.properties.magSource ?? latest?.properties.source ?? "usgs"];
   const preliminary = latest?.properties.status !== "reviewed";
   const down = catalogs ? (Object.keys(SOURCE_NAMES) as (keyof typeof SOURCE_NAMES)[]).filter(name => !catalogs[name]).map(name => SOURCE_NAMES[name]) : [];
   const mmi = main?.properties.mmi;

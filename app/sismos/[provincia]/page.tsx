@@ -123,7 +123,7 @@ export default async function ProvincePage({ params }: Props) {
                   <time dateTime={isoTime(latest.properties.time)}>{longDate.format(new Date(latest.properties.time))}</time> · {depthText(latest)} de profundidad
                 </span>
                 <span>
-                  Fuente: <a href={reportUrl(latest)} target="_blank" rel="noopener noreferrer">{SOURCE_NAMES[latest.properties.source ?? "usgs"]}</a>
+                  Fuente: <a href={reportUrl(latest)} target="_blank" rel="noopener noreferrer">{SOURCE_NAMES[latest.properties.magSource ?? latest.properties.source ?? "usgs"]}</a>
                   {latest.properties.status !== "reviewed" ? " · dato preliminar" : " · revisado"}
                 </span>
               </div>

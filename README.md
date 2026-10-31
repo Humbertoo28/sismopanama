@@ -324,6 +324,18 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## 🇵🇦 El IGC manda en la magnitud (31 de octubre de 2026)
+
+**Pedido.** El 31 de octubre a las 10:50 a. m. hubo un sismo cerca de Tonosí. El IGC publicó en X *«PRELIMINAR · M 6.1 · 10 km · a 18km al este de Tonosí»* (su tabla traía dos filas automáticas, M 6.0 y M 5.8), el USGS lo dio M 5.2 (revisado) y el EMSC M 5.2. El sitio mostraba la del USGS y quien administra pidió que el IGC, la red sísmica nacional, fuera la fuente de la magnitud («solo IGC»).
+
+- **Regla** (`preferIgc` en `lib/catalogs.ts`): si un sismo del USGS también está en la tabla del IGC, el sitio muestra la **magnitud, el estado (preliminar o revisado) y el enlace del IGC**. El **desglose de agencias** de la ficha conserva lo que dio cada una (USGS 5.2, IGC 6.1, EMSC 5.2), así que nada se esconde. Los sismos que el IGC no publica siguen mostrándose como los da el USGS o el EMSC.
+- **Qué no cambia:** el id del sismo y los datos que solo da el USGS (PAGER, «¿Lo sentiste?», llegadas a estaciones) se conservan, porque alertas, reportes y la ficha los buscan por id. **El sismo principal (M 7.7, `MAINSHOCK_ID`) se queda como lo da el USGS**: es la cifra del cartel y de su ficha. La propiedad nueva `magSource` indica de qué catálogo salen la magnitud y la etiqueta «Fuente».
+- **Revisiones del IGC en X** (`IGC_REVISIONS`, `withIgcRevisions`): cuando el IGC publica una revisión en @igcpanamaup antes de que su tabla la refleje, se anota ahí (hora, magnitud, profundidad) y se aplica a la fila de la tabla (±3 s) **mientras siga PRELIMINAR**; cuando la tabla pasa a REVISADO manda ella y la entrada se puede borrar. Hoy tiene una: el sismo de las 10:50:19 a. m. (M 6.1, 10 km). La posición es la de la tabla.
+- **Efecto en los sismos recientes** (los 4 de la lista que están en el USGS y en el IGC): 31 oct M 5.2 → **6.1**, 27 oct M 5.0 → **5.6**, 29 oct M 4.7 → **5.1**, 15 oct M 4.5 → **4.9**. El IGC da en estos casos de 0.4 a 0.9 más que el USGS (el IGC usa su propia escala y el USGS, M<sub>w</sub>); es una diferencia de escalas, no un error de uno u otro. Las alertas push ya enviadas no se repiten.
+- **Probado** contra los catálogos reales: el sismo de las 10:50 sale M 6.1, 10 km, fuente IGC, con `usgs:5.2 · igc:6.1 · emsc:5.2` en el desglose; los otros tres cambian como se lista; el principal sigue en 7.7. `tsc` y `next build` sin errores.
+
+---
+
 ## ⚡ Lista de sismos: la página se «caía» al tocar «Mayor magnitud»
 
 **Reporte (14 de octubre de 2026).** «Cuando alguien toca *Mayor magnitud*, se cae la página.» Ese botón ordena la lista «Sismos registrados» (`app/page.tsx`).

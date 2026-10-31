@@ -23,7 +23,7 @@ export default function LatestQuakeSsr({ events }: { events: Earthquake[] }) {
   const isMain = Boolean(main && latest.id === main.id);
   const isAfter = Boolean(main && !isMain && !latest.properties.nearby && isAftershock(latest, main));
   const depth = latest.geometry.coordinates[2];
-  const source = SOURCE_NAMES[latest.properties.source ?? "usgs"];
+  const source = SOURCE_NAMES[latest.properties.magSource ?? latest.properties.source ?? "usgs"];
 
   return (
     <div className="now-latest-body">

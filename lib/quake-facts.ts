@@ -7,6 +7,8 @@ export const SOURCE_NAMES = { usgs: "USGS", igc: "IGC", emsc: "EMSC" } as const;
 // Solo se enlazan los informes que están en el sitio de cada catálogo (el enlace viene de una fuente ajena).
 const REPORT_HOSTS = ["https://earthquake.usgs.gov/", "https://sismosgeociencias.up.ac.pa/", "https://www.emsc-csem.org/"];
 export function reportUrl(event: Earthquake | null | undefined) {
+  // Si la magnitud que se muestra es la del IGC, el enlace es a su tabla.
+  if (event?.properties.magSource === "igc") return "https://sismosgeociencias.up.ac.pa/";
   const url = event?.properties.url;
   return url && REPORT_HOSTS.some(host => url.startsWith(host)) ? url : "https://earthquake.usgs.gov/earthquakes/map/";
 }

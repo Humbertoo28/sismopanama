@@ -1,4 +1,4 @@
-import { REGION, isPanamaPlace, sameEvent, type Earthquake } from "./earthquakes";
+import { MAINSHOCK_ID, REGION, isPanamaPlace, sameEvent, type Earthquake } from "./earthquakes";
 import { isValidEarthquake, queryUsgs } from "./usgs";
 
 // Un solo catálogo no basta. El USGS tarda en publicar los sismos medianos y no lista los pequeños; EMSC
@@ -238,6 +238,30 @@ export const MANUAL_IGC_EVENTS: Earthquake[] = MANUAL_IGC.map(item => {
   };
 });
 
+// Revisiones que el IGC publica en su cuenta de X (@igcpanamaup) antes de que su tabla las refleje: la tabla puede traer filas automáticas distintas
+// del mismo sismo y quedarse atrás. Se aplican a la fila de la tabla (mismo segundo, ±3 s) mientras siga PRELIMINAR; cuando la tabla pasa a REVISADO manda
+// ella y la entrada sobra. Solo se cambian los datos que el IGC publicó (magnitud y profundidad); la posición es la de la tabla.
+type IgcRevision = { local: string; mag: number; depth?: number };
+const IGC_REVISIONS: IgcRevision[] = [
+  // 31 de octubre de 2026, 10:50:19 a. m.: la tabla traía M 6.0 (14 km al este de Tonosí) y M 5.8 (22 km al noreste); en X el IGC publicó
+  // «PRELIMINAR · M 6.1 · 10 km · a 18km al este de Tonosí» (10:55 a. m.). El USGS y el EMSC dan M 5.2.
+  { local: "2026-10-31T10:50:19-05:00", mag: 6.1, depth: 10 },
+];
+
+export function withIgcRevisions(rows: Earthquake[]): Earthquake[] {
+  return rows.map(row => {
+    if (row.properties.status === "reviewed") return row;
+    const revision = IGC_REVISIONS.find(item => Math.abs(Date.parse(item.local) - row.properties.time) <= 3000);
+    if (!revision) return row;
+    const [lng, lat] = row.geometry.coordinates;
+    return {
+      ...row,
+      properties: { ...row.properties, mag: revision.mag },
+      geometry: { coordinates: revision.depth === undefined ? row.geometry.coordinates : [lng, lat, revision.depth] },
+    };
+  });
+}
+
 export function withManualIgc(fromIgc: Earthquake[], since: number): Earthquake[] {
   const missing = MANUAL_IGC_EVENTS.filter(manual => manual.properties.time >= since && !fromIgc.some(real => sameEvent(real, manual)));
   return missing.length ? [...fromIgc, ...missing] : fromIgc;
@@ -314,18 +338,34 @@ function merge(primary: Earthquake[], secondary: Earthquake[]) {
   return [...merged, ...onlySecondary].sort((a, b) => b.properties.time - a.properties.time);
 }
 
+// El IGC (la red sísmica nacional) manda en la magnitud de los sismos que publica: si un sismo del USGS también está en la tabla del IGC, el sitio
+// muestra la magnitud y el estado del IGC (con su enlace) y deja la del USGS y la del EMSC en el desglose de agencias. Se conservan el id y los datos
+// que solo da el USGS (PAGER, «¿Lo sentiste?», profundidad, ficha), que otras partes usan por id. El sismo principal queda como lo da el USGS: su
+// cifra es la del cartel «M 7.7» y la de su ficha.
+export function preferIgc(events: Earthquake[], igcRows: Earthquake[]): Earthquake[] {
+  return events.map(event => {
+    const { properties } = event;
+    if ((properties.source ?? "usgs") !== "usgs" || event.id === MAINSHOCK_ID || !properties.agencies?.some(item => item.source === "igc")) return event;
+    const row = igcRows
+      .filter(item => item.properties.mag !== null && sameEvent(item, event))
+      .sort((a, b) => Math.abs(a.properties.time - properties.time) - Math.abs(b.properties.time - properties.time))[0];
+    if (!row) return event;
+    return { ...event, properties: { ...properties, mag: row.properties.mag, magType: null, status: row.properties.status, magSource: "igc" as const } };
+  });
+}
+
 export async function fetchPanamaEvents(since: number): Promise<{ events: Earthquake[]; catalogs: CatalogStatus }> {
   const [usgs, igc, emsc] = await Promise.allSettled([fetchUsgs(since), fetchIgc(since), fetchEmsc(since)]);
   if (usgs.status === "rejected") console.error("USGS no disponible:", usgs.reason);
   if (igc.status === "rejected") console.error("IGC no disponible:", igc.reason);
   if (emsc.status === "rejected") console.error("EMSC no disponible:", emsc.reason);
   const [fromUsgs, igcRows, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
-  const fromIgc = withManualIgc(igcRows, since);
+  const fromIgc = withManualIgc(withIgcRevisions(igcRows), since);
   if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
   // Prioridad al elegir qué registro mostrar de un mismo sismo: USGS (revisión y datos adicionales), luego
   // IGC (red local, etiqueta del lugar) y por último EMSC.
   return {
-    events: merge(merge(fromUsgs, fromIgc), fromEmsc),
+    events: preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc),
     catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
   };
 }
@@ -337,7 +377,7 @@ export async function fetchNearbyEvents(since: number): Promise<{ events: Earthq
   if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
   const [fromUsgs, fromIgc, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
   return {
-    events: merge(merge(fromUsgs, fromIgc), fromEmsc),
+    events: preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc),
     catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
   };
 }

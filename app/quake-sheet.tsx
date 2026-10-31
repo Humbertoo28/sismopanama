@@ -34,7 +34,7 @@ export function QuakeDetails({
   const facts = useMemo(() => arrivals(event), [event]);
   const { status: phaseStatus, phases } = useEventPhases(event.id);
   const agencies = properties.agencies ?? [{ source: properties.source ?? "usgs", mag: properties.mag, magType: properties.magType ?? null }];
-  const primary = SOURCE_NAMES[properties.source ?? "usgs"];
+  const primary = SOURCE_NAMES[properties.magSource ?? properties.source ?? "usgs"];
   const reviewed = properties.status === "reviewed";
   const magnitude = properties.mag === null ? "—" : properties.mag.toFixed(1);
   const arrivalId = `${headingId}-arrival`;
