@@ -1,4 +1,4 @@
-import { MAINSHOCK_ID, REGION, isPanamaPlace, sameEvent, type Earthquake } from "./earthquakes";
+import { MAINSHOCK_ID, REGION, isIgcConfirmed, isPanamaPlace, sameEvent, type Earthquake } from "./earthquakes";
 import { isValidEarthquake, queryUsgs } from "./usgs";
 
 // Un solo catálogo no basta. El USGS tarda en publicar los sismos medianos y no lista los pequeños; EMSC
@@ -45,7 +45,8 @@ const IGC_URL = "https://sismosgeociencias.up.ac.pa/";
 const IGC_MIN_INTERVAL_MS = 4_000;
 // El IGC no tiene API: publica una tabla HTML de los últimos 7 días. Se lee con respeto: identificándonos,
 // con caché condicional (ETag) y sin consultar más de una vez cada 4 s por instancia del servidor.
-let igcCache: { at: number; etag: string | null; events: Earthquake[]; nearby: Earthquake[] } | null = null;
+// `windowStart`: hora del sismo más antiguo de la tabla (la tabla del IGC solo guarda unos días; antes de esa hora no se puede saber si el IGC lo publicó).
+let igcCache: { at: number; etag: string | null; events: Earthquake[]; nearby: Earthquake[]; windowStart: number | null } | null = null;
 
 const entities: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " " };
 const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&(amp|lt|gt|quot|#39|nbsp);/g, m => entities[m]).replace(/\s+/g, " ").trim();
@@ -156,8 +157,18 @@ export async function fetchIgc(since: number, scope: Scope = "panama"): Promise<
   if (html.length > 3_000_000) throw new Error("Respuesta del IGC demasiado grande");
   const { panama, nearby } = parseIgcAll(html);
   if (panama.length === 0 && !/Listado de sismos/i.test(html)) throw new Error("La página del IGC cambió de formato");
-  igcCache = { at: now, etag: response.headers.get("etag"), events: panama, nearby };
+  const times = [...panama, ...nearby].map(event => event.properties.time);
+  igcCache = { at: now, etag: response.headers.get("etag"), events: panama, nearby, windowStart: times.length > 0 ? Math.min(...times) : null };
   return pick(igcCache);
+}
+
+// Regla de quien administra el sitio (31 de octubre de 2026): solo se muestran los sismos que el IGC confirma (que están en su tabla). La tabla del
+// IGC guarda unos días: de lo anterior a su sismo más antiguo no se puede saber si el IGC lo publicó, y se conserva tal como lo traen los catálogos
+// (si no, desaparecería el historial de la secuencia, incluido el M 7.7 del 9 de octubre). Si la tabla no respondió o está vacía no hay con qué
+// confirmar y no se quita nada (el sitio ya avisa que el IGC no responde).
+export function onlyIgcConfirmed(events: Earthquake[], windowStart: number | null): Earthquake[] {
+  if (windowStart === null) return events;
+  return events.filter(event => isIgcConfirmed(event) || event.properties.time < windowStart);
 }
 
 // Sismos que un catálogo publicó y la institución local desmintió: no se muestran ni se cuentan ni se avisan, en ningún lugar de
@@ -362,10 +373,11 @@ export async function fetchPanamaEvents(since: number): Promise<{ events: Earthq
   const [fromUsgs, igcRows, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
   const fromIgc = withManualIgc(withIgcRevisions(igcRows), since);
   if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
-  // Prioridad al elegir qué registro mostrar de un mismo sismo: USGS (revisión y datos adicionales), luego
-  // IGC (red local, etiqueta del lugar) y por último EMSC.
+  // El IGC manda: se muestra su magnitud y solo lo que él confirma (ver preferIgc y onlyIgcConfirmed). Entre catálogos se fusiona con
+  // prioridad USGS (conserva su id y sus datos), luego IGC y por último EMSC.
+  const windowStart = igc.status === "fulfilled" ? igcCache?.windowStart ?? null : null;
   return {
-    events: preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc),
+    events: onlyIgcConfirmed(preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc), windowStart),
     catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
   };
 }
@@ -376,8 +388,9 @@ export async function fetchNearbyEvents(since: number): Promise<{ events: Earthq
   const [usgs, igc, emsc] = await Promise.allSettled([fetchUsgs(since, "nearby"), fetchIgc(since, "nearby"), fetchEmsc(since, "nearby")]);
   if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
   const [fromUsgs, fromIgc, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
+  const windowStart = igc.status === "fulfilled" ? igcCache?.windowStart ?? null : null;
   return {
-    events: preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc),
+    events: onlyIgcConfirmed(preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc), windowStart),
     catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
   };
 }
