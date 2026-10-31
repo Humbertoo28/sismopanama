@@ -336,6 +336,17 @@ Todas las gráficas usan **solo sismos que los catálogos (USGS, IGC, EMSC) ya p
 
 ---
 
+## ✅ Alertas solo de sismos que el IGC publica (31 de octubre de 2026)
+
+**Pedido.** Quien administra el sitio, tras el sismo del 31 de octubre que el IGC dio M 6.1 y el USGS y el EMSC M 5.2: «todo debe ser confirmado por el IGC, si no no va».
+
+- **Regla** (`isIgcConfirmed` y `awaitsConfirmation` en `lib/earthquakes.ts`): un sismo se avisa —push, sirena y notificación con la página abierta— **solo si el IGC lo publica** (es un registro de su tabla, o el IGC figura entre las agencias del registro fusionado). Si el IGC no lo publica **no se avisa**, sea cual sea su magnitud, quién más lo traiga (USGS o EMSC) o si el IGC está respondiendo. Se sigue mostrando en la lista, el mapa y la ficha, y cuando el IGC lo publica cuenta como nuevo y se avisa entonces. Los sismos agregados a mano como del IGC (`MANUAL_IGC`) cuentan como del IGC.
+- **Qué cambia frente a la regla del 13 de octubre** (ver «Sismos sin confirmar»): antes un sismo de **M 5.0 o más** que solo traía el EMSC, uno que solo traía el USGS, y cualquier sismo mientras **el IGC no respondía** se avisaban igual; ahora ninguno (se quitó `UNCONFIRMED_ALERT_MAG` y el parámetro `igcUp` de `selectQuakesToPush`, `runQuakeCheck` y `runQuakeCheckThrottled`). **Consecuencia a tener presente:** si el IGC deja de responder, o no publica un sismo grande, el sitio no avisa; en una caída como la del 14 y 15 de octubre hay que agregar los sismos a mano a `MANUAL_IGC`, como se hizo entonces.
+- **Qué no cambia:** la lista, el mapa, la ficha y `/analisis` siguen mostrando los datos de los tres catálogos (una gran parte del historial, de antes de la ventana de siete días de la tabla del IGC, no aparece en ella). La magnitud que se muestra y se manda en la alerta es la del IGC cuando el sismo está en su tabla (ver «El IGC manda en la magnitud»).
+- **Probado** con 9 casos de `selectQuakesToPush` (sin tocar ningún envío): se avisan el sismo del IGC, el de USGS+IGC fusionado (M 6.1) y el de EMSC+IGC; **no** se avisan solo-EMSC M 3.5, solo-EMSC M 6.0, solo-USGS M 5.2, USGS+EMSC sin IGC, el agregado a mano sin avisar y el de hace 90 minutos. `tsc` sin errores.
+
+---
+
 ## ⚡ Lista de sismos: la página se «caía» al tocar «Mayor magnitud»
 
 **Reporte (14 de octubre de 2026).** «Cuando alguien toca *Mayor magnitud*, se cae la página.» Ese botón ordena la lista «Sismos registrados» (`app/page.tsx`).

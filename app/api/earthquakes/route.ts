@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     // Con after() de Next.js, Vercel no mata el proceso serverless hasta completar el despacho push.
     after(async () => {
       try {
-        await runQuakeCheckThrottled(events, catalogs.igc);
+        await runQuakeCheckThrottled(events);
       } catch (e) {
         console.warn("[push] oportuno fallo:", e);
       }

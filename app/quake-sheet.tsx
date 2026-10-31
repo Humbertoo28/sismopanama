@@ -90,7 +90,7 @@ export function QuakeDetails({
           <dt>Estado</dt>
           <dd>
             {reviewed ? `Revisado por ${primary}.` : "Preliminar: la magnitud y la ubicación pueden cambiar."}
-            {isUnconfirmed(event) && <small>Solo lo publica el EMSC: el IGC y el USGS no lo registran. Puede ser una detección errónea.{awaitsConfirmation(event) && " No se avisa por alerta hasta que alguno lo confirme."}</small>}
+            {isUnconfirmed(event) && <small>Solo lo publica el EMSC: el IGC y el USGS no lo registran. Puede ser una detección errónea.{awaitsConfirmation(event) && " No se avisa por alerta hasta que el IGC lo confirme."}</small>}
           </dd>
         </div>
       </dl>

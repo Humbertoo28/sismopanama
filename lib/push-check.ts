@@ -23,9 +23,9 @@ function sameQuake(a: { time: number; mag: number }, b: { time: number; mag: num
   return Math.abs(a.time - b.time) <= SAME_QUAKE_MS && Math.abs(a.mag - b.mag) <= SAME_QUAKE_MAG;
 }
 
-// `igcUp`: si el IGC respondió en esta consulta. Un sismo que solo trae el EMSC (y es menor de M 5) no se avisa mientras el IGC
-// funcione y no lo confirme; cuando el IGC o el USGS lo publican, el registro fusionado ya no es «solo EMSC» y se avisa entonces.
-export function selectQuakesToPush(events: Earthquake[], notified: NotifiedRow[], now = Date.now(), igcUp = true): Earthquake[] {
+// Solo se avisan los sismos que el IGC publica (ver awaitsConfirmation); uno del USGS o del EMSC que el IGC aún no registra espera, y cuando el
+// IGC lo publica el registro fusionado ya lo trae y se avisa entonces.
+export function selectQuakesToPush(events: Earthquake[], notified: NotifiedRow[], now = Date.now()): Earthquake[] {
   const ids = new Set(notified.map(row => row.id));
   const known = notified.map(row => ({ time: Number(row.time), mag: Number(row.magnitude ?? 0) }));
   const picked: Earthquake[] = [];
@@ -34,7 +34,7 @@ export function selectQuakesToPush(events: Earthquake[], notified: NotifiedRow[]
     if (mag < MIN_MAGNITUDE || now - event.properties.time > PUSH_MAX_AGE_MS) continue;
     // Agregado a mano sin avisar (ver MANUAL_IGC_EVENTS): nunca sale como alerta.
     if (event.properties.noAlert) continue;
-    if (awaitsConfirmation(event, igcUp)) continue;
+    if (awaitsConfirmation(event)) continue;
     if ([event.id, ...(event.properties.aliases ?? [])].some(id => ids.has(id))) continue;
     const current = { time: event.properties.time, mag };
     if (known.some(row => sameQuake(row, current))) continue;
@@ -101,7 +101,7 @@ export type QuakeCheckResult = {
   message: string;
 };
 
-export async function runQuakeCheck(events: Earthquake[], now = Date.now(), igcUp = true): Promise<QuakeCheckResult> {
+export async function runQuakeCheck(events: Earthquake[], now = Date.now()): Promise<QuakeCheckResult> {
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return { ok: false, configured: false, eventsChecked: 0, newQuakes: 0, notificationsSent: 0, message: "Supabase no está conectado todavía. Agrega SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY." };
@@ -121,7 +121,7 @@ export async function runQuakeCheck(events: Earthquake[], now = Date.now(), igcU
     .limit(2000);
   if (error) throw new Error(`No se pudo leer los avisos enviados: ${error.message}`);
 
-  const toPush = selectQuakesToPush(recent, (data ?? []) as NotifiedRow[], now, igcUp);
+  const toPush = selectQuakesToPush(recent, (data ?? []) as NotifiedRow[], now);
   if (toPush.length === 0) {
     return { ok: true, configured: true, eventsChecked: recent.length, newQuakes: 0, notificationsSent: 0, message: "Todos los sismos recientes ya fueron avisados." };
   }
@@ -142,7 +142,7 @@ export async function runQuakeCheck(events: Earthquake[], now = Date.now(), igcU
 // consulta para revisar los push hace que un sismo llegue al celular en segundos si hay tráfico (justo lo que
 // pasa cuando ocurre uno), sin depender de que algo externo llame al cron. Con un límite por instancia.
 let lastRun = 0;
-export async function runQuakeCheckThrottled(events: Earthquake[], igcUp = true) {
+export async function runQuakeCheckThrottled(events: Earthquake[]) {
   // Solo en producción de Vercel. Un servidor local o una vista previa suelen cargar las mismas credenciales de
   // Supabase (.env.local) y enviarían avisos reales a los dispositivos suscritos con solo abrir la página.
   if (process.env.VERCEL_ENV !== "production") return;
@@ -150,7 +150,7 @@ export async function runQuakeCheckThrottled(events: Earthquake[], igcUp = true)
   if (now - lastRun < THROTTLE_MS || !getSupabaseServerClient()) return;
   lastRun = now;
   try {
-    const result = await runQuakeCheck(events, now, igcUp);
+    const result = await runQuakeCheck(events, now);
     // Solo se escribe cuando hubo algo que avisar: así se ve en los registros si esta tarea posterior a la respuesta
     // llega a terminar (si la plataforma la cortara, el sismo quedaría reservado sin enviarse).
     if (result.newQuakes > 0) console.log(`[push] chequeo desde la consulta: ${result.message} enviados=${result.notificationsSent}`);

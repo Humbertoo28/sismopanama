@@ -36,8 +36,8 @@ async function handleCheck(req: NextRequest) {
 
   try {
     // Ventana de 3 horas: la misma que usa runQuakeCheck para decidir qué falta por avisar.
-    const { events, catalogs } = await fetchPanamaEvents(Date.now() - 3 * 3600 * 1000);
-    const result = await runQuakeCheck(events, Date.now(), catalogs.igc);
+    const { events } = await fetchPanamaEvents(Date.now() - 3 * 3600 * 1000);
+    const result = await runQuakeCheck(events, Date.now());
     return NextResponse.json(result, { status: result.configured ? 200 : 503 });
   } catch (err: unknown) {
     // El detalle queda en el registro del servidor; a quien llame no se le devuelve (puede revelar la infraestructura).

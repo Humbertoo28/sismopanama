@@ -243,11 +243,9 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
         const known = stored.length > 0 ? stored : (seen.current ?? []);
         const isFirstRun = !seen.current && stored.length === 0;
 
-        // Un sismo que solo trae el EMSC (y es menor de M 5) no suena ni avisa hasta que el IGC o el USGS lo confirmen. Tampoco se
-        // anota como visto: así, cuando lo confirmen, cuenta como nuevo y avisa entonces (ver awaitsConfirmation).
-        const igcUp = data.catalogs?.igc ?? true;
-        const held = (event: Earthquake) => awaitsConfirmation(event, igcUp);
-        const reliable = data.features.filter(event => !held(event));
+        // Un sismo que el IGC no publica no suena ni avisa hasta que el IGC lo confirme. Tampoco se anota como visto: así, cuando lo
+        // confirme, cuenta como nuevo y avisa entonces (ver awaitsConfirmation).
+        const reliable = data.features.filter(event => !awaitsConfirmation(event));
 
         // Un sismo es "nuevo" si no estaba registrado y ocurrió hace menos de 2 horas
         const fresh = reliable.filter(
