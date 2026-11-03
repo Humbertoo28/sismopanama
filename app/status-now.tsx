@@ -76,6 +76,7 @@ export default function StatusNow({ fallback, latest, main, mainshock, status, l
   const pager = main?.properties.alert ? PAGER[main.properties.alert] : undefined;
   const mainUrl = reportUrl(main);
   const strongest = mainshock?.aftershocks.strongest;
+  const zoneCount = mainshock?.aftershocks.zoneCount;
 
   return (
     <section className="now" aria-labelledby="now-title">
@@ -186,6 +187,7 @@ export default function StatusNow({ fallback, latest, main, mainshock, status, l
             <div>
               <dt>Réplicas desde entonces</dt>
               <dd>{mainshock ? <CountUp value={mainshock.aftershocks.count} from={0} /> : "—"}</dd>
+              {typeof zoneCount === "number" && <small>En toda la zona (Panamá, frontera con Costa Rica y alrededores): <strong>{zoneCount.toLocaleString("es-PA")}</strong></small>}
               {strongest && <small>La más fuerte: magnitud {magText(strongest)}</small>}
             </div>
             {typeof mmi === "number" && (
@@ -215,7 +217,8 @@ export default function StatusNow({ fallback, latest, main, mainshock, status, l
 
       <p className="now-note">
         Datos del USGS, del Instituto de Geociencias de la Universidad de Panamá y del EMSC. Las cifras se revisan y pueden cambiar.
-        Esta página no reemplaza los avisos oficiales de <a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC</a>.
+        {typeof zoneCount === "number" && " La cifra «en toda la zona» suma a las réplicas de Panamá los sismos posteriores al principal que los catálogos ubican en la frontera con Costa Rica y en los alrededores; no todos son réplicas."}
+        {" "}Esta página no reemplaza los avisos oficiales de <a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC</a>.
       </p>
 
       <nav className="now-more" aria-label="Más información">

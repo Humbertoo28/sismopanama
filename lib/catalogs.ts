@@ -32,9 +32,14 @@ type EmscProperties = {
   lat?: number; lon?: number; flynn_region?: string; evtype?: string;
 };
 
+// Techo de registros por consulta. Los dos catálogos ordenan del más nuevo al más viejo, así que un techo bajo recorta justo lo
+// más antiguo (el sismo principal y las primeras réplicas) en cuanto la secuencia lo supera. 20000 es el máximo de ambas APIs;
+// es un techo, no una reserva: solo devuelven los sismos que existen (el EMSC tenía 1148 en la zona el 29 de octubre de 2026).
+const QUERY_LIMIT = "20000";
+
 async function fetchUsgs(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
   const data = (await queryUsgs({
-    starttime: new Date(since).toISOString(), orderby: "time", limit: "2000", ...REGION,
+    starttime: new Date(since).toISOString(), orderby: "time", limit: QUERY_LIMIT, ...REGION,
   })) as { features?: Earthquake[] } | null;
   return (data?.features ?? [])
     .filter(item => isValidEarthquake(item) && isPanamaPlace(item.properties.place) === (scope === "panama"))
@@ -280,7 +285,7 @@ export function withManualIgc(fromIgc: Earthquake[], since: number): Earthquake[
 
 async function fetchEmsc(since: number, scope: Scope = "panama"): Promise<Earthquake[]> {
   const query = new URLSearchParams({
-    format: "json", orderby: "time", limit: "2000", starttime: new Date(since).toISOString().slice(0, 19), ...REGION,
+    format: "json", orderby: "time", limit: QUERY_LIMIT, starttime: new Date(since).toISOString().slice(0, 19), ...REGION,
   });
   const response = await fetch(`https://www.seismicportal.eu/fdsnws/event/1/query?${query}`, {
     headers: { Accept: "application/json" },

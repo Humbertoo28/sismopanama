@@ -42,10 +42,10 @@ export async function GET(request: Request) {
     });
 
     const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
-    // Caché corta: s-maxage hace que la red Edge de Vercel responda a casi todas las visitas
+    // Caché de 1 minuto en el Edge de Vercel: absorbe la mayoría de los polls del cliente (cada 60 s)
     // sin despertar el servidor serverless.
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=90" },
+      headers: { "Cache-Control": "public, max-age=20, s-maxage=60, stale-while-revalidate=120" },
     });
   } catch (error) {
     console.error("Catálogos sísmicos no disponibles:", error);

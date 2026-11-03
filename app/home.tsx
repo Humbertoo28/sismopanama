@@ -48,9 +48,9 @@ import { FAR_OFFSHORE, OUTSIDE, PROVINCE_BY_ID, provinceKey, provinceLabel } fro
 import { PROVINCES } from "../lib/provinces";
 import { MAINSHOCK_ID, awaitsConfirmation, isAftershock, isBeforeMainshock, isUnconfirmed, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
-// La lista de sismos en tiempo real se consulta cada 35 s.
+// La lista de sismos en tiempo real se consulta cada 60 s.
 // El sismo principal histórico y conteo de réplicas se consulta cada 5 min (300 s) para proteger cuotas del servidor.
-const POLL_MS = 35_000;
+const POLL_MS = 60_000;
 const SLOW_POLL_MS = 300_000;
 
 const date = new Intl.DateTimeFormat("es-PA", {
@@ -228,7 +228,7 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
     const controller = new AbortController();
     const load = async () => {
       setStatus("loading");
-      const timeout = window.setTimeout(() => controller.abort(), 35_000);
+      const timeout = window.setTimeout(() => controller.abort(), 55_000);
       try {
         const response = await fetch("/api/earthquakes", {
           signal: controller.signal,

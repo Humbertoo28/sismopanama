@@ -36,7 +36,10 @@ export type EarthquakeResponse = {
 
 export type MainshockResponse = {
   mainshock: Earthquake;
-  aftershocks: { count: number; strongest: Earthquake | null; tsunami: Earthquake | null };
+  // `count`: réplicas de Panamá (el conteo del sitio). `zoneCount`: esas mismas más los sismos posteriores al principal que los
+  // catálogos ubican en la frontera con Costa Rica y en los alrededores dentro de la zona del mapa; no todos son réplicas. Falta si no
+  // se pudo calcular con los mismos catálogos que `count`.
+  aftershocks: { count: number; zoneCount?: number; strongest: Earthquake | null; tsunami: Earthquake | null };
   fetchedAt: string;
 };
 

@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const { events, catalogs } = await fetchNearbyEvents(SINCE);
     const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=30, s-maxage=60, stale-while-revalidate=120" },
+      headers: { "Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=300" },
     });
   } catch (error) {
     console.error("Catálogos de los alrededores no disponibles:", error);
