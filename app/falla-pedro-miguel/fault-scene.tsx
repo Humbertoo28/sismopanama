@@ -29,6 +29,9 @@ const PRESETS = {
   side: { label: "De lado (corte)", view: { yaw: -90, pitch: 84, zoom: 1 } },
 } as const;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+// Perspectiva de la escena (la misma en el estilo del escenario y en la proyección que decide qué nombres caben).
+const PERSPECTIVE = 1700;
+const ORIGIN_Y = 0.36;
 // Los números de los estilos se redondean: el servidor los escribe con menos decimales que el navegador y React avisaría de una diferencia.
 const r2 = (value: number) => Math.round(value * 100) / 100;
 const dateTime = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
@@ -105,7 +108,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     transform: `translate3d(${r2(x)}px, ${r2(y)}px, ${r2(z)}px) rotateZ(calc(var(--yaw) * -1)) rotateX(calc(var(--pitch) * -1)) scale(${r2(1 / scale * 1000) / 1000})`,
   });
 
-  const move = (dyaw: number, dpitch: number, dzoom = 1) => setView(current => ({ yaw: current.yaw + dyaw, pitch: clamp(current.pitch + dpitch, 0, 88), zoom: clamp(current.zoom * dzoom, 0.6, 4) }));
+  const move = (dyaw: number, dpitch: number, dzoom = 1) => setView(current => ({ yaw: current.yaw + dyaw, pitch: clamp(current.pitch + dpitch, 0, 88), zoom: clamp(current.zoom * dzoom, 0.6, 6) }));
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     drag.current = { x: event.clientX, y: event.clientY };
@@ -132,12 +135,42 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     event.preventDefault();
   };
 
+  const scale3 = r2(scale * 1000) / 1000;
+  const offsetY = r2(stageSize.h * 0.04 - 0.5 * depthPx(FAULT_DEPTH_KM) * Math.sin((view.pitch * Math.PI) / 180) * scale);
   const pivot: CSSProperties & Record<string, string | number> = {
     "--yaw": `${r2(view.yaw)}deg`,
     "--pitch": `${r2(view.pitch)}deg`,
     // Al inclinar el suelo, la falla (que cuelga bajo él) baja en la pantalla: se sube la escena la mitad de lo que baja, para centrarla.
-    transform: `translate3d(0px, ${r2(stageSize.h * 0.04 - 0.5 * depthPx(FAULT_DEPTH_KM) * Math.sin((view.pitch * Math.PI) / 180) * scale)}px, 0px) scale(${r2(scale * 1000) / 1000}) rotateX(${r2(view.pitch)}deg) rotateZ(${r2(view.yaw)}deg)`,
+    // scale3d y no scale: `scale` solo escala x e y y dejaba la profundidad sin escalar, o sea exagerada 1/escala veces aunque dijera «Real».
+    transform: `translate3d(0px, ${offsetY}px, 0px) scale3d(${scale3}, ${scale3}, ${scale3}) rotateX(${r2(view.pitch)}deg) rotateZ(${r2(view.yaw)}deg)`,
   };
+
+  // Localidades: en orden de importancia; al acercar aparecen más, y solo las que caben sin taparse (se proyecta a la pantalla igual que el navegador).
+  const towns = useMemo(() => labels.map(label => ({ ...label, ...geo.at(label.lng, label.lat) })), [labels, geo]);
+  const toScreen = (x: number, y: number, z: number) => {
+    const yaw = (view.yaw * Math.PI) / 180;
+    const pitch = (view.pitch * Math.PI) / 180;
+    const dx = x - geo.center.x;
+    const dy = y - geo.center.y;
+    const x1 = dx * Math.cos(yaw) - dy * Math.sin(yaw);
+    const y1 = dx * Math.sin(yaw) + dy * Math.cos(yaw);
+    const y2 = y1 * Math.cos(pitch) - z * Math.sin(pitch);
+    const z2 = y1 * Math.sin(pitch) + z * Math.cos(pitch);
+    const originX = stageSize.w / 2;
+    const originY = stageSize.h * ORIGIN_Y;
+    const k = PERSPECTIVE / (PERSPECTIVE - z2 * scale);
+    return { sx: originX + (stageSize.w / 2 + x1 * scale - originX) * k, sy: originY + (stageSize.h / 2 + offsetY + y2 * scale - originY) * k };
+  };
+  const wanted = clamp(Math.round(4 + (view.zoom - 1) * 9), 4, towns.length);
+  const visibleTowns: ((typeof towns)[number] & { sx: number; sy: number; w: number })[] = [];
+  for (const town of towns) {
+    if (visibleTowns.length >= wanted) break;
+    const screen = toScreen(town.x, town.y, 2);
+    const w = town.name.length * 8.6 + 16;
+    if (screen.sx - w / 2 < 4 || screen.sx + w / 2 > stageSize.w - 4 || screen.sy < 24 || screen.sy > stageSize.h) continue;
+    if (visibleTowns.some(other => Math.abs(other.sx - screen.sx) < (other.w + w) / 2 && Math.abs(other.sy - screen.sy) < 26)) continue;
+    visibleTowns.push({ ...town, ...screen, w });
+  }
 
   return (
     <div className="fs">
@@ -171,6 +204,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
       <div
         ref={stage}
         className="fs-stage"
+        style={{ perspective: `${PERSPECTIVE}px`, perspectiveOrigin: `50% ${ORIGIN_Y * 100}%` }}
         tabIndex={0}
         role="group"
         aria-label={`Escena 3D de la falla de Pedro Miguel con ${quakes.length} sismos registrados cerca. Arrastra para girar; con el teclado, las flechas giran e inclinan y más y menos acercan.`}
@@ -201,10 +235,12 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
               <span key={km} className="fs-tick" style={billboard(southEnd.x + 14, southEnd.y, -depthPx(km))}>{km} km</span>
             ))}
 
-            {labels.map(label => {
-              const p = geo.at(label.lng, label.lat);
-              return <span key={label.name} className="fs-label" style={billboard(p.x, p.y, 2)}>{label.name}</span>;
-            })}
+            {visibleTowns.map(town => (
+              <Fragment key={town.name}>
+                <span className="fs-town-dot" style={billboard(town.x, town.y, 1)} />
+                <span className="fs-label" style={billboard(town.x, town.y, 2)}>{town.name}</span>
+              </Fragment>
+            ))}
 
             {quakes.map(quake => {
               const p = geo.at(quake.lng, quake.lat);
@@ -230,7 +266,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
           </div>
         </div>
         {loaded < geo.tiles.length && <p className="fs-loading" role="status">Cargando el satélite…</p>}
-        <p className="fs-credit">Imágenes: Esri, Maxar, Earthstar Geographics</p>
+        <p className="fs-credit">Imágenes: Esri, Maxar, Earthstar Geographics · Localidades: GeoNames</p>
       </div>
 
       <div className="fs-legend" aria-label="Leyenda">
@@ -248,7 +284,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
             {depthIsAssigned(selected.depthKm) && selected.depthKm !== null ? " (asignada por el catálogo, no medida)" : ""} · {SOURCE_NAMES[selected.source]}
           </p>
         ) : (
-          <p className="fs-hint">Toca un sismo para ver sus datos. Arrastra para girar la escena.</p>
+          <p className="fs-hint">Toca un sismo para ver sus datos. Arrastra para girar la escena; al acercar con + aparecen más nombres de localidades.</p>
         )}
       </div>
     </div>

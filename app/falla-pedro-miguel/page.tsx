@@ -5,6 +5,7 @@ import type { Earthquake } from "../../lib/earthquakes";
 import { SCENE_BOX, inSceneBox, nearestOnTrace, pedroMiguel, traceLengthKm, type SceneQuake } from "../../lib/fault-geometry";
 import { placeEs } from "../../lib/history";
 import { loadQuakeData } from "../../lib/load-quakes";
+import { PLACES } from "../../lib/places";
 import { SITE_NAME, SITE_URL, pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import SceneSection from "./scene-section";
@@ -39,12 +40,17 @@ const SEQUENCE_START = Date.parse("2026-10-09T00:00:00Z");
 // El sismo de las 5:38:14 p. m. del 4 de noviembre de 2026, a 5 km al noroeste de Arraiján, que el director del IGC relacionó con la falla.
 const HIGHLIGHT_TIME = Date.parse("2026-11-04T17:38:14-05:00");
 
-// Localidades de GeoNames (las mismas que usa el sitio en lib/places.ts); el centro histórico de la ciudad de Panamá, la Plaza de la Independencia.
+// Localidades de GeoNames (las mismas que usa el sitio en lib/places.ts), en el orden en que aparecen al acercar la escena; el centro histórico de la ciudad de
+// Panamá es la Plaza de la Independencia. Las que haya dentro del recuadro y no estén en la lista van al final.
+const CITY = { name: "Ciudad de Panamá (centro histórico)", lat: 8.9524, lng: -79.535 };
+const PRIORITY = [
+  "Arraiján", "Chilibre", "Burunga", CITY.name, "Veracruz", "Vista Alegre", "Nuevo Arraiján", "San Miguelito", "Ancón", "La Chorrera", "Cerro Silvestre", "Nuevo Emperador",
+  "Santa Clara", "Puerto Caimito", "Río Congo", "Alcalde Díaz", "Curundú", "Betania", "Bella Vista", "Calidonia", "San Francisco", "La Mitra", "Nuevo San Juan",
+];
+const inBox = PLACES.filter(place => inSceneBox(place.lat, place.lng));
 const LABELS = [
-  { name: "Arraiján", lat: 8.94, lng: -79.64 },
-  { name: "Burunga", lat: 8.962, lng: -79.672 },
-  { name: "Chilibre", lat: 9.154, lng: -79.62 },
-  { name: "Ciudad de Panamá", lat: 8.9524, lng: -79.535 },
+  ...PRIORITY.flatMap(name => (name === CITY.name ? [CITY] : inBox.filter(place => place.name === name).slice(0, 1).map(place => ({ name: place.name, lat: place.lat, lng: place.lng })))),
+  ...inBox.filter(place => !PRIORITY.includes(place.name)).map(place => ({ name: place.name, lat: place.lat, lng: place.lng })),
 ];
 
 const LINKS = {
@@ -225,7 +231,7 @@ export default async function FallaPedroMiguelPage() {
             <li><a href={LINKS.panamaAmerica2023} {...ext}>Panamá América: falla de Pedro Miguel, cómo se asoció con el sismo de Arraiján</a> (20 de julio de 2023).</li>
             <li><a href={LINKS.estrella} {...ext}>La Estrella: entendiendo el riesgo sísmico de la ciudad de Panamá</a>.</li>
             <li><a href={LINKS.usgsDepth} {...ext}>USGS: ¿por qué tantos sismos ocurren a 10 km de profundidad?</a> y <a href={LINKS.usgsFaults} {...ext}>USGS: qué es una falla y qué tipos hay</a>.</li>
-            <li>Sismos: <a href={LINKS.igc} {...ext}>IGC-UP</a>, <a href="https://earthquake.usgs.gov/" {...ext}>USGS</a> y <a href="https://www.emsc-csem.org/" {...ext}>EMSC</a>. Imágenes del satélite: Esri, Maxar, Earthstar Geographics.</li>
+            <li>Sismos: <a href={LINKS.igc} {...ext}>IGC-UP</a>, <a href="https://earthquake.usgs.gov/" {...ext}>USGS</a> y <a href="https://www.emsc-csem.org/" {...ext}>EMSC</a>. Localidades: <a href="https://www.geonames.org/" {...ext}>GeoNames</a> (CC BY 4.0). Imágenes del satélite: Esri, Maxar, Earthstar Geographics.</li>
           </ul>
         </section>
       </main>
