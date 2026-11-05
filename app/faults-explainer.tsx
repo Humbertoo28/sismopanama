@@ -1,4 +1,5 @@
-import { MapPin } from "lucide-react";
+import Link from "next/link";
+import { Box, MapPin } from "lucide-react";
 import { ACTIVE_FAULTS, ACTIVE_FAULTS_SOURCE, type ActiveFault } from "../lib/active-faults";
 import type { Earthquake } from "../lib/earthquakes";
 
@@ -59,7 +60,10 @@ export default function FaultsExplainer({ main, onShow }: { main: Earthquake | n
           </p>
           <button type="button" className="btn btn-secondary btn-small" onClick={onShow}>
             <MapPin aria-hidden="true" size={18} /> Ver las fallas en el mapa
-          </button>
+          </button>{" "}
+          <Link href="/falla-pedro-miguel" className="btn btn-secondary btn-small">
+            <Box aria-hidden="true" size={18} /> Ver la falla de Pedro Miguel en 3D
+          </Link>
         </section>
 
         <section aria-labelledby="fe-known">

@@ -22,6 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/analisis`, lastModified, changeFrequency: "hourly", priority: 0.7 },
     { url: `${SITE_URL}/noticias`, lastModified, changeFrequency: "hourly", priority: 0.6 },
     { url: `${SITE_URL}/historia`, lastModified, changeFrequency: "daily", priority: 0.6 },
+    { url: `${SITE_URL}/falla-pedro-miguel`, lastModified, changeFrequency: "weekly", priority: 0.5 },
     { url: `${SITE_URL}/reportes`, lastModified, changeFrequency: "hourly", priority: 0.5 },
     { url: `${SITE_URL}/resumen`, lastModified, changeFrequency: "hourly", priority: 0.5 },
     { url: `${SITE_URL}/acerca`, lastModified, changeFrequency: "monthly", priority: 0.4 },
