@@ -120,7 +120,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
 
   const move = (dyaw: number, dpitch: number, dzoom = 1) => setView(current => ({ yaw: current.yaw + dyaw, pitch: clamp(current.pitch + dpitch, 0, 88), zoom: clamp(current.zoom * dzoom, 0.6, 6) }));
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button")) return;
+    if ((event.target as HTMLElement).closest("button, .fs-card")) return;
     drag.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -280,6 +280,27 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
           </div>
         </div>
         {loaded < geo.tiles.length && <p className="fs-loading" role="status">Cargando el satélite…</p>}
+        {/* Los datos del sismo tocado salen dentro de la escena (la tarjeta de debajo de la página quedaba fuera de la pantalla). */}
+        <div className="fs-card-slot" role="status" aria-live="polite">
+          {selected && (
+            <div className="fs-card">
+              <p>
+                <strong>M {selected.mag?.toFixed(1) ?? "—"}</strong> · {dateTime.format(selected.time)}
+                <br />
+                {selected.place}
+                <br />
+                Profundidad {selected.depthKm === null ? "sin dato" : `${selected.depthKm.toLocaleString("es-PA", { maximumFractionDigits: 1 })} km`}
+                {depthIsAssigned(selected.depthKm) && selected.depthKm !== null ? " (asignada por el catálogo, no medida)" : ""} · {SOURCE_NAMES[selected.source]}
+                {selected.traceKm !== undefined && (
+                  <span className="fs-card-note">
+                    A {selected.traceKm.toLocaleString("es-PA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km al {selected.traceSide} de la traza (cálculo propio con las posiciones publicadas)
+                  </span>
+                )}
+              </p>
+              <button type="button" aria-label="Cerrar los datos del sismo" onClick={() => onSelect(null)}>×</button>
+            </div>
+          )}
+        </div>
         <p className="fs-credit">Imágenes: Esri, Maxar, Earthstar Geographics · Localidades: GeoNames</p>
       </div>
 
@@ -290,17 +311,8 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
         <span><i className="fs-key ring" aria-hidden="true" />Profundidad de 5 o 10 km exactos: suele ser asignada, no medida</span>
       </div>
 
-      <div className="fs-info" role="status" aria-live="polite">
-        {selected ? (
-          <p>
-            <strong>M {selected.mag?.toFixed(1) ?? "—"}</strong> · {dateTime.format(selected.time)} · {selected.place} · profundidad{" "}
-            {selected.depthKm === null ? "sin dato" : `${selected.depthKm.toLocaleString("es-PA", { maximumFractionDigits: 1 })} km`}
-            {depthIsAssigned(selected.depthKm) && selected.depthKm !== null ? " (asignada por el catálogo, no medida)" : ""} · {SOURCE_NAMES[selected.source]}
-            {selected.traceKm !== undefined && <> · a {selected.traceKm.toLocaleString("es-PA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km al {selected.traceSide} de la traza (cálculo propio con las posiciones publicadas)</>}
-          </p>
-        ) : (
-          <p className="fs-hint">Toca un sismo para ver sus datos. Arrastra para girar la escena; al acercar con + aparecen más nombres de localidades.</p>
-        )}
+      <div className="fs-info">
+        <p className="fs-hint">Toca un sismo (los círculos) para ver sus datos dentro de la escena. Arrastra para girar; al acercar con + aparecen más nombres de localidades.</p>
       </div>
     </div>
   );

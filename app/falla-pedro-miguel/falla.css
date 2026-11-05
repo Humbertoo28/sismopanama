@@ -21,9 +21,11 @@
 
 .fs-stage { position: relative; height: clamp(440px, 68vh, 700px); border-radius: 12px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #14233b 0%, #0a1322 70%); perspective: 1700px; perspective-origin: 50% 36%; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .fs-stage:active { cursor: grabbing; }
-.fs-pivot { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; transform-origin: 0 0; will-change: transform; }
-.fs-plane { position: absolute; transform-style: preserve-3d; }
-.fs-ground { position: absolute; inset: 0; background: #0d1a2b; }
+/* Ni el contenedor ni el suelo reciben toques (quedan delante de los sismos, que están bajo tierra); solo los círculos (.fs-quake). El arrastre lo recibe .fs-stage. */
+.fs-pivot { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+.fs-plane { position: absolute; transform-style: preserve-3d; pointer-events: none; }
+/* El suelo no recibe toques: los sismos están bajo él (z negativo) y, al mirar desde arriba, el suelo queda delante y se los quedaba. El arrastre lo recibe el escenario. */
+.fs-ground { position: absolute; inset: 0; background: #0d1a2b; pointer-events: none; }
 .fs-ground img { position: absolute; width: 256px; height: 256px; max-width: none; pointer-events: none; }
 .fs-wall { position: absolute; left: 0; top: 0; box-sizing: border-box; transform-origin: 0 0; border-top: 3px solid #fff; background: linear-gradient(to bottom, rgba(255,64,96,.42), rgba(255,64,96,.08)); pointer-events: none; }
 .fs-ruler { position: absolute; left: 0; top: 0; width: 2px; transform-origin: 0 0; background: rgba(255,255,255,.75); pointer-events: none; }
@@ -34,11 +36,20 @@
 .fs-town-dot { position: absolute; left: 0; top: 0; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); pointer-events: none; }
 .fs-wall-label { position: absolute; left: 0; top: 0; white-space: nowrap; margin-top: 12px; padding: 2px 8px; border-radius: 6px; background: rgba(120,20,45,.75); color: #fff; font-size: 12px; font-weight: 700; pointer-events: none; }
 .fs-epicenter { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.95); box-shadow: 0 0 0 2px rgba(0,0,0,.4); pointer-events: none; }
-.fs-quake { position: absolute; left: 0; top: 0; padding: 0; border: 1.5px solid #fff; border-radius: 50%; background: rgba(245,166,35,.92); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.fs-quake { position: absolute; left: 0; top: 0; pointer-events: auto; padding: 0; border: 1.5px solid #fff; border-radius: 50%; background: rgba(245,166,35,.92); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .fs-quake.assigned { border-style: dashed; background: rgba(245,166,35,.45); }
 .fs-quake.hl { border-width: 2.5px; background: #1d6bff; box-shadow: 0 0 0 4px rgba(29,107,255,.35), 0 0 16px 6px rgba(29,107,255,.55); }
+/* Zona de toque más grande que el círculo (los de M 2 miden menos de 10 px). */
+.fs-quake::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
 .fs-quake.on { outline: 3px solid #fff; outline-offset: 2px; }
 .fs-quake:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+/* Tarjeta con los datos del sismo tocado: dentro de la escena, para verla sin bajar la página. */
+.fs-card { position: absolute; left: 10px; right: 10px; bottom: 34px; z-index: 5; display: flex; align-items: flex-start; gap: 10px; max-width: 560px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.3); border-radius: 10px; background: rgba(8,16,30,.92); color: #fff; font-size: calc(14px*var(--ts,1)); line-height: 1.45; cursor: default; user-select: text; -webkit-user-select: text; box-shadow: 0 6px 22px rgba(0,0,0,.5); }
+.fs-card p { flex: 1; margin: 0; color: #fff; }
+.fs-card .fs-card-note { display: block; margin-top: 4px; color: #c9d6ea; font-size: .92em; }
+.fs-card button { flex: none; min-width: 36px; min-height: 36px; border: 1px solid rgba(255,255,255,.35); border-radius: 8px; background: transparent; color: #fff; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+.fs-card button:hover { background: rgba(255,255,255,.14); }
+.fs-card button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 .fs-loading, .fs-credit { position: absolute; margin: 0; padding: 4px 8px; border-radius: 6px; background: rgba(8,16,30,.72); color: #dfe8f5; font-size: 12px; pointer-events: none; }
 .fs-loading { left: 12px; top: 12px; }
 .fs-credit { right: 10px; bottom: 8px; font-size: 11px; color: #b9c8de; }
@@ -84,6 +95,7 @@
 
 @media (max-width: 700px) {
   .fs-stage { height: clamp(380px, 62vh, 520px); }
+  .fs-card { left: 8px; right: 8px; bottom: 30px; padding: 8px 10px; font-size: calc(13px*var(--ts,1)); }
   .fs-range input { width: 90px; }
 }
 @media (prefers-reduced-motion: reduce) { .fs-pivot { will-change: auto; } }
