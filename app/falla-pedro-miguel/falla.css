@@ -19,7 +19,7 @@
 .fs-range input { width: 110px; accent-color: var(--primary); }
 .fs-range span { min-width: 3ch; color: var(--ink-2); }
 
-.fs-stage { position: relative; height: clamp(440px, 68vh, 700px); border-radius: 12px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #14233b 0%, #0a1322 70%); perspective: 1700px; perspective-origin: 50% 36%; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.fs-stage { position: relative; height: clamp(440px, 68vh, 700px); border-radius: 12px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #14233b 0%, #0a1322 70%); perspective: 1700px; perspective-origin: 50% 36%; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .fs-stage:active { cursor: grabbing; }
 /* Ni el contenedor ni el suelo reciben toques (quedan delante de los sismos, que están bajo tierra); solo los círculos (.fs-quake). El arrastre lo recibe .fs-stage. */
 .fs-pivot { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; transform-origin: 0 0; will-change: transform; pointer-events: none; }
@@ -56,6 +56,18 @@
 .fs-quake::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
 .fs-quake.on { outline: 3px solid #fff; outline-offset: 2px; }
 .fs-quake:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+/* Botones de acercar, alejar y centrar sobre la escena (como en un mapa), con tamaño de dedo. */
+.fs-zoom { position: absolute; top: 10px; right: 10px; z-index: 4; display: flex; flex-direction: column; gap: 6px; }
+.fs-zoom button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid rgba(255,255,255,.4); border-radius: 10px; background: rgba(8,16,30,.82); color: #fff; font: inherit; font-size: 24px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.45); touch-action: manipulation; }
+.fs-zoom button:hover { background: rgba(8,16,30,.96); }
+.fs-zoom button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+/* Aviso de gestos: se va con el primer toque. */
+/* `.fs .fs-gesture-hint` (y no solo la clase): el estilo global de `p` fija un color oscuro y le ganaba al blanco. */
+.fs .fs-gesture-hint { position: absolute; left: 12px; right: 12px; bottom: 36px; z-index: 3; box-sizing: border-box; width: fit-content; max-width: calc(100% - 24px); margin: 0 auto; padding: 7px 14px; border-radius: 12px; background: rgba(8,16,30,.9); color: #fff; font-size: calc(13px*var(--ts,1)); font-weight: 700; line-height: 1.35; text-align: center; pointer-events: none; }
+/* Texto para dedos o para mouse según el dispositivo principal. */
+.fs-on-touch { display: none; }
+@media (pointer: coarse) { .fs-on-touch { display: inline; } .fs-on-mouse { display: none; } }
+
 /* Tarjeta con los datos del sismo tocado: dentro de la escena, para verla sin bajar la página. */
 .fs-card { position: absolute; left: 10px; right: 10px; bottom: 34px; z-index: 5; display: flex; align-items: flex-start; gap: 10px; max-width: 560px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.3); border-radius: 10px; background: rgba(8,16,30,.92); color: #fff; font-size: calc(14px*var(--ts,1)); line-height: 1.45; cursor: default; user-select: text; -webkit-user-select: text; box-shadow: 0 6px 22px rgba(0,0,0,.5); }
 .fs-card p { flex: 1; margin: 0; color: #fff; }

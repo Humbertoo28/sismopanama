@@ -20,15 +20,21 @@ type Props = {
 
 const TILE_URL = (x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${TILE_ZOOM}/${y}/${x}`;
 const DEPTH_TICKS = [0, 5, 10, 15];
-const DEFAULT_VIEW = { yaw: 38, pitch: 58, zoom: 1 };
+// `panX` y `panY` son lo que se ha movido la escena en la pantalla (píxeles), para recorrerla cuando está acercada.
+type View = { yaw: number; pitch: number; zoom: number; panX: number; panY: number };
+const DEFAULT_VIEW: View = { yaw: 38, pitch: 58, zoom: 1, panX: 0, panY: 0 };
 // `pitch` es cuánto se inclina el suelo respecto a la vista desde arriba: 0 = desde arriba, 90 = de canto.
 const PRESETS = {
   perspective: { label: "Perspectiva", view: DEFAULT_VIEW },
-  top: { label: "Desde arriba", view: { yaw: 0, pitch: 0, zoom: 1 } },
+  top: { label: "Desde arriba", view: { yaw: 0, pitch: 0, zoom: 1, panX: 0, panY: 0 } },
   // Desde el oeste, mirando al este: los sismos (casi todos al oeste de la traza) quedan entre la vista y el plano de la falla.
   // De canto exacto (90°): la profundidad se lee en la regla sin que la distancia a la vista la desplace.
-  side: { label: "De lado (corte)", view: { yaw: -90, pitch: 90, zoom: 1 } },
+  side: { label: "De lado (corte)", view: { yaw: -90, pitch: 90, zoom: 1, panX: 0, panY: 0 } },
 } as const;
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 6;
+// Un dedo que se mueve menos que esto al tocar un sismo sigue siendo un toque, no un arrastre.
+const TAP_SLOP = 6;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 // Perspectiva de la escena (la misma en el estilo del escenario y en la proyección que decide qué nombres caben). Al mirar casi de canto (la vista de corte)
 // se vuelve casi ortogonal: con perspectiva, lo que queda más cerca de la vista se ve más grande y más desplazado, y la regla de profundidad (que está en el
@@ -40,11 +46,20 @@ const ORIGIN_Y = 0.36;
 const r2 = (value: number) => Math.round(value * 100) / 100;
 const dateTime = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 const SOURCE_NAMES = { usgs: "USGS", igc: "IGC", emsc: "EMSC" } as const;
+// Capturar el puntero lanza un error si el dedo ya se levantó (un toque rápido); en ese caso no hay nada que capturar.
+const capture = (element: HTMLElement, pointerId: number) => {
+  try { element.setPointerCapture(pointerId); } catch { /* el puntero ya terminó */ }
+};
 
 export default function FaultScene({ lines, quakes, labels, selectedId, onSelect }: Props) {
   const stage = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; y: number } | null>(null);
-  const [view, setView] = useState<{ yaw: number; pitch: number; zoom: number }>(DEFAULT_VIEW);
+  // Gestos: los dedos (o el mouse) que están tocando y lo que lleva hecho el gesto. Un dedo gira e inclina; dos dedos acercan (pellizco) y mueven.
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ moved: boolean; startX: number; startY: number; pinch: { dist: number; mx: number; my: number } | null; suppressClickUntil: number }>(
+    { moved: false, startX: 0, startY: 0, pinch: null, suppressClickUntil: 0 },
+  );
+  const [touched, setTouched] = useState(false);
+  const [view, setView] = useState<View>(DEFAULT_VIEW);
   const [stageSize, setStageSize] = useState({ w: 720, h: 520 });
   const [surface, setSurface] = useState(62);
   const [vex, setVex] = useState<1 | 2>(1);
@@ -119,18 +134,87 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     transform: `translate3d(${r2(x)}px, ${r2(y)}px, ${r2(z)}px) rotateZ(calc(var(--yaw) * -1)) rotateX(calc(var(--pitch) * -1)) scale(${r2(1 / scale * 1000) / 1000})`,
   });
 
-  const move = (dyaw: number, dpitch: number, dzoom = 1) => setView(current => ({ yaw: current.yaw + dyaw, pitch: clamp(current.pitch + dpitch, 0, 88), zoom: clamp(current.zoom * dzoom, 0.6, 6) }));
+  // La escena no se puede sacar del todo de la pantalla: su borde llega, como mucho, al centro.
+  const limitPan = (next: View): View => {
+    const k = fit * next.zoom;
+    const limX = (geo.boxW * k) / 2;
+    const limY = (geo.boxH * k) / 2;
+    return { ...next, panX: clamp(next.panX, -limX, limX), panY: clamp(next.panY, -limY, limY) };
+  };
+  // Los botones y el teclado acercan alrededor del centro: lo movido se escala con el zoom.
+  const move = (dyaw: number, dpitch: number, dzoom = 1) => setView(current => {
+    const zoom = clamp(current.zoom * dzoom, ZOOM_MIN, ZOOM_MAX);
+    const f = zoom / current.zoom;
+    return limitPan({ yaw: current.yaw + dyaw, pitch: clamp(current.pitch + dpitch, 0, 88), zoom, panX: current.panX * f, panY: current.panY * f });
+  });
+  // Un dedo (o el mouse) arrastrando gira e inclina; arrastrar hacia abajo mira la escena más desde arriba, como en cualquier visor 3D.
+  const orbit = (dx: number, dy: number) => move(dx * 0.4, -dy * 0.3);
+  const pan = (dx: number, dy: number) => setView(current => limitPan({ ...current, panX: current.panX + dx, panY: current.panY + dy }));
+  // Pellizco: acerca alrededor del punto medio de los dos dedos (ese punto de la escena se queda bajo los dedos) y, si los dedos se mueven juntos, mueve la escena.
+  const zoomAbout = (factor: number, mx: number, my: number, dx: number, dy: number) => setView(current => {
+    const zoom = clamp(current.zoom * factor, ZOOM_MIN, ZOOM_MAX);
+    const f = zoom / current.zoom;
+    const baseX = stageSize.w / 2;
+    const baseY = stageSize.h / 2 + offsetY;
+    return limitPan({ ...current, zoom, panX: current.panX * f + (mx - baseX) * (1 - f) + dx, panY: current.panY * f + (my - baseY) * (1 - f) + dy });
+  });
+  const pinchOf = () => {
+    const [a, b] = [...pointers.current.values()];
+    const rect = stage.current?.getBoundingClientRect();
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2 - (rect?.left ?? 0), my: (a.y + b.y) / 2 - (rect?.top ?? 0) };
+  };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button, .fs-card")) return;
-    drag.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    const target = event.target as HTMLElement;
+    if (target.closest(".fs-card, .fs-zoom")) return; // los botones de la propia escena no arrastran
+    // Un toque sobre un sismo es un clic; solo se vuelve arrastre si el dedo se mueve (se captura entonces, para que el clic siga llegando al sismo).
+    const onQuake = Boolean(target.closest(".fs-quake"));
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    setTouched(true);
+    const g = gesture.current;
+    if (pointers.current.size === 1) {
+      g.moved = false;
+      g.startX = event.clientX;
+      g.startY = event.clientY;
+      g.pinch = null;
+    } else {
+      g.moved = true;
+      g.pinch = pinchOf();
+      for (const id of pointers.current.keys()) capture(event.currentTarget, id);
+    }
+    if (!onQuake) capture(event.currentTarget, event.pointerId);
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return;
-    const dx = event.clientX - drag.current.x;
-    const dy = event.clientY - drag.current.y;
-    drag.current = { x: event.clientX, y: event.clientY };
-    move(dx * 0.4, event.pointerType === "mouse" ? dy * 0.3 : 0);
+    const previous = pointers.current.get(event.pointerId);
+    if (!previous) return;
+    const next = { x: event.clientX, y: event.clientY };
+    pointers.current.set(event.pointerId, next);
+    const g = gesture.current;
+    if (pointers.current.size >= 2) {
+      const now = pinchOf();
+      const before = g.pinch ?? now;
+      g.pinch = now;
+      zoomAbout(now.dist / before.dist, now.mx, now.my, now.mx - before.mx, now.my - before.my);
+      return;
+    }
+    if (!g.moved) {
+      if (Math.hypot(next.x - g.startX, next.y - g.startY) < TAP_SLOP) return;
+      g.moved = true;
+      capture(event.currentTarget, event.pointerId);
+    }
+    const dx = next.x - previous.x;
+    const dy = next.y - previous.y;
+    if (event.pointerType === "mouse" && event.shiftKey) pan(dx, dy);
+    else orbit(dx, dy);
+  };
+  const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(event.pointerId);
+    const g = gesture.current;
+    g.pinch = null;
+    if (pointers.current.size === 0) {
+      // Tras arrastrar, el clic que algunos navegadores disparan al soltar sobre un sismo no debe elegirlo.
+      if (g.moved) g.suppressClickUntil = performance.now() + 350;
+      g.moved = false;
+    }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 15 : 5;
@@ -154,7 +238,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     "--pitch": `${r2(view.pitch)}deg`,
     // Al inclinar el suelo, la falla (que cuelga bajo él) baja en la pantalla: se sube la escena la mitad de lo que baja, para centrarla.
     // scale3d y no scale: `scale` solo escala x e y y dejaba la profundidad sin escalar, o sea exagerada 1/escala veces aunque dijera «Real».
-    transform: `translate3d(0px, ${offsetY}px, 0px) scale3d(${scale3}, ${scale3}, ${scale3}) rotateX(${r2(view.pitch)}deg) rotateZ(${r2(view.yaw)}deg)`,
+    transform: `translate3d(${r2(view.panX)}px, ${r2(offsetY + view.panY)}px, 0px) scale3d(${scale3}, ${scale3}, ${scale3}) rotateX(${r2(view.pitch)}deg) rotateZ(${r2(view.yaw)}deg)`,
   };
 
   // Localidades: en orden de importancia; al acercar aparecen más, y solo las que caben sin taparse (se proyecta a la pantalla igual que el navegador).
@@ -171,7 +255,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     const originX = stageSize.w / 2;
     const originY = stageSize.h * ORIGIN_Y;
     const k = perspective / (perspective - z2 * scale);
-    return { sx: originX + (stageSize.w / 2 + x1 * scale - originX) * k, sy: originY + (stageSize.h / 2 + offsetY + y2 * scale - originY) * k };
+    return { sx: originX + (stageSize.w / 2 + view.panX + x1 * scale - originX) * k, sy: originY + (stageSize.h / 2 + offsetY + view.panY + y2 * scale - originY) * k };
   };
   const wanted = clamp(Math.round(4 + (view.zoom - 1) * 9), 4, towns.length);
   const visibleTowns: ((typeof towns)[number] & { sx: number; sy: number; w: number })[] = [];
@@ -183,6 +267,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     const w = town.name.length * 8.6 + 16;
     if (Math.abs(nameTag.sx - screen.sx) < (190 + w) / 2 && Math.abs(nameTag.sy - 26 - screen.sy) < 34) continue;
     if (screen.sx - w / 2 < 4 || screen.sx + w / 2 > stageSize.w - 4 || screen.sy < 24 || screen.sy > stageSize.h) continue;
+    if (screen.sx + w / 2 > stageSize.w - 62 && screen.sy < 160) continue; // bajo los botones de acercar
     if (visibleTowns.some(other => Math.abs(other.sx - screen.sx) < (other.w + w) / 2 && Math.abs(other.sy - screen.sy) < 26)) continue;
     visibleTowns.push({ ...town, ...screen, w });
   }
@@ -222,11 +307,11 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
         style={{ perspective: `${perspective}px`, perspectiveOrigin: `50% ${ORIGIN_Y * 100}%` }}
         tabIndex={0}
         role="group"
-        aria-label={`Escena 3D de la falla de Pedro Miguel con ${quakes.length} sismos registrados cerca. Arrastra para girar; con el teclado, las flechas giran e inclinan y más y menos acercan.`}
+        aria-label={`Escena 3D de la falla de Pedro Miguel con ${quakes.length} sismos registrados cerca. Arrastra con un dedo para girar e inclinar y pellizca con dos para acercar; con el teclado, las flechas giran e inclinan y más y menos acercan.`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={() => { drag.current = null; }}
-        onPointerCancel={() => { drag.current = null; }}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
         onKeyDown={onKeyDown}
       >
         <div className="fs-pivot" style={pivot}>
@@ -286,7 +371,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
                     style={{ ...billboard(p.x, p.y, z), width: radius * 2, height: radius * 2, marginLeft: -radius, marginTop: -radius }}
                     aria-label={`Sismo de magnitud ${quake.mag?.toFixed(1) ?? "sin dato"}, ${dateTime.format(quake.time)}`}
                     aria-pressed={quake.id === selectedId}
-                    onClick={() => onSelect(quake.id === selectedId ? null : quake.id)}
+                    onClick={() => { if (performance.now() < gesture.current.suppressClickUntil) return; onSelect(quake.id === selectedId ? null : quake.id); }}
                   />
                 </Fragment>
               );
@@ -294,6 +379,20 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
           </div>
         </div>
         {loaded < geo.tiles.length && <p className="fs-loading" role="status">Cargando el satélite…</p>}
+        {/* Botones sobre la escena (como en un mapa): en el teléfono los de la barra de arriba quedan lejos cuando la escena ocupa la pantalla. */}
+        <div className="fs-zoom" role="group" aria-label="Acercar, alejar y centrar">
+          <button type="button" aria-label="Acercar" onClick={() => move(0, 0, 1.4)}>+</button>
+          <button type="button" aria-label="Alejar" onClick={() => move(0, 0, 1 / 1.4)}>−</button>
+          <button type="button" aria-label="Centrar la vista" title="Centrar la vista" onClick={() => setView(DEFAULT_VIEW)}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5" /><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4" /></svg>
+          </button>
+        </div>
+        {!touched && (
+          <p className="fs-gesture-hint" aria-hidden="true">
+            <span className="fs-on-touch">Un dedo gira e inclina · dos dedos acercan y mueven</span>
+            <span className="fs-on-mouse">Arrastra para girar · Mayús + arrastrar para mover</span>
+          </p>
+        )}
         {/* Los datos del sismo tocado salen dentro de la escena (la tarjeta de debajo de la página quedaba fuera de la pantalla). */}
         <div className="fs-card-slot" role="status" aria-live="polite">
           {selected && (
@@ -326,7 +425,12 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
       </div>
 
       <div className="fs-info">
-        <p className="fs-hint">Toca un sismo (los círculos) para ver sus datos dentro de la escena. Arrastra para girar; al acercar con + aparecen más nombres de localidades.</p>
+        <p className="fs-hint">
+          Toca un sismo (los círculos) para ver sus datos dentro de la escena.{" "}
+          <span className="fs-on-touch">Con un dedo gira e inclina la escena; con dos, pellizca para acercar y arrastra para moverla.</span>
+          <span className="fs-on-mouse">Arrastra para girar e inclinar; Mayús + arrastrar la mueve.</span>{" "}
+          Al acercar aparecen más nombres de localidades; el botón de la mira devuelve la vista inicial.
+        </p>
       </div>
     </div>
   );
