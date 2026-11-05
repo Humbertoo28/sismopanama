@@ -72,6 +72,9 @@ export type SceneQuake = {
   source: "usgs" | "igc" | "emsc";
   /** El del 4 de noviembre de 2026, el que relacionó el IGC con la falla. */
   highlight?: boolean;
+  /** Distancia horizontal al trazado de la falla y de qué lado queda (cálculo propio con las posiciones publicadas). */
+  traceKm?: number;
+  traceSide?: "oeste" | "este";
 };
 
 /** Los catálogos suelen fijar 5 o 10 km cuando los datos no alcanzan para calcular la profundidad (USGS): no es una medición. */

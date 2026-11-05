@@ -111,8 +111,14 @@ export default async function FallaPedroMiguelPage() {
   const [live, history] = await Promise.all([loadQuakeData(), loadHistory()]);
   const recent = (live?.features ?? []).filter(event => event.properties.time >= SEQUENCE_START && inSceneBox(event.geometry.coordinates[1], event.geometry.coordinates[0])).map(toSceneQuake);
   const target = recent.reduce<SceneQuake | null>((best, quake) => (Math.abs(quake.time - HIGHLIGHT_TIME) < (best ? Math.abs(best.time - HIGHLIGHT_TIME) : 120_000) ? quake : best), null);
-  const quakes: SceneQuake[] = [...history, ...recent.map(quake => (quake === target ? { ...quake, highlight: true } : quake))];
+  const quakes: SceneQuake[] = [...history, ...recent.map(quake => (quake === target ? { ...quake, highlight: true } : quake))].map(quake => {
+    const near = nearestOnTrace(quake.lat, quake.lng, fault.lines);
+    return { ...quake, traceKm: near.km, traceSide: near.side };
+  });
   const highlight = quakes.find(quake => quake.highlight) ?? null;
+  const distances = quakes.map(quake => quake.traceKm ?? 0);
+  const median = [...distances].sort((a, b) => a - b)[Math.floor(distances.length / 2)] ?? 0;
+  const west = quakes.filter(quake => quake.traceSide === "oeste").length;
   const traceKm = Math.round(fault.lines.reduce((sum, line) => sum + traceLengthKm(line), 0));
   const offset = highlight ? nearestOnTrace(highlight.lat, highlight.lng, fault.lines) : null;
   const early = history.filter(quake => year(quake.time) <= 1998).length;
@@ -149,6 +155,10 @@ export default async function FallaPedroMiguelPage() {
             <li>
               <strong>Los sismos van a la profundidad que publicó su catálogo</strong>, a escala real (o ×2). Los catálogos suelen fijar 5 o 10 km cuando los datos no alcanzan para calcular la profundidad (
               <a href={LINKS.usgsDepth} {...ext}>explicación del USGS</a>): esos son los círculos con borde punteado, y no son una medición. El relieve del terreno no se representa.
+            </li>
+            <li>
+              <strong>En la vista «de lado (corte)» los sismos no están sobre el plano.</strong> El recuadro de la escena mide unos 30 km de ancho y los sismos quedan a distancias distintas de la traza: de {km1(Math.min(...distances))} a {km1(Math.max(...distances))} km
+              (la mitad, a menos de {km1(median)} km; {west} al oeste y {quakes.length - west} al este): que se vean delante del plano rojo no significa que estén en él. Cada sismo dice a cuántos km de la traza está (cálculo propio con las posiciones publicadas, que tienen su margen de error).
             </li>
             <li>
               En la escena hay {quakes.length} sismos

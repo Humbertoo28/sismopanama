@@ -26,11 +26,15 @@ const PRESETS = {
   perspective: { label: "Perspectiva", view: DEFAULT_VIEW },
   top: { label: "Desde arriba", view: { yaw: 0, pitch: 0, zoom: 1 } },
   // Desde el oeste, mirando al este: los sismos (casi todos al oeste de la traza) quedan entre la vista y el plano de la falla.
-  side: { label: "De lado (corte)", view: { yaw: -90, pitch: 84, zoom: 1 } },
+  // De canto exacto (90°): la profundidad se lee en la regla sin que la distancia a la vista la desplace.
+  side: { label: "De lado (corte)", view: { yaw: -90, pitch: 90, zoom: 1 } },
 } as const;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-// Perspectiva de la escena (la misma en el estilo del escenario y en la proyección que decide qué nombres caben).
-const PERSPECTIVE = 1700;
+// Perspectiva de la escena (la misma en el estilo del escenario y en la proyección que decide qué nombres caben). Al mirar casi de canto (la vista de corte)
+// se vuelve casi ortogonal: con perspectiva, lo que queda más cerca de la vista se ve más grande y más desplazado, y la regla de profundidad (que está en el
+// extremo de la falla) dejaría de leerse bien en los sismos que están a otra distancia.
+const PERSPECTIVE_NEAR = 1700;
+const PERSPECTIVE_FAR = 20000;
 const ORIGIN_Y = 0.36;
 // Los números de los estilos se redondean: el servidor los escribe con menos decimales que el navegador y React avisaría de una diferencia.
 const r2 = (value: number) => Math.round(value * 100) / 100;
@@ -101,6 +105,12 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     return geo.at(south[0], south[1]);
   }, [lines, geo]);
 
+  const wallMid = useMemo(() => {
+    const longest = lines.reduce((best, line) => (line.length > best.length ? line : best), lines[0]);
+    const point = longest[Math.floor(longest.length / 2)];
+    return geo.at(point[0], point[1]);
+  }, [lines, geo]);
+
   const selected = quakes.find(quake => quake.id === selectedId) ?? null;
   // Marcas que siempre miran a la vista y mantienen su tamaño en la pantalla aunque la escena se acerque o se aleje (como en un mapa): se contragira
   // el giro de la escena y se contraescala su zoom.
@@ -135,6 +145,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     event.preventDefault();
   };
 
+  const perspective = Math.round(PERSPECTIVE_NEAR + (PERSPECTIVE_FAR - PERSPECTIVE_NEAR) * clamp((view.pitch - 60) / 24, 0, 1));
   const scale3 = r2(scale * 1000) / 1000;
   const offsetY = r2(stageSize.h * 0.04 - 0.5 * depthPx(FAULT_DEPTH_KM) * Math.sin((view.pitch * Math.PI) / 180) * scale);
   const pivot: CSSProperties & Record<string, string | number> = {
@@ -158,7 +169,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     const z2 = y1 * Math.sin(pitch) + z * Math.cos(pitch);
     const originX = stageSize.w / 2;
     const originY = stageSize.h * ORIGIN_Y;
-    const k = PERSPECTIVE / (PERSPECTIVE - z2 * scale);
+    const k = perspective / (perspective - z2 * scale);
     return { sx: originX + (stageSize.w / 2 + x1 * scale - originX) * k, sy: originY + (stageSize.h / 2 + offsetY + y2 * scale - originY) * k };
   };
   const wanted = clamp(Math.round(4 + (view.zoom - 1) * 9), 4, towns.length);
@@ -204,7 +215,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
       <div
         ref={stage}
         className="fs-stage"
-        style={{ perspective: `${PERSPECTIVE}px`, perspectiveOrigin: `50% ${ORIGIN_Y * 100}%` }}
+        style={{ perspective: `${perspective}px`, perspectiveOrigin: `50% ${ORIGIN_Y * 100}%` }}
         tabIndex={0}
         role="group"
         aria-label={`Escena 3D de la falla de Pedro Miguel con ${quakes.length} sismos registrados cerca. Arrastra para girar; con el teclado, las flechas giran e inclinan y más y menos acercan.`}
@@ -228,6 +239,9 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
             {segments.map((segment, index) => (
               <div key={index} className="fs-wall" style={{ width: segment.length + 0.6, height: depthPx(FAULT_DEPTH_KM), transform: `translate3d(${segment.x}px, ${segment.y}px, 0px) rotateZ(${segment.angle}deg) rotateX(-90deg)` }} />
             ))}
+
+            {/* El plano no es un dato de la falla: se dice en la propia escena. */}
+            <span className="fs-wall-label" style={billboard(wallMid.x, wallMid.y, -depthPx(FAULT_DEPTH_KM) - 4)}>Plano ilustrativo hasta {FAULT_DEPTH_KM} km (no es un dato de la falla)</span>
 
             {/* Regla de profundidad en el extremo sur del trazado. */}
             <div className="fs-ruler" style={{ transform: `translate3d(${southEnd.x + 14}px, ${southEnd.y}px, 0px) rotateZ(calc(var(--yaw) * -1)) rotateX(-90deg)`, height: depthPx(FAULT_DEPTH_KM) }} />
@@ -282,6 +296,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
             <strong>M {selected.mag?.toFixed(1) ?? "—"}</strong> · {dateTime.format(selected.time)} · {selected.place} · profundidad{" "}
             {selected.depthKm === null ? "sin dato" : `${selected.depthKm.toLocaleString("es-PA", { maximumFractionDigits: 1 })} km`}
             {depthIsAssigned(selected.depthKm) && selected.depthKm !== null ? " (asignada por el catálogo, no medida)" : ""} · {SOURCE_NAMES[selected.source]}
+            {selected.traceKm !== undefined && <> · a {selected.traceKm.toLocaleString("es-PA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km al {selected.traceSide} de la traza (cálculo propio con las posiciones publicadas)</>}
           </p>
         ) : (
           <p className="fs-hint">Toca un sismo para ver sus datos. Arrastra para girar la escena; al acercar con + aparecen más nombres de localidades.</p>

@@ -22,7 +22,7 @@ export default function SceneSection({ lines, quakes, labels }: Props) {
           <table>
             <caption>Sismos registrados dentro del recuadro de la escena, del más reciente al más antiguo.</caption>
             <thead>
-              <tr><th scope="col">Fecha (hora de Panamá)</th><th scope="col">Magnitud</th><th scope="col">Profundidad</th><th scope="col">Lugar</th><th scope="col">Fuente</th></tr>
+              <tr><th scope="col">Fecha (hora de Panamá)</th><th scope="col">Magnitud</th><th scope="col">Profundidad</th><th scope="col">Distancia a la traza (cálculo propio)</th><th scope="col">Lugar</th><th scope="col">Fuente</th></tr>
             </thead>
             <tbody>
               {sorted.map(quake => (
@@ -30,6 +30,7 @@ export default function SceneSection({ lines, quakes, labels }: Props) {
                   <td>{dateTime.format(quake.time)}</td>
                   <td>{quake.mag === null ? "—" : quake.mag.toFixed(1)}</td>
                   <td>{quake.depthKm === null ? "sin dato" : `${quake.depthKm.toLocaleString("es-PA", { maximumFractionDigits: 1 })} km${depthIsAssigned(quake.depthKm) ? " (asignada)" : ""}`}</td>
+                  <td>{quake.traceKm === undefined ? "—" : `${quake.traceKm.toLocaleString("es-PA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km al ${quake.traceSide}`}</td>
                   <td>{quake.place}</td>
                   <td>{SOURCE_NAMES[quake.source]}</td>
                 </tr>

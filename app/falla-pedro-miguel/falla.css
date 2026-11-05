@@ -32,6 +32,7 @@
 .fs-tick { margin-left: 40px; margin-top: -10px; font-size: 14px; font-weight: 700; }
 .fs-label { margin-top: -20px; font-size: 15px; font-weight: 800; letter-spacing: .01em; }
 .fs-town-dot { position: absolute; left: 0; top: 0; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); pointer-events: none; }
+.fs-wall-label { position: absolute; left: 0; top: 0; white-space: nowrap; margin-top: 12px; padding: 2px 8px; border-radius: 6px; background: rgba(120,20,45,.75); color: #fff; font-size: 12px; font-weight: 700; pointer-events: none; }
 .fs-epicenter { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.95); box-shadow: 0 0 0 2px rgba(0,0,0,.4); pointer-events: none; }
 .fs-quake { position: absolute; left: 0; top: 0; padding: 0; border: 1.5px solid #fff; border-radius: 50%; background: rgba(245,166,35,.92); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .fs-quake.assigned { border-style: dashed; background: rgba(245,166,35,.45); }
