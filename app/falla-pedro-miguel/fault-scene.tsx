@@ -93,6 +93,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
   const fit = Math.min(stageSize.w / (geo.boxW * 1.08), stageSize.h / (geo.boxH * 0.86));
   const scale = fit * view.zoom;
   const depthPx = (km: number) => r2(km * geo.pxPerKm * vex);
+  const traceW = r2(6 / scale);
 
   const segments = useMemo(() => lines.flatMap(line => line.slice(0, -1).map((a, i) => {
     const p = geo.at(a[0], a[1]);
@@ -174,10 +175,13 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
   };
   const wanted = clamp(Math.round(4 + (view.zoom - 1) * 9), 4, towns.length);
   const visibleTowns: ((typeof towns)[number] & { sx: number; sy: number; w: number })[] = [];
+  // El rótulo con el nombre de la falla ocupa su sitio: ninguna localidad se le pone encima.
+  const nameTag = toScreen(wallMid.x, wallMid.y, 4);
   for (const town of towns) {
     if (visibleTowns.length >= wanted) break;
     const screen = toScreen(town.x, town.y, 2);
     const w = town.name.length * 8.6 + 16;
+    if (Math.abs(nameTag.sx - screen.sx) < (190 + w) / 2 && Math.abs(nameTag.sy - 26 - screen.sy) < 34) continue;
     if (screen.sx - w / 2 < 4 || screen.sx + w / 2 > stageSize.w - 4 || screen.sy < 24 || screen.sy > stageSize.h) continue;
     if (visibleTowns.some(other => Math.abs(other.sx - screen.sx) < (other.w + w) / 2 && Math.abs(other.sy - screen.sy) < 26)) continue;
     visibleTowns.push({ ...town, ...screen, w });
@@ -235,10 +239,20 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
               ))}
             </div>
 
-            {/* El plano de la falla: un muro por cada tramo del trazado, desde la superficie hasta la profundidad de la ilustración. */}
+            {/* El plano de la falla: un muro por cada tramo del trazado, desde la superficie hasta la profundidad de la ilustración. Con líneas cada 5 km para leer la profundidad. */}
             {segments.map((segment, index) => (
-              <div key={index} className="fs-wall" style={{ width: segment.length + 0.6, height: depthPx(FAULT_DEPTH_KM), transform: `translate3d(${segment.x}px, ${segment.y}px, 0px) rotateZ(${segment.angle}deg) rotateX(-90deg)` }} />
+              <div key={index} className="fs-wall" style={{ width: segment.length + 0.6, height: depthPx(FAULT_DEPTH_KM), "--km": `${depthPx(5)}px`, transform: `translate3d(${segment.x}px, ${segment.y}px, 0px) rotateZ(${segment.angle}deg) rotateX(-90deg)` } as CSSProperties} />
             ))}
+
+            {/* El trazado en la superficie (la línea publicada por CCAF-DB / GEM): gruesa y brillante para que se vea sobre el satélite; mantiene unos 6 px en pantalla al acercar o alejar. */}
+            {/* Dos capas: primero todos los halos y encima todos los núcleos (si no, el halo de un tramo tapa el núcleo del vecino y la línea sale a pedazos). */}
+            {(["halo", "core"] as const).map((layer, layerIndex) => segments.map((segment, index) => {
+              const h = layer === "halo" ? traceW : r2(traceW * 0.5); // el núcleo, más fino, deja ver el borde rojo
+              return (
+                <div key={`${layer}-${index}`} className={`fs-trace ${layer}`} style={{ width: r2(segment.length + 0.6), height: h, transform: `translate3d(${segment.x}px, ${segment.y}px, ${layerIndex + 1}px) rotateZ(${segment.angle}deg) translateY(${r2(-h / 2)}px)` }} />
+              );
+            }))}
+            <span className="fs-trace-name" style={billboard(wallMid.x, wallMid.y, 4)}><span>Falla de Pedro Miguel</span></span>
 
             {/* El plano no es un dato de la falla: se dice en la propia escena. */}
             <span className="fs-wall-label" style={billboard(wallMid.x, wallMid.y, -depthPx(FAULT_DEPTH_KM) - 4)}>Plano ilustrativo hasta {FAULT_DEPTH_KM} km (no es un dato de la falla)</span>

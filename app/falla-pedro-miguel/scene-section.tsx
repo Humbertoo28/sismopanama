@@ -11,7 +11,8 @@ const dateTime = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", 
 const SOURCE_NAMES = { usgs: "USGS", igc: "IGC", emsc: "EMSC" } as const;
 
 export default function SceneSection({ lines, quakes, labels }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(quakes.find(quake => quake.highlight)?.id ?? null);
+  // Empieza sin tarjeta abierta: tapaba la parte baja de la falla; se abre al tocar un círculo.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const sorted = [...quakes].sort((a, b) => b.time - a.time);
   return (
     <>
