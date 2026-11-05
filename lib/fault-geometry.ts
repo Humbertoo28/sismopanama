@@ -77,6 +77,12 @@ export type SceneQuake = {
   traceSide?: "oeste" | "este";
 };
 
+/**
+ * Un nombre de lugar de la escena. `kind`: localidad, agua (Canal, lago, islas) o lugar (esclusas, puentes, aeropuertos, parques); `major`: cabecera o corregimiento
+ * (se dibuja más grande). La lista llega ya ordenada: primero lo más importante y cercano a la falla; la escena muestra más a medida que se acerca.
+ */
+export type SceneLabel = { id: string; name: string; lat: number; lng: number; kind: "place" | "water" | "landmark"; major: boolean };
+
 /** Los catálogos suelen fijar 5 o 10 km cuando los datos no alcanzan para calcular la profundidad (USGS): no es una medición. */
 export function depthIsAssigned(depthKm: number | null) {
   return depthKm === 5 || depthKm === 10;

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import PageHeader from "../page-header";
 import { ACTIVE_FAULTS_SOURCE, FAULT_DEPTH_KM } from "../../lib/active-faults";
 import type { Earthquake } from "../../lib/earthquakes";
-import { SCENE_BOX, inSceneBox, nearestOnTrace, pedroMiguel, traceLengthKm, type SceneQuake } from "../../lib/fault-geometry";
+import { FAULT_PLACES } from "../../lib/fault-places";
+import { SCENE_BOX, inSceneBox, nearestOnTrace, pedroMiguel, traceLengthKm, type SceneLabel, type SceneQuake } from "../../lib/fault-geometry";
 import { placeEs } from "../../lib/history";
 import { loadQuakeData } from "../../lib/load-quakes";
 import { PLACES } from "../../lib/places";
@@ -40,18 +41,30 @@ const SEQUENCE_START = Date.parse("2026-10-09T00:00:00Z");
 // El sismo de las 5:38:14 p. m. del 4 de noviembre de 2026, a 5 km al noroeste de Arraiján, que el director del IGC relacionó con la falla.
 const HIGHLIGHT_TIME = Date.parse("2026-11-04T17:38:14-05:00");
 
-// Localidades de GeoNames (las mismas que usa el sitio en lib/places.ts), en el orden en que aparecen al acercar la escena; el centro histórico de la ciudad de
-// Panamá es la Plaza de la Independencia. Las que haya dentro del recuadro y no estén en la lista van al final.
+// Nombres de lugares de la escena, todos de GeoNames (CC BY 4.0): las cabeceras y corregimientos de lib/places.ts (los de la lista PRIORITY, más grandes) y los
+// de lib/fault-places.ts (127 localidades cercanas a la falla y 15 de agua y lugares: esclusas, Canal, puentes, aeropuertos, parques; lo genera
+// scripts/build-fault-places.mjs). El centro histórico de la ciudad de Panamá es la Plaza de la Independencia.
+// Orden en que se muestran (la escena pone más a medida que se acerca, y solo los que caben sin taparse): distancia a la traza de la falla, con ventaja
+// para las cabeceras (−8 km), los lugares (esclusas, puentes, aeropuertos, parques: −4 km) y el agua (−2 km), y desventaja para las localidades pequeñas sin población (+2 km).
 const CITY = { name: "Ciudad de Panamá (centro histórico)", lat: 8.9524, lng: -79.535 };
 const PRIORITY = [
   "Arraiján", "Chilibre", "Burunga", CITY.name, "Veracruz", "Vista Alegre", "Nuevo Arraiján", "San Miguelito", "Ancón", "La Chorrera", "Cerro Silvestre", "Nuevo Emperador",
   "Santa Clara", "Puerto Caimito", "Río Congo", "Alcalde Díaz", "Curundú", "Betania", "Bella Vista", "Calidonia", "San Francisco", "La Mitra", "Nuevo San Juan",
 ];
+const FAULT_LINES = pedroMiguel().lines;
+const normName = (name: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const kmToTrace = (lat: number, lng: number) => nearestOnTrace(lat, lng, FAULT_LINES).km;
 const inBox = PLACES.filter(place => inSceneBox(place.lat, place.lng));
-const LABELS = [
-  ...PRIORITY.flatMap(name => (name === CITY.name ? [CITY] : inBox.filter(place => place.name === name).slice(0, 1).map(place => ({ name: place.name, lat: place.lat, lng: place.lng })))),
-  ...inBox.filter(place => !PRIORITY.includes(place.name)).map(place => ({ name: place.name, lat: place.lat, lng: place.lng })),
-];
+const majorLabels: (SceneLabel & { rank: number })[] = PRIORITY.flatMap(name => {
+  const place = name === CITY.name ? { id: "centro-historico", ...CITY } : inBox.filter(item => item.name === name).slice(0, 1).map(item => ({ id: item.id, name: item.name, lat: item.lat, lng: item.lng }))[0];
+  return place ? [{ id: place.id, name: place.name, lat: place.lat, lng: place.lng, kind: "place" as const, major: true, rank: kmToTrace(place.lat, place.lng) - 8 }] : [];
+});
+const otherLabels: (SceneLabel & { rank: number })[] = inBox.filter(place => !PRIORITY.includes(place.name)).map(place => ({ id: place.id, name: place.name, lat: place.lat, lng: place.lng, kind: "place" as const, major: false, rank: kmToTrace(place.lat, place.lng) + 2 }));
+const taken = new Set([...majorLabels, ...otherLabels].map(label => normName(label.name)));
+const faultLabels: (SceneLabel & { rank: number })[] = FAULT_PLACES.filter(place => !taken.has(normName(place.name))).map(place => ({
+  id: place.id, name: place.name, lat: place.lat, lng: place.lng, kind: place.kind, major: false, rank: place.km + (place.kind === "landmark" ? -4 : place.kind === "water" ? -2 : place.pop >= 500 ? 0 : 2),
+}));
+const LABELS: SceneLabel[] = [...majorLabels, ...otherLabels, ...faultLabels].sort((a, b) => a.rank - b.rank).map(label => ({ id: label.id, name: label.name, lat: label.lat, lng: label.lng, kind: label.kind, major: label.major }));
 
 const LINKS = {
   gemRepo: "https://github.com/GEMScienceTools/gem-global-active-faults",
@@ -241,7 +254,7 @@ export default async function FallaPedroMiguelPage() {
             <li><a href={LINKS.panamaAmerica2023} {...ext}>Panamá América: falla de Pedro Miguel, cómo se asoció con el sismo de Arraiján</a> (20 de julio de 2023).</li>
             <li><a href={LINKS.estrella} {...ext}>La Estrella: entendiendo el riesgo sísmico de la ciudad de Panamá</a>.</li>
             <li><a href={LINKS.usgsDepth} {...ext}>USGS: ¿por qué tantos sismos ocurren a 10 km de profundidad?</a> y <a href={LINKS.usgsFaults} {...ext}>USGS: qué es una falla y qué tipos hay</a>.</li>
-            <li>Sismos: <a href={LINKS.igc} {...ext}>IGC-UP</a>, <a href="https://earthquake.usgs.gov/" {...ext}>USGS</a> y <a href="https://www.emsc-csem.org/" {...ext}>EMSC</a>. Localidades: <a href="https://www.geonames.org/" {...ext}>GeoNames</a> (CC BY 4.0). Imágenes del satélite: Esri, Maxar, Earthstar Geographics.</li>
+            <li>Sismos: <a href={LINKS.igc} {...ext}>IGC-UP</a>, <a href="https://earthquake.usgs.gov/" {...ext}>USGS</a> y <a href="https://www.emsc-csem.org/" {...ext}>EMSC</a>. Nombres de lugares (localidades, esclusas, puentes, aeropuertos, parques): <a href="https://www.geonames.org/" {...ext}>GeoNames</a> (CC BY 4.0). Imágenes del satélite: Esri, Maxar, Earthstar Geographics.</li>
           </ul>
         </section>
       </main>

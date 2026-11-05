@@ -26,7 +26,8 @@
 .fs-plane { position: absolute; transform-style: preserve-3d; pointer-events: none; }
 /* El suelo no recibe toques: los sismos están bajo él (z negativo) y, al mirar desde arriba, el suelo queda delante y se los quedaba. El arrastre lo recibe el escenario. */
 .fs-ground { position: absolute; inset: 0; background: #0d1a2b; pointer-events: none; }
-.fs-ground img { position: absolute; width: 256px; height: 256px; max-width: none; pointer-events: none; }
+.fs-ground img { position: absolute; width: 256px; height: 256px; max-width: none; pointer-events: none; filter: brightness(1.22) saturate(1.12) contrast(1.04); } /* el satélite se ve oscuro sobre el fondo de la escena */
+.fs-ground img.fine { width: 128px; height: 128px; }
 /* El plano de la falla: rojo saturado arriba (más tenue hacia abajo), una línea clara cada 5 km (--km) y el borde inferior punteado, porque su profundidad es ilustrativa. */
 .fs-wall { position: absolute; left: 0; top: 0; box-sizing: border-box; transform-origin: 0 0; border-bottom: 2px dashed rgba(255,255,255,.85);
   background:
@@ -43,12 +44,23 @@
 .fs-trace-name span::after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -6px; border: 6px solid transparent; border-top: 7px solid #fff; border-bottom: 0; }
 .fs-ruler { position: absolute; left: 0; top: 0; width: 2px; transform-origin: 0 0; background: rgba(255,255,255,.75); pointer-events: none; }
 .fs-drop { position: absolute; left: 0; top: 0; width: 1.5px; transform-origin: 0 0; background: rgba(255,255,255,.55); pointer-events: none; }
-.fs-tick, .fs-label { position: absolute; left: 0; top: 0; white-space: nowrap; color: #fff; text-shadow: 0 1px 3px #000, 0 0 2px #000, 0 0 6px #000; pointer-events: none; }
+.fs-tick { position: absolute; left: 0; top: 0; white-space: nowrap; color: #fff; text-shadow: 0 1px 3px #000, 0 0 2px #000, 0 0 6px #000; pointer-events: none; }
 .fs-tick { margin-left: 40px; margin-top: -10px; font-size: 14px; font-weight: 700; }
-.fs-label { margin-top: -20px; font-size: 15px; font-weight: 800; letter-spacing: .01em; }
-.fs-town-dot { position: absolute; left: 0; top: 0; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); pointer-events: none; }
+/* Capa 2D de nombres de lugares sobre la escena: nunca se hunden bajo el suelo ni los cruza el plano de la falla. */
+.fs-names { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+.fs-name { position: absolute; width: 0; height: 0; }
+.fs-name::before { content: ""; position: absolute; left: 0; top: 0; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); }
+.fs-name.water::before { background: #9fd8ff; }
+.fs-name.landmark::before { background: #ffd166; border-radius: 2px; }
+.fs-name > span { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - 7px)); white-space: nowrap; color: #fff; font-size: 12.5px; font-weight: 700; letter-spacing: .01em; text-shadow: 0 1px 3px #000, 0 0 2px #000, 0 0 6px #000; }
+.fs-name.major > span { font-size: 15px; font-weight: 800; }
+.fs-name.water > span { color: #bfe6ff; font-style: italic; }
+.fs-name.landmark > span { color: #ffe08a; }
+.fs-name.below > span { transform: translate(-50%, 7px); }
+.fs-name.right > span { transform: translate(9px, -50%); }
+.fs-name.left > span { transform: translate(calc(-100% - 9px), -50%); }
 .fs-wall-label { position: absolute; left: 0; top: 0; white-space: nowrap; margin-top: 12px; padding: 2px 8px; border-radius: 6px; background: rgba(120,20,45,.75); color: #fff; font-size: 12px; font-weight: 700; pointer-events: none; }
-.fs-epicenter { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.95); box-shadow: 0 0 0 2px rgba(0,0,0,.4); pointer-events: none; }
+.fs-epicenter { position: absolute; left: 0; top: 0; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: rgba(255,255,255,.95); box-shadow: 0 0 0 2px rgba(0,0,0,.4); pointer-events: none; }
 .fs-quake { position: absolute; left: 0; top: 0; pointer-events: auto; padding: 0; border: 1.5px solid #fff; border-radius: 50%; background: rgba(245,166,35,.92); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .fs-quake.assigned { border-style: dashed; background: rgba(245,166,35,.45); }
 .fs-quake.hl { border-width: 2.5px; background: #1d6bff; box-shadow: 0 0 0 4px rgba(29,107,255,.35), 0 0 16px 6px rgba(29,107,255,.55); }
@@ -84,6 +96,9 @@
 .fs-key { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
 .fs-key.wall { width: 18px; height: 12px; border-radius: 2px; background: linear-gradient(to bottom, rgba(255,32,78,.9), rgba(176,14,64,.45)); border: 0; border-top: 3px solid #fff3f6; box-shadow: 0 -1px 6px rgba(255,31,85,.9); }
 .fs-key.hl { background: #1d6bff; }
+.fs-key.name { width: 10px; height: 10px; background: #fff; border-color: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.55); }
+.fs-key.name.water { background: #9fd8ff; }
+.fs-key.name.landmark { background: #ffd166; border-radius: 2px; }
 .fs-key.usgs { background: #f5a623; }
 .fs-key.ring { background: rgba(245,166,35,.45); border-style: dashed; }
 .fs-info { min-height: 3.4em; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }

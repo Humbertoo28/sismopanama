@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { depthIsAssigned, type SceneQuake } from "../../lib/fault-geometry";
+import { depthIsAssigned, type SceneLabel, type SceneQuake } from "../../lib/fault-geometry";
 import FaultScene from "./fault-scene";
 
 // La escena 3D de la falla más una tabla con los mismos sismos (la escena no la leen bien las ayudas de lectura de pantalla).
-type Props = { lines: [number, number][][]; quakes: SceneQuake[]; labels: { name: string; lat: number; lng: number }[] };
+type Props = { lines: [number, number][][]; quakes: SceneQuake[]; labels: SceneLabel[] };
 
 const dateTime = new Intl.DateTimeFormat("es-PA", { timeZone: "America/Panama", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 const SOURCE_NAMES = { usgs: "USGS", igc: "IGC", emsc: "EMSC" } as const;

@@ -2,23 +2,24 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { FAULT_DEPTH_KM } from "../../lib/active-faults";
-import { SCENE_BOX, TILE_ZOOM, depthIsAssigned, kmPerPixel, worldPixel, type SceneQuake } from "../../lib/fault-geometry";
+import { SCENE_BOX, TILE_ZOOM, depthIsAssigned, kmPerPixel, worldPixel, type SceneLabel, type SceneQuake } from "../../lib/fault-geometry";
 
 // La falla de Pedro Miguel en 3D: el satélite de la zona como suelo, el trazado publicado de la falla, su plano hacia abajo (ilustrativo:
 // la base de datos no publica hasta qué profundidad llega) y los sismos registrados cerca, cada uno a su profundidad publicada. Es 3D del
 // navegador (CSS), sin librerías: el suelo es una cuadrícula de mosaicos y la falla, un muro por cada tramo del trazado. La profundidad va
 // a escala real (o ×2); el relieve del terreno no se representa.
 
-type Label = { name: string; lat: number; lng: number };
 type Props = {
   lines: [number, number][][];
   quakes: SceneQuake[];
-  labels: Label[];
+  labels: SceneLabel[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 };
 
-const TILE_URL = (x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${TILE_ZOOM}/${y}/${x}`;
+const TILE_URL = (x: number, y: number, zoom = TILE_ZOOM) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${y}/${x}`;
+// Al acercar (zoom 2 o más) se pone encima una capa del siguiente nivel de detalle (el doble de nitidez): cada mosaico se parte en cuatro.
+const FINE_FROM_ZOOM = 2;
 const DEPTH_TICKS = [0, 5, 10, 15];
 // `panX` y `panY` son lo que se ha movido la escena en la pantalla (píxeles), para recorrerla cuando está acercada.
 type View = { yaw: number; pitch: number; zoom: number; panX: number; panY: number };
@@ -80,10 +81,13 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     };
     const tiles: { x: number; y: number; left: number; top: number }[] = [];
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) tiles.push({ x: tx, y: ty, left: (tx - x0) * 256, top: (ty - y0) * 256 });
+    // Cada mosaico se parte en cuatro del siguiente nivel de detalle (128 px de suelo cada uno, con imagen de 256).
+    const fine = tiles.flatMap(tile => [0, 1].flatMap(dy => [0, 1].map(dx => ({ x: tile.x * 2 + dx, y: tile.y * 2 + dy, left: tile.left + dx * 128, top: tile.top + dy * 128 }))));
     const centerLat = (SCENE_BOX.north + SCENE_BOX.south) / 2;
     return {
       at,
       tiles,
+      fine,
       width: (x1 - x0 + 1) * 256,
       height: (y1 - y0 + 1) * 256,
       center: at((SCENE_BOX.west + SCENE_BOX.east) / 2, centerLat),
@@ -121,11 +125,21 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     return geo.at(south[0], south[1]);
   }, [lines, geo]);
 
+  // Dónde va el rótulo con el nombre de la falla: el punto del tramo central de la traza (del 20 % al 80 %) más lejos de los 14 nombres más importantes,
+  // para no taparlos (el medio exacto cae sobre las esclusas, los nombres que más importan). Es fijo: se mueve con la escena, no salta al girarla.
   const wallMid = useMemo(() => {
     const longest = lines.reduce((best, line) => (line.length > best.length ? line : best), lines[0]);
-    const point = longest[Math.floor(longest.length / 2)];
-    return geo.at(point[0], point[1]);
-  }, [lines, geo]);
+    const top = labels.slice(0, 14).map(label => geo.at(label.lng, label.lat));
+    let best = { point: longest[Math.floor(longest.length / 2)], gap: -1 };
+    for (let i = Math.floor(longest.length * 0.2); i <= Math.floor(longest.length * 0.8); i++) {
+      const here = geo.at(longest[i][0], longest[i][1]);
+      const gap = Math.min(...top.map(other => Math.hypot(other.x - here.x, other.y - here.y)));
+      if (gap > best.gap) best = { point: longest[i], gap };
+    }
+    return geo.at(best.point[0], best.point[1]);
+  }, [lines, labels, geo]);
+
+  const tracePoints = useMemo(() => lines.flat().map(point => geo.at(point[0], point[1])), [lines, geo]);
 
   const selected = quakes.find(quake => quake.id === selectedId) ?? null;
   // Marcas que siempre miran a la vista y mantienen su tamaño en la pantalla aunque la escena se acerque o se aleje (como en un mapa): se contragira
@@ -257,19 +271,60 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
     const k = perspective / (perspective - z2 * scale);
     return { sx: originX + (stageSize.w / 2 + view.panX + x1 * scale - originX) * k, sy: originY + (stageSize.h / 2 + offsetY + view.panY + y2 * scale - originY) * k };
   };
-  const wanted = clamp(Math.round(4 + (view.zoom - 1) * 9), 4, towns.length);
-  const visibleTowns: ((typeof towns)[number] & { sx: number; sy: number; w: number })[] = [];
-  // El rótulo con el nombre de la falla ocupa su sitio: ninguna localidad se le pone encima.
+  // Cuántos nombres salen: 18 al principio y más al acercar (menos en pantallas estrechas); solo los que caben sin taparse, en el orden de la lista (los más
+  // importantes y cercanos a la falla primero). Cada nombre prueba ponerse arriba, abajo, a la derecha o a la izquierda de su punto, y se reserva su rectángulo
+  // en la pantalla; si no cabe en ningún lado, no sale hasta que se acerque más.
+  const density = stageSize.w < 500 ? 0.75 : 1;
+  const wanted = clamp(Math.round((18 + (view.zoom - 1) * 30) * density), 8, towns.length);
+  type Box = { sx: number; w: number; top: number; bottom: number };
+  type Side = "above" | "below" | "right" | "left";
+  const SIDES: Side[] = ["above", "below", "right", "left"];
+  const boxFor = (side: Side, sx: number, sy: number, w: number, h: number): Box => {
+    if (side === "above") return { sx, w, top: sy - 7 - h, bottom: sy - 7 };
+    if (side === "below") return { sx, w, top: sy + 7, bottom: sy + 7 + h };
+    if (side === "right") return { sx: sx + 9 + w / 2, w, top: sy - h / 2, bottom: sy + h / 2 };
+    return { sx: sx - 9 - w / 2, w, top: sy - h / 2, bottom: sy + h / 2 };
+  };
+  // La traza proyectada a la pantalla: los nombres la esquivan si hay otro sitio libre (los de lugares que están sobre la falla, como las esclusas, la cruzan por fuerza).
+  const traceScreen = tracePoints.map(point => toScreen(point.x, point.y, 0));
+  const crossesTrace = (box: Box) => {
+    const [x0, x1, y0, y1] = [box.sx - box.w / 2 - 3, box.sx + box.w / 2 + 3, box.top - 3, box.bottom + 3];
+    for (let i = 0; i < traceScreen.length - 1; i++) {
+      // Liang–Barsky: ¿el tramo pasa por el rectángulo?
+      const [ax, ay, dx, dy] = [traceScreen[i].sx, traceScreen[i].sy, traceScreen[i + 1].sx - traceScreen[i].sx, traceScreen[i + 1].sy - traceScreen[i].sy];
+      let [t0, t1] = [0, 1];
+      const clip = (p: number, q: number) => {
+        if (p === 0) return q >= 0;
+        const t = q / p;
+        if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+        return true;
+      };
+      if (clip(-dx, ax - x0) && clip(dx, x1 - ax) && clip(-dy, ay - y0) && clip(dy, y1 - ay)) return true;
+    }
+    return false;
+  };
+  const visibleTowns: ((typeof towns)[number] & { side: Side; sx: number; sy: number })[] = [];
+  const placed: Box[] = [];
+  // El rótulo con el nombre de la falla ocupa su sitio: ningún nombre se le pone encima.
   const nameTag = toScreen(wallMid.x, wallMid.y, 4);
+  placed.push({ sx: nameTag.sx, w: 200, top: nameTag.sy - 44, bottom: nameTag.sy });
   for (const town of towns) {
     if (visibleTowns.length >= wanted) break;
     const screen = toScreen(town.x, town.y, 2);
-    const w = town.name.length * 8.6 + 16;
-    if (Math.abs(nameTag.sx - screen.sx) < (190 + w) / 2 && Math.abs(nameTag.sy - 26 - screen.sy) < 34) continue;
-    if (screen.sx - w / 2 < 4 || screen.sx + w / 2 > stageSize.w - 4 || screen.sy < 24 || screen.sy > stageSize.h) continue;
-    if (screen.sx + w / 2 > stageSize.w - 62 && screen.sy < 160) continue; // bajo los botones de acercar
-    if (visibleTowns.some(other => Math.abs(other.sx - screen.sx) < (other.w + w) / 2 && Math.abs(other.sy - screen.sy) < 26)) continue;
-    visibleTowns.push({ ...town, ...screen, w });
+    if (screen.sx < 4 || screen.sx > stageSize.w - 4 || screen.sy < 12 || screen.sy > stageSize.h - 12) continue;
+    const w = town.name.length * (town.major ? 8.6 : 7.3) + 14;
+    const h = town.major ? 28 : 22;
+    const fits = (candidate: Side, avoidTrace: boolean) => {
+      const box = boxFor(candidate, screen.sx, screen.sy, w, h);
+      if (box.sx - w / 2 < 4 || box.sx + w / 2 > stageSize.w - 4 || box.top < 4 || box.bottom > stageSize.h - 4) return false;
+      if (box.sx + w / 2 > stageSize.w - 62 && box.top < 160) return false; // bajo los botones de acercar
+      if (placed.some(other => Math.abs(other.sx - box.sx) < (other.w + w) / 2 + 2 && other.top < box.bottom + 2 && box.top < other.bottom + 2)) return false;
+      return !(avoidTrace && crossesTrace(box));
+    };
+    const side = SIDES.find(candidate => fits(candidate, true)) ?? SIDES.find(candidate => fits(candidate, false));
+    if (!side) continue;
+    placed.push(boxFor(side, screen.sx, screen.sy, w, h));
+    visibleTowns.push({ ...town, side, sx: screen.sx, sy: screen.sy });
   }
 
   return (
@@ -322,6 +377,12 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
                 <img key={`${tile.x}-${tile.y}`} src={TILE_URL(tile.x, tile.y)} alt="" width={256} height={256} draggable={false} decoding="async" referrerPolicy="no-referrer"
                   style={{ left: tile.left, top: tile.top }} onLoad={() => setLoaded(count => count + 1)} />
               ))}
+              {/* Al acercar: la capa del siguiente nivel de detalle, encima de la anterior (que sigue de fondo mientras cargan). */}
+              {view.zoom >= FINE_FROM_ZOOM && geo.fine.map(tile => (
+                // eslint-disable-next-line @next/next/no-img-element -- igual que arriba
+                <img key={`fine-${tile.x}-${tile.y}`} className="fine" src={TILE_URL(tile.x, tile.y, TILE_ZOOM + 1)} alt="" width={128} height={128} draggable={false} decoding="async" referrerPolicy="no-referrer"
+                  style={{ left: tile.left, top: tile.top }} />
+              ))}
             </div>
 
             {/* El plano de la falla: un muro por cada tramo del trazado, desde la superficie hasta la profundidad de la ilustración. Con líneas cada 5 km para leer la profundidad. */}
@@ -348,13 +409,6 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
               <span key={km} className="fs-tick" style={billboard(southEnd.x + 14, southEnd.y, -depthPx(km))}>{km} km</span>
             ))}
 
-            {visibleTowns.map(town => (
-              <Fragment key={town.name}>
-                <span className="fs-town-dot" style={billboard(town.x, town.y, 1)} />
-                <span className="fs-label" style={billboard(town.x, town.y, 2)}>{town.name}</span>
-              </Fragment>
-            ))}
-
             {quakes.map(quake => {
               const p = geo.at(quake.lng, quake.lat);
               const z = -depthPx(clamp(quake.depthKm ?? 0, 0, 40));
@@ -377,6 +431,13 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
               );
             })}
           </div>
+        </div>
+        {/* Los nombres van en una capa 2D encima de la escena (en la posición en pantalla que ya se calcula para que no se tapen): en 3D se hundían bajo el suelo
+            translúcido o los cruzaba el plano de la falla, y el texto salía borroso. */}
+        <div className="fs-names" aria-hidden="true">
+          {visibleTowns.map(town => (
+            <span key={town.id} className={`fs-name ${town.kind}${town.major ? " major" : ""} ${town.side}`} style={{ left: r2(town.sx), top: r2(town.sy) }}><span>{town.name}</span></span>
+          ))}
         </div>
         {loaded < geo.tiles.length && <p className="fs-loading" role="status">Cargando el satélite…</p>}
         {/* Botones sobre la escena (como en un mapa): en el teléfono los de la barra de arriba quedan lejos cuando la escena ocupa la pantalla. */}
@@ -414,7 +475,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
             </div>
           )}
         </div>
-        <p className="fs-credit">Imágenes: Esri, Maxar, Earthstar Geographics · Localidades: GeoNames</p>
+        <p className="fs-credit">Imágenes: Esri, Maxar, Earthstar Geographics · Nombres de lugares: GeoNames</p>
       </div>
 
       <div className="fs-legend" aria-label="Leyenda">
@@ -422,6 +483,9 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
         <span><i className="fs-key hl" aria-hidden="true" />Sismo del 4 de noviembre</span>
         <span><i className="fs-key usgs" aria-hidden="true" />Otros sismos registrados</span>
         <span><i className="fs-key ring" aria-hidden="true" />Profundidad de 5 o 10 km exactos: suele ser asignada, no medida</span>
+        <span><i className="fs-key name" aria-hidden="true" />Localidades</span>
+        <span><i className="fs-key name water" aria-hidden="true" />Agua: Canal, lago e islas</span>
+        <span><i className="fs-key name landmark" aria-hidden="true" />Esclusas, puentes, aeropuertos y parques</span>
       </div>
 
       <div className="fs-info">
