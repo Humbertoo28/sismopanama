@@ -108,9 +108,10 @@ export default function SlipIllustration() {
       </div>
       <figcaption>
         Ilustración a escala, vista desde arriba (norte arriba). No es una simulación del terremoto de 1621 ni de uno futuro: muestra cómo se desplaza una falla de
-        desplazamiento lateral derecho, en la que, parado en un lado y mirando hacia la falla, el otro bloque se mueve hacia tu derecha. El único dato real es la
-        medida: en 1621 el terreno se desplazó <strong>al menos {SLIP_M.toLocaleString("es-PA")} m</strong> cerca del Canal (Rockwell y otros, 2010). La velocidad de
-        la animación es ilustrativa.
+        desplazamiento lateral derecho, en la que, visto desde cualquiera de los dos lados, el bloque de enfrente se mueve hacia la derecha
+        (<a href="https://www.usgs.gov/faqs/what-a-fault-and-what-are-different-types" target="_blank" rel="noopener noreferrer">definición del USGS</a>). El único dato real es la
+        medida: en el terremoto de 1621 el terreno se desplazó <strong>al menos {SLIP_M.toLocaleString("es-PA")} m</strong> cerca del Canal
+        (<a href="https://doi.org/10.1785/0120090342" target="_blank" rel="noopener noreferrer">Rockwell y otros, 2010</a>). La velocidad de la animación es ilustrativa.
       </figcaption>
     </figure>
   );

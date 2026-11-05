@@ -74,9 +74,9 @@ export type SceneQuake = {
   highlight?: boolean;
 };
 
-/** El catálogo suele asignar 0, 5 o 10 km cuando no logra calcular la profundidad: no es una medición. */
+/** Los catálogos suelen fijar 5 o 10 km cuando los datos no alcanzan para calcular la profundidad (USGS): no es una medición. */
 export function depthIsAssigned(depthKm: number | null) {
-  return depthKm === null || depthKm === 0 || depthKm === 5 || depthKm === 10;
+  return depthKm === 5 || depthKm === 10;
 }
 
 export function inSceneBox(lat: number, lng: number) {

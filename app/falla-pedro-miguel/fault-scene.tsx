@@ -237,7 +237,7 @@ export default function FaultScene({ lines, quakes, labels, selectedId, onSelect
         <span><i className="fs-key wall" aria-hidden="true" />Falla: trazado y plano ilustrativo hasta {FAULT_DEPTH_KM} km</span>
         <span><i className="fs-key hl" aria-hidden="true" />Sismo del 4 de noviembre</span>
         <span><i className="fs-key usgs" aria-hidden="true" />Otros sismos registrados</span>
-        <span><i className="fs-key ring" aria-hidden="true" />Profundidad asignada por el catálogo (0, 5 o 10 km)</span>
+        <span><i className="fs-key ring" aria-hidden="true" />Profundidad de 5 o 10 km exactos: suele ser asignada, no medida</span>
       </div>
 
       <div className="fs-info" role="status" aria-live="polite">
