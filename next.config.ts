@@ -67,6 +67,13 @@ const nextConfig: NextConfig = {
         source: "/leaflet.js",
         headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
       },
+      // Iconos de la app y de las notificaciones. Cada aviso push hace que el teléfono pida /icon-192.png y
+      // /badge-96.png; sin caché eran ~30 % de todas las peticiones que cobra Vercel. Para cambiar un icono,
+      // sube su ?v= (o cámbiale el nombre): con esta caché los teléfonos no lo vuelven a pedir en 30 días.
+      ...["favicon.svg", "icon-192.png", "icon-512.png", "icon-maskable-192.png", "icon-maskable-512.png", "apple-touch-icon.png", "badge-96.png"].map(file => ({
+        source: `/${file}`,
+        headers: [{ key: "Cache-Control", value: "public, max-age=2592000, stale-while-revalidate=31536000" }],
+      })),
       {
         source: "/vendor/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
