@@ -139,12 +139,28 @@ export function awaitsConfirmation(event: Earthquake) {
   return !isIgcConfirmed(event);
 }
 
-// El sismo principal fue de M 7.7. Una réplica es un sismo posterior a él: los anteriores (hubo uno de M 2.6, doce horas
-// antes y a 5 km del epicentro) no son réplicas aunque la lista arranque el 9 de octubre.
+// Sismos posteriores al 9 de octubre pero independientes del terremoto M 7.7 de Azuero (otra falla).
+//  - igc:1793831894 / emsc:2085443 — M 3.9 del 4 de nov de 2026, 5:38 p. m., 6 km al NO de Arraiján (falla de Pedro Miguel).
+export const INDEPENDENT_EVENTS: Record<string, string> = {
+  "igc:1793831894": "Falla de Pedro Miguel",
+  "emsc:2085443": "Falla de Pedro Miguel",
+};
+
+export function independentEventNote(event: Earthquake): string | null {
+  return INDEPENDENT_EVENTS[event.id] ?? event.properties.aliases?.map(id => INDEPENDENT_EVENTS[id]).find(Boolean) ?? null;
+}
+
+export function isIndependentEvent(event: Earthquake): boolean {
+  return independentEventNote(event) !== null;
+}
+
+// El sismo principal fue de M 7.7. Una réplica es un sismo posterior a él que no pertenezca a otra falla aparte: los
+// anteriores (hubo uno de M 2.6, doce horas antes y a 5 km del epicentro) y los marcados como sismos aparte no son réplicas.
 export function isAftershock(event: Earthquake, mainshock: Earthquake) {
   return (
     event.id !== mainshock.id &&
     !sameEvent(event, mainshock) &&
+    !isIndependentEvent(event) &&
     event.properties.time > mainshock.properties.time
   );
 }

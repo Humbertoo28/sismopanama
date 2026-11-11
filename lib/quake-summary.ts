@@ -1,4 +1,4 @@
-import { MAINSHOCK_ID, isAftershock, isBeforeMainshock, type Earthquake } from "./earthquakes";
+import { MAINSHOCK_ID, isAftershock, isBeforeMainshock, isIndependentEvent, type Earthquake } from "./earthquakes";
 import { placeLabel, whereText } from "./place-of";
 import { provinceOfEvent } from "./province-of";
 
@@ -101,6 +101,7 @@ export function buildSummary(events: Earthquake[], now: number, options: Summary
   const strongest = recent.reduce<Earthquake | null>((best, event) => (!best || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
   const main = recent.find(event => event.id === MAINSHOCK_ID) ?? strongest;
   const aftershocks = main ? recent.filter(event => isAftershock(event, main)) : [];
+  const independentCount = recent.filter(event => isIndependentEvent(event)).length;
   const beforeMain = main ? recent.filter(event => isBeforeMainshock(event, main)).length : 0;
   const strongestAfter = aftershocks.reduce<Earthquake | null>((best, event) => (!best || (event.properties.mag ?? -1) > (best.properties.mag ?? -1) ? event : best), null);
   const last24 = recent.filter(event => now - event.properties.time <= 24 * HOUR).length;
@@ -117,13 +118,21 @@ export function buildSummary(events: Earthquake[], now: number, options: Summary
     ? (["usgs", "igc", "emsc"] as const).filter(key => !options.catalogs![key]).map(key => key.toUpperCase())
     : [];
 
+  const breakdownParts = main
+    ? [
+        "el sismo principal",
+        plural(aftershocks.length, "réplica", "réplicas"),
+        ...(independentCount ? [independentCount === 1 ? "1 sismo aparte" : `${independentCount} sismos aparte`] : []),
+        ...(beforeMain ? [`${beforeMain === 1 ? "1 sismo anterior" : `${beforeMain} sismos anteriores`} al principal`] : []),
+      ]
+    : [];
   const sections: SummarySection[] = [];
-  // Si el último sismo es posterior al sismo principal, es la última réplica (igual que en la portada y en los gráficos).
-  if (recent[0]) sections.push({ heading: main && recent[0].id !== main.id && recent[0].properties.time > main.properties.time ? "Última réplica registrada" : "Último sismo registrado", lines: [quakeSentence(recent[0])] });
+  // Si el último sismo es réplica del sismo principal, lo titulamos así (igual que en la portada y en los gráficos).
+  if (recent[0]) sections.push({ heading: main && isAftershock(recent[0], main) ? "Última réplica registrada" : "Último sismo registrado", lines: [quakeSentence(recent[0])] });
   if (main) sections.push({ heading: "Sismo principal", lines: [quakeSentence(main)] });
   const figures = [
     main
-      ? `Desde el 9 de octubre se han registrado ${plural(recent.length, "sismo", "sismos")} en Panamá: el sismo principal${beforeMain ? "," : " y"} ${plural(aftershocks.length, "réplica", "réplicas")}${beforeMain ? ` y ${beforeMain === 1 ? "1 sismo anterior" : `${beforeMain} sismos anteriores`} al principal` : ""}.`
+      ? `Desde el 9 de octubre se han registrado ${plural(recent.length, "sismo", "sismos")} en Panamá: ${breakdownParts.slice(0, -1).join(", ")} y ${breakdownParts[breakdownParts.length - 1]}.`
       : `Desde el 9 de octubre se han registrado ${plural(recent.length, "sismo", "sismos")} en Panamá.`,
     `En las últimas 24 horas hubo ${plural(last24, "sismo", "sismos")}.`,
     `En la última hora hubo ${plural(lastHour, "sismo", "sismos")}.`,

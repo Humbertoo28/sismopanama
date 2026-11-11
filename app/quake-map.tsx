@@ -3,7 +3,7 @@
 
 import Script from "next/script";
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { isAftershock, isUnconfirmed, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
+import { independentEventNote, isAftershock, isUnconfirmed, shakeFor, type Earthquake, type FocusRequest, type LiveAlert, type ReplayStep } from "../lib/earthquakes";
 import { PANAMA_MAP_BOUNDS, PANAMA_RINGS } from "../lib/panama";
 import { placeLabel } from "../lib/place-of";
 import { PROVINCE_BY_ID, provinceLabel } from "../lib/province-of";
@@ -429,6 +429,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
 
       // Los sismos de los alrededores («Incluir alrededores») no son réplicas aunque sean posteriores al principal.
       const after = !event.properties.nearby && !!mainshock && isAftershock(event, mainshock);
+      const independentNote = !event.properties.nearby ? independentEventNote(event) : null;
       const kind = isLatest ? " latest" : isMain ? " main" : after ? " after" : "";
       const ageClass = isVeryRecent ? " recent-3h" : isRecent12h ? " recent-12h" : isAged ? " aged" : "";
       const recent = !isMain && !isLatest && isVeryRecent ? " recent" : "";
@@ -453,7 +454,7 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
       });
       const role = isMain ? "Sismo principal" : isLatest
         ? (after ? "Última réplica" : "Último sismo")
-        : after ? "Réplica" : event.properties.nearby ? "Sismo fuera de Panamá" : "Sismo";
+        : after ? "Réplica" : independentNote ? `Sismo aparte (${independentNote})` : event.properties.nearby ? "Sismo fuera de Panamá" : "Sismo";
       const magLabel = mag === null ? "—" : mag.toFixed(1);
       const marker = L.marker([lat, lng], { icon, zIndexOffset: zIndex }).addTo(layer);
       // Nombre para lectores de pantalla (antes era un `title`, que además mostraba un recuadro nativo lento y en inglés).
@@ -506,6 +507,11 @@ export default function QuakeMap({ events, filtersKey, fitKey, propagation, onPr
         const badge = document.createElement("div");
         badge.className = "popup-badge-after";
         badge.textContent = "Réplica";
+        popup.appendChild(badge);
+      } else if (independentNote) {
+        const badge = document.createElement("div");
+        badge.className = "popup-badge-main";
+        badge.textContent = `Sismo aparte · ${independentNote}`;
         popup.appendChild(badge);
       }
       if (isUnconfirmed(event)) {

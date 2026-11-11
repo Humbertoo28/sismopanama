@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { awaitsConfirmation, isAftershock, isUnconfirmed, type Earthquake } from "../lib/earthquakes";
+import { awaitsConfirmation, independentEventNote, isAftershock, isUnconfirmed, type Earthquake } from "../lib/earthquakes";
 import { isRoundDepth } from "../lib/depth";
 import { agoLabel, arrivals, depthClass, energyTnt, reportUrl, SOURCE_NAMES } from "../lib/quake-facts";
 import { placeLabel } from "../lib/place-of";
@@ -31,6 +31,7 @@ export function QuakeDetails({
   const depth = Number.isFinite(depthRaw) ? depthRaw! : null;
   const isMain = event.id === mainshock?.id;
   const after = !!mainshock && !properties.nearby && isAftershock(event, mainshock);
+  const independentNote = !isMain && !properties.nearby ? independentEventNote(event) : null;
   const facts = useMemo(() => arrivals(event), [event]);
   const { status: phaseStatus, phases } = useEventPhases(event.id);
   const agencies = properties.agencies ?? [{ source: properties.source ?? "usgs", mag: properties.mag, magType: properties.magType ?? null }];
@@ -46,6 +47,7 @@ export function QuakeDetails({
         {isMain && <span className="qs-badge main">Sismo principal</span>}
         {isUnconfirmed(event) && <span className="qs-badge unconfirmed">SIN CONFIRMAR · SOLO EMSC</span>}
         {!isMain && after && <span className="qs-badge">RÉPLICA DEL SISMO M {mainshock?.properties.mag?.toFixed(1)}</span>}
+        {independentNote && <span className="qs-badge">SISMO APARTE · {independentNote.toUpperCase()}</span>}
         <div className="qs-mag-row">
           <strong className="qs-mag" aria-label={`Magnitud ${magnitude}`}>{magnitude}</strong>
           <div>

@@ -1,4 +1,4 @@
-import { type Earthquake } from "./earthquakes";
+import { isIndependentEvent, type Earthquake } from "./earthquakes";
 
 // Cálculos del panel /analisis. Solo trabajan con sismos que los catálogos (USGS, IGC, EMSC) ya publicaron: conteos,
 // máximos, medianas y agrupaciones. No hay modelos, pronósticos ni estimaciones: lo que se muestra es lo que se registró.
@@ -22,6 +22,7 @@ export type Quake = {
   place: string;
   source: Source;
   url: string | null;
+  independent?: boolean;
 };
 
 // Los sismos sin magnitud publicada no se pueden ordenar ni agrupar por magnitud: el panel los deja fuera y lo avisa.
@@ -36,6 +37,7 @@ export function toQuakes(events: Earthquake[]): Quake[] {
       place: place || "Ubicación no especificada",
       source: source ?? "usgs",
       url: url ?? null,
+      independent: isIndependentEvent(event),
     }];
   });
 }
@@ -160,7 +162,7 @@ export function observedFacts(quakes: Quake[], mainshockTime: number | null, now
   const facts: string[] = [];
   const latest = latestOf(quakes);
   if (latest) {
-    const isAfter = mainshockTime !== null && latest.time > mainshockTime;
+    const isAfter = mainshockTime !== null && !latest.independent && latest.time > mainshockTime;
     const last1h = quakes.filter((quake) => now - quake.time <= HOUR).length;
     const last24h = quakes.filter((quake) => now - quake.time <= DAY).length;
     const noun = isAfter ? "La última réplica registrada" : "El último sismo registrado";
@@ -172,11 +174,11 @@ export function observedFacts(quakes: Quake[], mainshockTime: number | null, now
   const day = quakes.filter((quake) => now - quake.time <= DAY);
   const top24 = strongest(day);
   if (top24 && day.length > 1) {
-    const isTopAfter = mainshockTime !== null && top24.time > mainshockTime;
+    const isTopAfter = mainshockTime !== null && !top24.independent && top24.time > mainshockTime;
     facts.push(`La mayor ${isTopAfter ? "réplica" : "magnitud"} de las últimas 24 h fue de M ${top24.mag.toFixed(1)} (${ago(now - top24.time)}).`);
   }
   if (mainshockTime !== null) {
-    const after = quakes.filter((quake) => quake.time > mainshockTime);
+    const after = quakes.filter((quake) => !quake.independent && quake.time > mainshockTime);
     const top = strongest(after);
     if (top) facts.push(`Desde el sismo principal se han registrado ${after.length} réplicas; la mayor fue de M ${top.mag.toFixed(1)} (${ago(now - top.time)}).`);
   }

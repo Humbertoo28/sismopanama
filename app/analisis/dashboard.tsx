@@ -207,10 +207,13 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
     [mainshockTime, quakes, now],
   );
   const shown = useMemo(() => filterQuakes(quakes, filters, now, sequenceStart), [quakes, filters, now, sequenceStart]);
-  // Réplicas = sismos posteriores al principal. El principal entra en los gráficos, pero no en los totales ni en «mayor réplica».
-  const afterShown = useMemo(() => (mainshockTime === null ? shown : shown.filter((quake) => quake.time > mainshockTime)), [shown, mainshockTime]);
+  // Réplicas = sismos posteriores al principal (excluyendo sismos aparte). El principal y los sismos aparte entran en los gráficos, pero no en los totales de réplicas ni en «mayor réplica».
+  const afterShown = useMemo(
+    () => (mainshockTime === null ? shown.filter((quake) => !quake.independent) : shown.filter((quake) => !quake.independent && quake.time > mainshockTime)),
+    [shown, mainshockTime],
+  );
   const inSequence = useMemo(
-    () => quakes.filter((quake) => quake.time >= sequenceStart && (mainshockTime === null || quake.time > mainshockTime)).length,
+    () => quakes.filter((quake) => !quake.independent && quake.time >= sequenceStart && (mainshockTime === null || quake.time > mainshockTime)).length,
     [quakes, sequenceStart, mainshockTime],
   );
 
