@@ -125,3 +125,37 @@ create policy "Allow service_role full access to felt_reports"
   to service_role
   using (true)
   with check (true);
+
+-- =========================================================================
+-- 6. ARCHIVO DE LO QUE PUBLICA EL IGC
+--
+-- La tabla del IGC solo guarda los últimos 7 días. El sitio muestra solo los sismos que el IGC confirma, así que guarda aquí cada
+-- fila de esa tabla para seguir sabiendo, pasados los 7 días, qué confirmó el IGC y qué no. Ver lib/igc-archive.ts.
+-- Solo son datos públicos del IGC (hora, magnitud, lugar, posición, profundidad, estado).
+-- =========================================================================
+create table if not exists public.igc_events (
+  id text primary key check (char_length(id) <= 40),
+  time bigint not null,
+  mag double precision,
+  place text check (char_length(place) <= 200),
+  lat double precision not null,
+  lng double precision not null,
+  depth double precision,
+  reviewed boolean not null default false,
+  -- Sismo de los alrededores (fuera de Panamá).
+  nearby boolean not null default false,
+  updated_at timestamp with time zone not null default now()
+);
+
+create index if not exists idx_igc_events_time on public.igc_events(time);
+
+alter table public.igc_events enable row level security;
+revoke all on table public.igc_events from anon, authenticated;
+
+drop policy if exists "Allow service_role full access to igc_events" on public.igc_events;
+create policy "Allow service_role full access to igc_events"
+  on public.igc_events
+  for all
+  to service_role
+  using (true)
+  with check (true);

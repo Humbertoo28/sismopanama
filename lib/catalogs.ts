@@ -1,4 +1,5 @@
 import { MAINSHOCK_ID, REGION, isIgcConfirmed, isPanamaPlace, sameEvent, type Earthquake } from "./earthquakes";
+import { loadIgcArchive, saveIgcTable, type IgcArchive, type IgcArchiveRow } from "./igc-archive";
 import { isValidEarthquake, queryUsgs } from "./usgs";
 
 // Un solo catálogo no basta. El USGS tarda en publicar los sismos medianos y no lista los pequeños; EMSC
@@ -164,16 +165,75 @@ export async function fetchIgc(since: number, scope: Scope = "panama"): Promise<
   if (panama.length === 0 && !/Listado de sismos/i.test(html)) throw new Error("La página del IGC cambió de formato");
   const times = [...panama, ...nearby].map(event => event.properties.time);
   igcCache = { at: now, etag: response.headers.get("etag"), events: panama, nearby, windowStart: times.length > 0 ? Math.min(...times) : null };
+  // Se guarda lo que el IGC publica: su tabla solo conserva 7 días (ver lib/igc-archive.ts).
+  await saveIgcTable([...panama, ...nearby].map(toArchiveRow), igcCache.windowStart);
   return pick(igcCache);
 }
 
-// Regla de quien administra el sitio (31 de octubre de 2026): solo se muestran los sismos que el IGC confirma (que están en su tabla). La tabla del
-// IGC guarda unos días: de lo anterior a su sismo más antiguo no se puede saber si el IGC lo publicó, y se conserva tal como lo traen los catálogos
-// (si no, desaparecería el historial de la secuencia, incluido el M 7.7 del 9 de octubre). Si la tabla no respondió o está vacía no hay con qué
-// confirmar y no se quita nada (el sitio ya avisa que el IGC no responde).
-export function onlyIgcConfirmed(events: Earthquake[], windowStart: number | null): Earthquake[] {
-  if (windowStart === null) return events;
-  return events.filter(event => isIgcConfirmed(event) || event.properties.time < windowStart);
+const toArchiveRow = (event: Earthquake): IgcArchiveRow => ({
+  id: event.id,
+  time: event.properties.time,
+  mag: event.properties.mag,
+  place: event.properties.place,
+  lat: event.geometry.coordinates[1],
+  lng: event.geometry.coordinates[0],
+  depth: event.geometry.coordinates[2] ?? null,
+  reviewed: event.properties.status === "reviewed",
+  nearby: event.properties.nearby === true,
+});
+
+const fromArchiveRow = (row: IgcArchiveRow): Earthquake => ({
+  id: row.id,
+  properties: {
+    mag: row.mag,
+    place: row.place,
+    time: row.time,
+    url: IGC_URL,
+    status: row.reviewed ? "reviewed" : "automatic",
+    source: "igc",
+    ...(row.nearby ? { nearby: true } : {}),
+  },
+  geometry: { coordinates: [row.lng, row.lat, row.depth ?? undefined] },
+});
+
+// Lo que el IGC confirma: su tabla (los últimos 7 días) más lo que el sitio guardó de ella antes de que saliera (el archivo).
+//  - `rows`: los sismos del IGC. Del archivo solo se toma lo anterior a la tabla; dentro de sus 7 días manda la tabla. Sin tabla, todo el archivo.
+//  - `from` y `until`: entre esas dos horas se sabe qué confirmó el IGC, y lo que no confirmó no se muestra (ver onlyIgcConfirmed). `from` es
+//    null si no hay ni tabla ni archivo. `until` no tiene tope mientras la tabla responde; si no responde, llega hasta el último sismo guardado.
+export type IgcConfirmations = { rows: Earthquake[]; from: number | null; until: number };
+export function combineIgc(live: Earthquake[] | null, windowStart: number | null, archive: IgcArchive | null, since: number, scope: Scope): IgcConfirmations {
+  const liveWindow = live ? windowStart : null;
+  const older = (archive?.rows ?? [])
+    .filter(row => row.nearby === (scope === "nearby") && row.time >= since && (liveWindow === null || row.time < liveWindow))
+    .map(fromArchiveRow);
+  const starts = [archive?.from, liveWindow].filter((value): value is number => typeof value === "number");
+  return {
+    rows: [...(live ?? []), ...older],
+    from: starts.length > 0 ? Math.min(...starts) : null,
+    until: liveWindow !== null ? Infinity : archive?.until ?? Infinity,
+  };
+}
+
+async function igcConfirmations(since: number, scope: Scope): Promise<IgcConfirmations & { ok: boolean }> {
+  const [live, archive] = await Promise.all([
+    fetchIgc(since, scope).catch(error => {
+      console.error("IGC no disponible:", error);
+      return null;
+    }),
+    loadIgcArchive(),
+  ]);
+  return { ...combineIgc(live, igcCache?.windowStart ?? null, archive, since, scope), ok: live !== null };
+}
+
+// Regla de quien administra el sitio (31 de octubre de 2026, repetida el 11 de noviembre): solo se muestran los sismos que el IGC confirma.
+// Vale desde `from`, la hora más antigua de la que se sabe qué publicó el IGC (su tabla o lo guardado de ella): lo anterior se conserva tal como
+// lo traen los catálogos, porque no hay con qué confirmarlo (si no, desaparecería el historial de la secuencia, incluido el M 7.7 del 9 de octubre).
+// Como lo publicado por el IGC se guarda, un sismo que él no confirmó sigue oculto cuando sale de su tabla a los 7 días, y uno que sí confirmó se
+// conserva. Si la tabla no responde, lo posterior al último sismo guardado no se quita (no hay con qué confirmarlo y el sitio ya avisa que el IGC
+// no responde); sin tabla ni archivo no se quita nada.
+export function onlyIgcConfirmed(events: Earthquake[], from: number | null, until = Infinity): Earthquake[] {
+  if (from === null) return events;
+  return events.filter(event => isIgcConfirmed(event) || event.properties.time < from || event.properties.time > until);
 }
 
 // Sismos que un catálogo publicó y la institución local desmintió: no se muestran ni se cuentan ni se avisan, en ningún lugar de
@@ -370,33 +430,33 @@ export function preferIgc(events: Earthquake[], igcRows: Earthquake[]): Earthqua
   });
 }
 
+const settle = <T,>(promise: Promise<T>) => Promise.allSettled([promise]).then(([result]) => result);
+
 export async function fetchPanamaEvents(since: number): Promise<{ events: Earthquake[]; catalogs: CatalogStatus }> {
-  const [usgs, igc, emsc] = await Promise.allSettled([fetchUsgs(since), fetchIgc(since), fetchEmsc(since)]);
+  const [usgs, emsc, igc] = await Promise.all([settle(fetchUsgs(since)), settle(fetchEmsc(since)), igcConfirmations(since, "panama")]);
   if (usgs.status === "rejected") console.error("USGS no disponible:", usgs.reason);
-  if (igc.status === "rejected") console.error("IGC no disponible:", igc.reason);
   if (emsc.status === "rejected") console.error("EMSC no disponible:", emsc.reason);
-  const [fromUsgs, igcRows, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
-  const fromIgc = withManualIgc(withIgcRevisions(igcRows), since);
-  if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
+  const [fromUsgs, fromEmsc] = [usgs, emsc].map(result => result.status === "fulfilled" ? result.value : []);
+  const fromIgc = withManualIgc(withIgcRevisions(igc.rows), since);
+  if (usgs.status === "rejected" && !igc.ok && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
   // El IGC manda: se muestra su magnitud y solo lo que él confirma (ver preferIgc y onlyIgcConfirmed). Entre catálogos se fusiona con
   // prioridad USGS (conserva su id y sus datos), luego IGC y por último EMSC.
-  const windowStart = igc.status === "fulfilled" ? igcCache?.windowStart ?? null : null;
   return {
-    events: onlyIgcConfirmed(preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc), windowStart),
-    catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
+    events: onlyIgcConfirmed(preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc), igc.from, igc.until),
+    catalogs: { usgs: usgs.status === "fulfilled", igc: igc.ok, emsc: emsc.status === "fulfilled" },
   };
 }
 
 // Sismos de los alrededores de Panamá (Costa Rica, Colombia, mar abierto) dentro de la zona del mapa, combinados igual que
 // los de Panamá. No los usa nada más que la lista y el mapa cuando se pide «Incluir alrededores»: ni alertas ni conteos.
 export async function fetchNearbyEvents(since: number): Promise<{ events: Earthquake[]; catalogs: CatalogStatus }> {
-  const [usgs, igc, emsc] = await Promise.allSettled([fetchUsgs(since, "nearby"), fetchIgc(since, "nearby"), fetchEmsc(since, "nearby")]);
-  if (usgs.status === "rejected" && igc.status === "rejected" && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
-  const [fromUsgs, fromIgc, fromEmsc] = [usgs, igc, emsc].map(result => result.status === "fulfilled" ? result.value : []);
-  const windowStart = igc.status === "fulfilled" ? igcCache?.windowStart ?? null : null;
+  const [usgs, emsc, igc] = await Promise.all([settle(fetchUsgs(since, "nearby")), settle(fetchEmsc(since, "nearby")), igcConfirmations(since, "nearby")]);
+  if (usgs.status === "rejected" && !igc.ok && emsc.status === "rejected") throw new Error("Ningún catálogo respondió");
+  const [fromUsgs, fromEmsc] = [usgs, emsc].map(result => result.status === "fulfilled" ? result.value : []);
+  const fromIgc = igc.rows;
   return {
-    events: onlyIgcConfirmed(preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc), windowStart),
-    catalogs: { usgs: usgs.status === "fulfilled", igc: igc.status === "fulfilled", emsc: emsc.status === "fulfilled" },
+    events: onlyIgcConfirmed(preferIgc(merge(merge(fromUsgs, fromIgc), fromEmsc), fromIgc), igc.from, igc.until),
+    catalogs: { usgs: usgs.status === "fulfilled", igc: igc.ok, emsc: emsc.status === "fulfilled" },
   };
 }
 
