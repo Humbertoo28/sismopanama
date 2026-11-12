@@ -5,7 +5,7 @@ import { recentPanamaEvents } from "../../../lib/catalogs";
 import { REPORT_WINDOW_MS, parseReport, summarize, summarizeEvent, type EventSummary, type ReportRow } from "../../../lib/felt-reports";
 import { insertReport, listReports, reportsAvailable } from "../../../lib/felt-store";
 import { readJsonObject } from "../../../lib/push-validation";
-import { getClientIp } from "../../../lib/rate-limit";
+import { checkRateLimit, getClientIp } from "../../../lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 const EVENT_PARAM = /^(?:[a-z]{2}[0-9a-z]{6,12}|igc:\d{9,11}|emsc:[0-9A-Za-z_-]{4,40})$/;
 const NO_STORE = { "Cache-Control": "no-store" };
+const UNKNOWN_EVENTS_PER_MINUTE = 30;
 
 type Lookup = { byId: Map<string, Earthquake>; list: Earthquake[] };
 async function lookup(maxAgeMs?: number): Promise<Lookup | null> {
@@ -70,6 +71,12 @@ export async function GET(request: NextRequest) {
     const events = await lookup();
     if (eventId) {
       const event = events?.byId.get(eventId);
+      // Un id que no está en la lista de sismos casi nunca es legítimo (solo el de un sismo con reportes que los catálogos ya no
+      // traen). Cada uno cuesta una consulta a la base, así que se admite un número pequeño por minuto e instancia: inventar ids
+      // ya no sirve para hacer trabajar a la base en cada petición.
+      if (events && !event && !checkRateLimit("reportes:sismo-desconocido", UNKNOWN_EVENTS_PER_MINUTE, 60_000).allowed) {
+        return NextResponse.json({ error: "Demasiadas consultas. Inténtalo en un momento." }, { status: 429, headers: { ...NO_STORE, "Retry-After": "60" } });
+      }
       const ids = event ? [event.id, ...(event.properties.aliases ?? [])] : [eventId];
       const result = summarizeEvent(canonical(await listReports({ eventIds: ids }), events));
       const usgs = usgsFelt(event);

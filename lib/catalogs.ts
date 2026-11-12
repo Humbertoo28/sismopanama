@@ -463,14 +463,19 @@ export async function fetchNearbyEvents(since: number): Promise<{ events: Earthq
 // Sismos de la secuencia ya combinados, guardados unos segundos por instancia del servidor: los reportes «¿Lo sentiste?»
 // los consultan para comprobar que el sismo existe y para agrupar los registros de un mismo sismo, sin pedir los tres
 // catálogos en cada envío.
-let recent: { at: number; since: number; events: Promise<Earthquake[]> } | null = null;
-export function recentPanamaEvents(since: number, maxAgeMs = 20_000): Promise<Earthquake[]> {
-  const now = Date.now();
-  if (!recent || recent.since !== since || now - recent.at > maxAgeMs) {
-    const events = fetchPanamaEvents(since).then(result => result.events);
-    recent = { at: now, since, events };
-    // Si falla, la próxima consulta lo vuelve a intentar.
-    events.catch(() => { if (recent?.events === events) recent = null; });
-  }
-  return recent.events;
+function remembered(load: (since: number) => Promise<{ events: Earthquake[] }>) {
+  let recent: { at: number; since: number; events: Promise<Earthquake[]> } | null = null;
+  return (since: number, maxAgeMs = 20_000): Promise<Earthquake[]> => {
+    const now = Date.now();
+    if (!recent || recent.since !== since || now - recent.at > maxAgeMs) {
+      const events = load(since).then(result => result.events);
+      recent = { at: now, since, events };
+      // Si falla, la próxima consulta lo vuelve a intentar.
+      events.catch(() => { if (recent?.events === events) recent = null; });
+    }
+    return recent.events;
+  };
 }
+export const recentPanamaEvents = remembered(fetchPanamaEvents);
+// Lo mismo para los sismos de los alrededores: /api/earthquakes/phases comprueba con las dos listas que el sismo pedido existe.
+export const recentNearbyEvents = remembered(fetchNearbyEvents);

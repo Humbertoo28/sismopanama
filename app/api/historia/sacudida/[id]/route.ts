@@ -1,4 +1,5 @@
 import { buildHistory, historyUrl, HISTORY_REVALIDATE_SECONDS, parseHistory } from "../../../../../lib/history";
+import { rejectQuery } from "../../../../../lib/http";
 import { fetchWaveData } from "../../../../../lib/usgs-detail";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,10 @@ async function topIds() {
 // La rejilla de intensidad (ShakeMap) y, si existe, la falla de un sismo de los 12 mayores. Solo acepta esos 12 identificadores: así
 // nadie puede usar la ruta para consultar al USGS por cualquier sismo ni inventar direcciones para saltarse la caché del CDN.
 // Lo publicado de un sismo antiguo casi no cambia: se guarda un día en la red de Vercel.
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+// Tampoco admite parámetros: con ?x=1, ?x=2… cada dirección era distinta para la caché y obligaba a consultar al USGS cada vez.
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const rejected = rejectQuery(request);
+  if (rejected) return rejected;
   const { id } = await context.params;
   try {
     if (!/^[A-Za-z0-9]{4,40}$/.test(id) || !(await topIds()).includes(id)) {

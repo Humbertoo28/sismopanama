@@ -1,7 +1,8 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { sendWebPushToSubscription, vapidKeyIdFor } from "@/lib/push-service";
 import { isPushEndpoint, isPushKeys, readJsonObject } from "@/lib/push-validation";
-import { getClientIp } from "@/lib/rate-limit";
+import { isAllowedOrigin, isAutomatedBot } from "@/lib/bot-defense";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 // La prueba «con la app cerrada» espera unos segundos antes de enviar: la función tiene que seguir viva ese rato.
@@ -14,6 +15,8 @@ const DELAY_SECONDS = 30;
 // Una prueba diferida por conexión cada 2 minutos: retiene la función medio minuto y no debe poder usarse para cargar al servidor.
 const DELAYED_EVERY_MS = 120_000;
 const lastDelayed = new Map<string, number>();
+// Pruebas por conexión y minuto (inmediatas o diferidas). Varias personas pueden compartir una misma conexión móvil.
+const TESTS_PER_MINUTE = 10;
 
 // Qué significa la respuesta del servicio de push, en palabras (solo el código: nunca el detalle, que podría revelar la infraestructura).
 function explain(statusCode: number | undefined) {
@@ -24,6 +27,14 @@ function explain(statusCode: number | undefined) {
 }
 
 export async function POST(req: NextRequest) {
+  // Solo desde la propia página y con un tope por conexión, y antes de leer nada: esta ruta hace que el servidor firme y envíe
+  // un aviso, y sin límite cualquiera podía llamarla sin parar.
+  if (isAutomatedBot(req.headers.get("user-agent")) || !isAllowedOrigin(req)) {
+    return NextResponse.json({ error: "Acceso no autorizado" }, { status: 403 });
+  }
+  if (!checkRateLimit(`prueba-push:${getClientIp(req)}`, TESTS_PER_MINUTE, 60_000).allowed) {
+    return NextResponse.json({ error: "Demasiadas pruebas seguidas. Espera un minuto." }, { status: 429, headers: { "Retry-After": "60" } });
+  }
   try {
     const body = await readJsonObject(req);
     const endpoint = body?.endpoint;
