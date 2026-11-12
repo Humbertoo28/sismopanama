@@ -44,7 +44,7 @@ import QuakeSheet, { QuakeDetails } from "./quake-sheet";
 import FeltReport from "./felt-report";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { FAR_OFFSHORE, OUTSIDE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
+import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
 import { MAINSHOCK_ID, awaitsConfirmation, independentEventNote, isAftershock, isBeforeMainshock, isIndependentEvent, isUnconfirmed, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
 
@@ -86,33 +86,6 @@ function agoText(minutes: number) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
 }
 
-// «Incluir alrededores»: se recuerda en el equipo. Se lee con useSyncExternalStore para que el servidor (sin preferencia) y el
-// navegador no dibujen cosas distintas al cargar.
-const NEARBY_KEY = "sismo_panama_nearby_v1";
-const NEARBY_EVENT = "sismo-panama-nearby";
-const readNearby = () => {
-  try {
-    return localStorage.getItem(NEARBY_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
-const subscribeNearby = (changed: () => void) => {
-  window.addEventListener(NEARBY_EVENT, changed);
-  window.addEventListener("storage", changed);
-  return () => {
-    window.removeEventListener(NEARBY_EVENT, changed);
-    window.removeEventListener("storage", changed);
-  };
-};
-const setIncludeNearby = (on: boolean) => {
-  try {
-    localStorage.setItem(NEARBY_KEY, on ? "1" : "0");
-  } catch {
-    // Sin almacenamiento (navegación privada estricta) la elección no se puede guardar ni aplicar.
-  }
-  window.dispatchEvent(new Event(NEARBY_EVENT));
-};
 
 // Cambios en el permiso o la suscripción de alertas (los anuncia lib/alert-system.ts; también al volver a la pestaña, por si se
 // cambiaron en los ajustes del navegador).
@@ -399,29 +372,9 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
     };
   }, []);
 
-  // Sismos de los alrededores (Costa Rica, Colombia, mar abierto): solo con «Incluir alrededores». Se suman a la lista y al mapa,
-  // pero no a las alertas, los conteos de réplicas ni la secuencia.
-  const includeNearby = useSyncExternalStore(subscribeNearby, readNearby, () => false);
-  const [nearbyEvents, setNearbyEvents] = useState<Earthquake[]>([]);
-  useEffect(() => {
-    if (!includeNearby) return;
-    const controller = new AbortController();
-    fetch("/api/earthquakes/nearby", { signal: controller.signal })
-      .then(response => (response.ok ? (response.json() as Promise<EarthquakeResponse>) : null))
-      .then(data => { if (data && Array.isArray(data.features)) setNearbyEvents(data.features); })
-      .catch(() => {
-        // Si falla se conservan los que ya había: la próxima consulta lo vuelve a intentar.
-      });
-    return () => controller.abort();
-  }, [includeNearby, refreshKey]);
-  const shownEvents = useMemo(() => {
-    if (!includeNearby || !nearbyEvents.length) return allEvents;
-    // Un mismo sismo puede figurar en Panamá en un catálogo y en el país vecino en otro: manda el de Panamá.
-    const extra = nearbyEvents.filter(near => !allEvents.some(event => sameEvent(event, near)));
-    return [...allEvents, ...extra].sort((a, b) => b.properties.time - a.properties.time);
-  }, [allEvents, nearbyEvents, includeNearby]);
+  // Solo se muestran los sismos de Panamá: los de los alrededores (Costa Rica, Colombia, mar abierto) ya no se suman al mapa ni a la lista.
+  const shownEvents = allEvents;
 
-  const outsideCount = useMemo(() => shownEvents.filter(event => event.properties.nearby).length, [shownEvents]);
   const main = mainshock?.mainshock ?? null;
   const events = useMemo(
     () => {
@@ -549,7 +502,7 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
-  const filtersKey = minimum > 0 || timeRange !== "all" || province !== "all" || city !== "all" || onlyAftershocks || includeNearby ? [minimum, timeRange, province, city, onlyAftershocks, includeNearby].join("|") : "";
+  const filtersKey = minimum > 0 || timeRange !== "all" || province !== "all" || city !== "all" || onlyAftershocks ? [minimum, timeRange, province, city, onlyAftershocks].join("|") : "";
   const sheetEvent = sheet ? shownEvents.find(event => event.id === sheet.id) ?? null : null;
   const featured = mapEvents.find(event => event.id === selectedId) ?? (province === "all" ? newest ?? latest : latest);
   // El panel de accesibilidad lee en voz alta el último sismo registrado.
@@ -578,9 +531,6 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
   };
   const asideRef = useRef<HTMLDivElement>(null);
   const chooseEvent = (event: Earthquake) => {
-    if (event.properties.nearby && !includeNearby) {
-      setIncludeNearby(true);
-    }
     // Si algún filtro (provincia, magnitud, período, solo réplicas) deja fuera ese sismo, el mapa no tiene su marcador y
     // "Ver en el mapa" no haría nada: se quitan los filtros para poder llevarte a él.
     if (!mapEvents.some(item => item.id === event.id)) {
@@ -720,7 +670,7 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
           />
 
           <section id="mapa" className="map-section" aria-labelledby="map-title">
-            <div className="section-heading"><div><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3">M 3.0+ Sentidos</option><option value="3.5">M 3.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+ Fuertes</option><option value="6">M 6.0+</option><option value="7">M 7.0+</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 h</option><option value="6h">Últimas 6 h</option></select></label><label className="magnitude-filter">Provincia <select aria-label="Filtrar por provincia o comarca" value={province} onChange={event => { setProvince(event.target.value); setCity("all"); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option><optgroup label="Provincias">{PROVINCES.filter(item => item.kind === "provincia").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup><optgroup label="Comarcas indígenas">{PROVINCES.filter(item => item.kind === "comarca").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup>{(provinceCounts.get(FAR_OFFSHORE) ?? 0) > 0 && <option value={FAR_OFFSHORE}>Mar adentro · {provinceCounts.get(FAR_OFFSHORE)}</option>}{includeNearby && outsideCount > 0 && <option value={OUTSIDE}>Fuera de Panamá · {outsideCount}</option>}</select></label><label className="magnitude-filter">Ciudad <select aria-label="Filtrar por ciudad o localidad" value={city} onChange={event => { setCity(event.target.value); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option>{cityGroups.map(group => <optgroup key={group.code} label={province === "all" ? `${PROVINCE_BY_ID.get(group.province)?.name ?? ""} · ${group.name}` : group.name}>{group.options.length > 1 && <option value={`d:${group.code}`}>Todo {group.name} · {group.total}</option>}{group.options.map(({ place, count }) => <option key={place.id} value={place.id}>{place.name} · {count}</option>)}</optgroup>)}</select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}<label className="aftershock-toggle" title="Suma los sismos de Costa Rica, Colombia y el mar abierto cercano. No cuentan como réplicas ni generan alertas."><input type="checkbox" checked={includeNearby} onChange={event => { setIncludeNearby(event.target.checked); setSelectedId(null); setFocus(null); }} /> Incluir alrededores</label>{main && (replay === null
+            <div className="section-heading"><div><h2 id="map-title">Mapa de actividad</h2></div><div className="filters" aria-label="Filtros de eventos"><label className="magnitude-filter">Magnitud <select aria-label="Magnitud mínima" value={minimum} onChange={event => { setMinimum(Number(event.target.value)); setSelectedId(null); setFocus(null); }}><option value="0">Todas</option><option value="3">M 3.0+ Sentidos</option><option value="3.5">M 3.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+ Fuertes</option><option value="6">M 6.0+</option><option value="7">M 7.0+</option></select></label><label className="magnitude-filter">Período <select aria-label="Filtrar por tiempo" value={timeRange} onChange={event => { setTimeRange(event.target.value as "all" | "24h" | "6h"); setSelectedId(null); setFocus(null); }}><option value="all">Todo el evento</option><option value="24h">Últimas 24 h</option><option value="6h">Últimas 6 h</option></select></label><label className="magnitude-filter">Provincia <select aria-label="Filtrar por provincia o comarca" value={province} onChange={event => { setProvince(event.target.value); setCity("all"); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option><optgroup label="Provincias">{PROVINCES.filter(item => item.kind === "provincia").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup><optgroup label="Comarcas indígenas">{PROVINCES.filter(item => item.kind === "comarca").map(item => <option key={item.id} value={item.id}>{item.name} · {provinceCounts.get(item.id) ?? 0}</option>)}</optgroup>{(provinceCounts.get(FAR_OFFSHORE) ?? 0) > 0 && <option value={FAR_OFFSHORE}>Mar adentro · {provinceCounts.get(FAR_OFFSHORE)}</option>}</select></label><label className="magnitude-filter">Ciudad <select aria-label="Filtrar por ciudad o localidad" value={city} onChange={event => { setCity(event.target.value); setSelectedId(null); setFocus(null); }}><option value="all">Todas</option>{cityGroups.map(group => <optgroup key={group.code} label={province === "all" ? `${PROVINCE_BY_ID.get(group.province)?.name ?? ""} · ${group.name}` : group.name}>{group.options.length > 1 && <option value={`d:${group.code}`}>Todo {group.name} · {group.total}</option>}{group.options.map(({ place, count }) => <option key={place.id} value={place.id}>{place.name} · {count}</option>)}</optgroup>)}</select></label>{main && <label className="aftershock-toggle"><input type="checkbox" checked={onlyAftershocks} onChange={event => { setOnlyAftershocks(event.target.checked); setSelectedId(null); setFocus(null); }} /> Solo réplicas</label>}{main && (replay === null
               ? <button type="button" className="replay-button" onClick={startReplay} disabled={replayCount < 2} title={replayCount < 2 ? "Con estos filtros hay menos de 2 sismos para reproducir" : undefined}>▶ Reproducir secuencia · {replayCount}</button>
               : <div className="replay-pair"><button type="button" className="replay-button stop" onClick={stopReplay}>■ Parar</button><button type="button" className="replay-button" onClick={startReplay}>↻ Reiniciar</button></div>)}{filtersKey !== "" && mapEvents.length > 0 && <button type="button" className="replay-button" onClick={() => setFitKey(key => key + 1)} title="Acerca el mapa a los sismos que deja pasar el filtro">⌖ Ver {mapEvents.length === 1 ? "el sismo" : `los ${mapEvents.length} sismos`} en el mapa{nearbyOnMap > 0 ? ` (${nearbyOnMap} de alrededores)` : ""}</button>}</div></div>
             <a
