@@ -140,12 +140,22 @@ const SUBSCRIPTION_PAGE = 1000;
 const MAX_CONCURRENT_SENDS = 350;
 // Tiempo máximo para despachar (en Vercel Pro con maxDuration ampliado).
 export const PUSH_BUDGET_MS = 90_000;
+const READ_ATTEMPTS = 3;
 
+// `unread`: dispositivos de páginas que no se pudieron leer (no se les envió). `readFailed`: no se pudo leer ninguna suscripción,
+// así que el aviso no salió para nadie.
+export type BroadcastResult = {
+  total: number; sent: number; failed: number; cleaned: number; unsent: number; unread: number; readFailed: boolean;
+  outcomes: Record<string, number>;
+};
+const NOTHING_SENT: BroadcastResult = { total: 0, sent: 0, failed: 0, cleaned: 0, unsent: 0, unread: 0, readFailed: false, outcomes: {} };
+
+// Solo lanza un error ANTES de empezar a enviar (por ejemplo, sin Supabase): quien llama puede reintentar sin duplicar avisos.
 export async function broadcastPush(
   payload: WebPushPayload,
   minMagnitude: number = 3.0,
   budgetMs: number = PUSH_BUDGET_MS,
-): Promise<{ total: number; sent: number; failed: number; cleaned: number; unsent: number; outcomes: Record<string, number> }> {
+): Promise<BroadcastResult> {
   const startedAt = Date.now();
   const supabase = getSupabaseServerClient();
   if (!supabase) {
@@ -161,35 +171,66 @@ export async function broadcastPush(
       .select(columns, withCount ? { count: "exact" } : undefined)
       .lte("min_magnitude", payload.magnitude ?? minMagnitude)
       .order("created_at", { ascending: false })
+      // Segundo criterio fijo: sin él, dos suscripciones creadas en el mismo instante pueden cambiar de página entre lecturas.
+      .order("id", { ascending: true })
       .range(from, to);
-  let { data: firstPage, error: firstErr, count } = await readPage(0, SUBSCRIPTION_PAGE - 1, true);
-  if (firstErr && /vapid_key/.test(firstErr.message)) {
-    columns = "id, endpoint, p256dh, auth, min_magnitude";
-    ({ data: firstPage, error: firstErr, count } = await readPage(0, SUBSCRIPTION_PAGE - 1, true));
-  }
+  // Una lectura que falla (corte momentáneo de Supabase) se reintenta: antes, si fallaba la primera, el aviso no salía, y si
+  // fallaba cualquiera de las demás (hoy son ~23), mil dispositivos se quedaban sin aviso y sin que quedara escrito.
+  const readWithRetry = async (from: number, to: number, withCount = false) => {
+    let message = "";
+    for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt++) {
+      try {
+        let result = await readPage(from, to, withCount);
+        if (result.error && /vapid_key/.test(result.error.message) && columns.includes("vapid_key")) {
+          columns = "id, endpoint, p256dh, auth, min_magnitude";
+          result = await readPage(from, to, withCount);
+        }
+        if (!result.error) return { rows: (result.data as unknown as PushSubscriptionRow[]) ?? [], count: result.count };
+        message = result.error.message;
+      } catch (error) {
+        message = String(error);
+      }
+      if (attempt < READ_ATTEMPTS) await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+    }
+    console.error(`[push] no se pudo leer las suscripciones ${from}-${to} tras ${READ_ATTEMPTS} intentos: ${message}`);
+    return null;
+  };
 
-  if (firstErr) {
-    console.error("[push] no se pudo leer las suscripciones:", firstErr.message);
-    return { total: 0, sent: 0, failed: 0, cleaned: 0, unsent: 0, outcomes: {} };
-  }
+  const first = await readWithRetry(0, SUBSCRIPTION_PAGE - 1, true);
+  // Sin la primera lectura no se sabe a quién avisar: `readFailed` le dice a quien llama que el aviso NO salió (no es lo mismo
+  // que «no hay nadie suscrito») para que lo reintente en la siguiente ronda.
+  if (!first) return { ...NOTHING_SENT, readFailed: true };
 
-  const subs: PushSubscriptionRow[] = (firstPage as unknown as PushSubscriptionRow[]) ?? [];
-  const totalCount = count ?? subs.length;
+  const subs: PushSubscriptionRow[] = first.rows;
+  const totalCount = first.count ?? subs.length;
 
   // Descargar todas las páginas restantes EN PARALELO simultáneo (1 solo viaje de red)
+  let unread = 0;
   if (totalCount > SUBSCRIPTION_PAGE) {
-    const pagePromises = [];
+    const ranges: [number, number][] = [];
     for (let from = SUBSCRIPTION_PAGE; from < totalCount; from += SUBSCRIPTION_PAGE) {
-      pagePromises.push(readPage(from, Math.min(from + SUBSCRIPTION_PAGE - 1, totalCount - 1)));
+      ranges.push([from, Math.min(from + SUBSCRIPTION_PAGE - 1, totalCount - 1)]);
     }
-    const pages = await Promise.all(pagePromises);
-    for (const page of pages) {
-      if (page.data) subs.push(...(page.data as unknown as PushSubscriptionRow[]));
-    }
+    const pages = await Promise.all(ranges.map(([from, to]) => readWithRetry(from, to)));
+    // Mientras se leen las páginas alguien puede suscribirse o darse de baja y correr las filas: una misma suscripción puede
+    // venir en dos páginas. Se envía una sola vez.
+    const seen = new Set(subs.map(row => row.id));
+    pages.forEach((page, index) => {
+      if (!page) {
+        unread += ranges[index][1] - ranges[index][0] + 1;
+        return;
+      }
+      for (const row of page.rows) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        subs.push(row);
+      }
+    });
+    if (unread > 0) console.error(`[push] ${payload.id ?? "?"}: ${unread} de ${totalCount} dispositivos quedaron SIN LEER (y sin aviso) por fallos de lectura`);
   }
 
   if (subs.length === 0) {
-    return { total: 0, sent: 0, failed: 0, cleaned: 0, unsent: 0, outcomes: {} };
+    return { ...NOTHING_SENT, unread };
   }
 
   let sent = 0;
@@ -244,31 +285,37 @@ export async function broadcastPush(
   // Dar de baja las suscripciones caducadas (404/410). Antes se borraban todas en una sola consulta con las direcciones
   // completas: con miles de ellas la petición era demasiado grande, fallaba sin dejar rastro («0 dados de baja») y cada aviso
   // seguía gastando una cuarta parte de los envíos en direcciones muertas. Ahora va por id, en tandas.
+  // Esta limpieza ocurre con los avisos ya enviados: si falla, se anota y nada más (un error aquí no debe hacer creer a quien
+  // llama que el aviso no salió, porque lo repetiría a todos).
   let cleaned = 0;
   const CLEAN_BATCH = 150;
-  for (let from = 0; from < expiredIds.length; from += CLEAN_BATCH * 4) {
-    const batches = [0, 1, 2, 3]
-      .map(k => expiredIds.slice(from + k * CLEAN_BATCH, from + (k + 1) * CLEAN_BATCH))
-      .filter(batch => batch.length > 0);
-    const results = await Promise.all(batches.map(batch => supabase.from("push_subscriptions").delete().in("id", batch)));
-    results.forEach((result, k) => {
-      if (result.error) console.error("[push] no se pudieron dar de baja suscripciones caducadas:", result.error.message);
-      else cleaned += batches[k].length;
-    });
-  }
+  try {
+    for (let from = 0; from < expiredIds.length; from += CLEAN_BATCH * 4) {
+      const batches = [0, 1, 2, 3]
+        .map(k => expiredIds.slice(from + k * CLEAN_BATCH, from + (k + 1) * CLEAN_BATCH))
+        .filter(batch => batch.length > 0);
+      const results = await Promise.all(batches.map(batch => supabase.from("push_subscriptions").delete().in("id", batch)));
+      results.forEach((result, k) => {
+        if (result.error) console.error("[push] no se pudieron dar de baja suscripciones caducadas:", result.error.message);
+        else cleaned += batches[k].length;
+      });
+    }
 
-  if (columns.includes("vapid_key")) {
-    for (const id of ["v1", "v2"] as const) {
-      for (let from = 0; from < fixedKeys[id].length; from += CLEAN_BATCH) {
-        const { error } = await supabase.from("push_subscriptions").update({ vapid_key: id }).in("id", fixedKeys[id].slice(from, from + CLEAN_BATCH));
-        if (error) console.error("[push] no se pudo corregir la clave de suscripciones:", error.message);
+    if (columns.includes("vapid_key")) {
+      for (const id of ["v1", "v2"] as const) {
+        for (let from = 0; from < fixedKeys[id].length; from += CLEAN_BATCH) {
+          const { error } = await supabase.from("push_subscriptions").update({ vapid_key: id }).in("id", fixedKeys[id].slice(from, from + CLEAN_BATCH));
+          if (error) console.error("[push] no se pudo corregir la clave de suscripciones:", error.message);
+        }
       }
     }
+  } catch (error) {
+    console.error("[push] la limpieza posterior al envío falló:", error);
   }
 
   const unsent = subs.length - next;
   if (unsent > 0) console.error(`[push] TIEMPO AGOTADO en ${payload.id ?? "?"}: ${unsent} de ${subs.length} dispositivos quedaron sin aviso`);
 
-  console.log(`[push] ${payload.id ?? "?"} M${payload.magnitude ?? "?"}: ${sent}/${subs.length} aceptados, ${failed} rechazados, ${cleaned} dados de baja`, JSON.stringify(outcomes), "claves", JSON.stringify(byKey), errorSamples.length ? JSON.stringify(errorSamples) : "");
-  return { total: subs.length, sent, failed, cleaned, unsent, outcomes };
+  console.log(`[push] ${payload.id ?? "?"} M${payload.magnitude ?? "?"}: ${sent}/${subs.length} aceptados, ${failed} rechazados, ${cleaned} dados de baja${unread ? `, ${unread} sin leer` : ""}`, JSON.stringify(outcomes), "claves", JSON.stringify(byKey), errorSamples.length ? JSON.stringify(errorSamples) : "");
+  return { total: subs.length, sent, failed, cleaned, unsent, unread, readFailed: false, outcomes };
 }

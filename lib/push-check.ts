@@ -82,13 +82,25 @@ async function pushOne(supabase: SupabaseClient, quake: Earthquake, now: number)
   if (error) throw new Error(`No se pudo reservar el aviso: ${error.message}`);
   if (!claimed?.some(row => row.id === quake.id)) return { id: quake.id, skipped: true, sent: 0 };
 
-  const result = await broadcastPush(payload, quake.properties.mag ?? 3.0);
-  // Si había dispositivos y a ninguno llegó (caída del servicio de push), se libera para reintentar en la
-  // siguiente ronda en vez de dar el sismo por avisado.
-  if (result.total > 0 && result.sent === 0) {
-    await supabase.from("notified_quakes").delete().in("id", ids);
+  // Solo se liberan las filas que reservó esta ejecución (no las de un aviso anterior del mismo sismo con otro id).
+  const release = async (reason: string) => {
+    const { error: releaseError } = await supabase.from("notified_quakes").delete().in("id", claimed.map(row => row.id));
+    console.error(`[push] ${quake.id}: el aviso no salió (${reason}); ${releaseError ? `NO se pudo liberar para reintentarlo: ${releaseError.message}` : "se reintenta en la siguiente ronda"}`);
     return { id: quake.id, skipped: false, sent: 0, retry: true };
+  };
+
+  let result;
+  try {
+    result = await broadcastPush(payload, quake.properties.mag ?? 3.0);
+  } catch (error) {
+    // broadcastPush solo lanza antes de empezar a enviar: nadie lo recibió y se puede reintentar sin duplicar.
+    return release(`error antes de enviar: ${error instanceof Error ? error.message : String(error)}`);
   }
+  // Si a nadie le llegó porque no se pudieron leer las suscripciones (antes el sismo quedaba como avisado sin haberse enviado) o
+  // porque había dispositivos y todos fallaron (caída del servicio de push), se libera para reintentar en la siguiente ronda en
+  // vez de dar el sismo por avisado. Si de verdad no hay nadie suscrito a esa magnitud, queda como avisado.
+  if (result.readFailed) return release("no se pudieron leer las suscripciones");
+  if (result.total > 0 && result.sent === 0) return release("ningún dispositivo lo aceptó");
   return { id: quake.id, skipped: false, sent: result.sent };
 }
 
