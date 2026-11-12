@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   // Protección anti-bot / anti-scraper
   const userAgent = request.headers.get("user-agent");
   if (isAutomatedBot(userAgent)) {
-    return Response.json({ error: "Acceso no autorizado" }, { status: 403 });
+    return Response.json({ error: "Acceso no autorizado" }, { status: 403, headers: { "Cache-Control": "no-store" } });
   }
 
   // Rate limiting por IP (120 req/min para clientes en tiempo real)
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   if (!limit.allowed) {
     return Response.json(
       { error: "Demasiadas peticiones. Por favor espera un momento." },
-      { status: 429, headers: { "Retry-After": "60" } },
+      { status: 429, headers: { "Retry-After": "60", "Cache-Control": "no-store" } },
     );
   }
 
@@ -44,8 +44,13 @@ export async function GET(request: Request) {
     const result: EarthquakeResponse = { features: events, fetchedAt: new Date().toISOString(), catalogs };
     // Caché de 1 minuto en el Edge de Vercel: absorbe la mayoría de los polls del cliente (cada 60 s)
     // sin despertar el servidor serverless.
+    // Cloudflare-CDN-Cache-Control solo lo lee Cloudflare (que va delante de Vercel) y solo cuenta si allí hay una regla
+    // de caché para esta ruta. 30 s y no 60: su copia se suma a la de Vercel, y así un sismo nuevo no tarda el doble en verse.
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=20, s-maxage=60, stale-while-revalidate=120" },
+      headers: {
+        "Cache-Control": "public, max-age=20, s-maxage=60, stale-while-revalidate=120",
+        "Cloudflare-CDN-Cache-Control": "public, max-age=30",
+      },
     });
   } catch (error) {
     console.error("Catálogos sísmicos no disponibles:", error);

@@ -72,7 +72,10 @@ export async function GET(request: Request) {
       fetchedAt: new Date().toISOString(),
     };
     return Response.json(result, {
-      headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=900" },
+      headers: {
+        "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=900",
+        "Cloudflare-CDN-Cache-Control": "public, max-age=120",
+      },
     });
   } catch (error) {
     console.error("USGS mainshock fetch failed:", error);

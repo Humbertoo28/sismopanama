@@ -6,7 +6,7 @@ import { buildSummary, summaryToText, type QuakeSummary } from "../../lib/quake-
 import Downloads from "./downloads";
 
 // Misma cadencia que la página principal: la consulta cae casi siempre en la caché de la red, y se pausa con la pestaña oculta.
-const POLL_MS = 35_000;
+const POLL_MS = 60_000;
 // Si la copia que llega tiene más de esto, se pide otra enseguida (una sola vez por ronda): la red entrega esa copia vieja y a la
 // vez renueva la suya, así que la segunda consulta ya trae datos frescos.
 const STALE_MS = 45_000;
@@ -95,7 +95,7 @@ export default function LiveSummary({ initial }: { initial: QuakeSummary | null 
     <>
       <p className="rs-updated">
         {summary.updated}{now !== null && ` (${ago(now - summary.dataTime)})`}.
-        {now !== null && checkedAt !== null && ` Última comprobación ${ago(now - checkedAt)}.`} Se actualiza sola cada 35 segundos mientras tengas la página abierta.
+        {now !== null && checkedAt !== null && ` Última comprobación ${ago(now - checkedAt)}.`} Se actualiza sola cada minuto mientras tengas la página abierta.
       </p>
       {failed && <p className="rs-card rs-warn" role="status">No se pudo actualizar ahora. Se muestra la última información recibida; se vuelve a intentar sola.</p>}
       {summary.sections.map((section, index) => (

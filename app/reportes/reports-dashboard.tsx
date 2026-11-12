@@ -88,6 +88,8 @@ export default function ReportsDashboardView({ children }: { children?: ReactNod
       } catch {
         if (live) setStatus(current => (current === "ready" ? current : "error"));
       }
+      // La lista de sismos pesa mucho más que los reportes: se pide una vuelta sí y otra no (cada 60 s).
+      if (tick % 2 !== 0) return;
       try {
         const quakes = (await (await fetch("/api/earthquakes")).json()) as EarthquakeResponse;
         if (live && quakes.features?.length) setLatest(quakes.features.reduce((a, b) => (b.properties.time > a.properties.time ? b : a)));
