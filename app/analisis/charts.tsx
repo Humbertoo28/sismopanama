@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import { type Bucket, type Quake } from "../../lib/analytics";
 import { fmtClock, fmtDay, fmtFull, fmtInt, tickLabel, timeTicks } from "./format";
 import { useReducedMotion } from "./motion";
@@ -50,24 +50,40 @@ type DotProps = {
   fresh: boolean;
   ripple: boolean;
   delay: number;
+  // Cuánto se encogen los puntos cuando hay muchos a la vez (1 = tamaño completo): así no se tapan unos a otros.
+  scale: number;
+  // Rótulo junto al punto (solo el sismo principal y el último) y hacia qué lado va para no salirse de la gráfica.
+  // El del último va encima del punto y no al lado: a su altura suele haber muchos otros sismos.
+  label?: string;
+  labelSide?: "right" | "left";
   onPick: (id: string) => void;
 };
+
+// Texto sobre la gráfica: tinta normal con un borde del color del fondo para que se lea encima de puntos, barras y líneas.
+const onChartText = { fill: "var(--an-ink)", fontSize: 12, fontWeight: 700, stroke: "var(--an-surface)", strokeWidth: 3.5, paintOrder: "stroke" as const, strokeLinejoin: "round" as const };
 
 // Está fuera del componente que dibuja la gráfica a propósito (si se creara dentro, cada cambio lo volvería un componente «nuevo» para
 // React y los 500 puntos se dibujarían de cero y repetirían su animación de entrada) y recibe solo valores simples, para que
 // `memo` lo salte cuando nada de él cambió: al reproducir, elegir o atenuar, solo se vuelven a dibujar los puntos que cambian.
 // Un punto son 3 elementos del SVG: el grupo (que anima y recibe el toque), el área de toque y el círculo.
-const TimelineDot = memo(function TimelineDot({ cx, cy, id, mag, role, selected, dim, fresh, ripple, delay, onPick }: DotProps) {
-  const radius = Math.max(3.5, Math.min(15, 2.2 + (mag - 2) * 2.4));
+const TimelineDot = memo(function TimelineDot({ cx, cy, id, mag, role, selected, dim, fresh, ripple, delay, scale, label, labelSide, onPick }: DotProps) {
+  const full = Math.max(3.5, Math.min(15, 2.2 + (mag - 2) * 2.4));
+  // Con muchos puntos a la vez se encogen (y el borde blanco se afina) para que se vea cada uno; los destacados no bajan de 6.
+  const radius = Math.max(role === "normal" ? 2 : 6, full * scale);
+  const crowded = scale < 0.8;
   return (
+    <>
     <g className={`an-dot${dim ? " an-dim" : ""}${selected ? " an-sel" : ""}`} style={{ "--d": `${delay}ms` } as CSSProperties} onClick={() => onPick(id)}>
       <circle cx={cx} cy={cy} r={radius + 9} fill="transparent" />
       {fresh && <circle className="an-ring an-ring-fresh" cx={cx} cy={cy} r={radius} />}
       {ripple && <circle className="an-ring an-ring-ripple" cx={cx} cy={cy} r={radius} />}
-      <circle cx={cx} cy={cy} r={radius} fill={role === "main" ? "var(--an-s2)" : "var(--an-s1)"} fillOpacity={role === "normal" ? 0.6 : 0.95} stroke="var(--an-surface)" strokeWidth={1.5} />
+      <circle cx={cx} cy={cy} r={radius} fill={role === "main" ? "var(--an-s2)" : "var(--an-s1)"} fillOpacity={role === "normal" ? (crowded ? 0.55 : 0.6) : 0.95} stroke="var(--an-surface)" strokeWidth={crowded && role === "normal" ? 0.6 : 1.5} />
       {role === "latest" && <circle cx={cx} cy={cy} r={radius + 3.5} fill="none" stroke="var(--an-ink)" strokeWidth={2} />}
       {selected && <circle className="an-sel-ring" cx={cx} cy={cy} r={radius + 6} fill="none" stroke="var(--an-ink)" strokeWidth={2} strokeDasharray="2 3" />}
     </g>
+      {/* Fuera del grupo: si no, el rótulo descentra la animación del punto. */}
+      {label && <text pointerEvents="none" x={role === "latest" ? cx : labelSide === "left" ? cx - radius - 8 : cx + radius + 8} y={role === "latest" ? cy - radius - 16 : cy} dy="0.35em" textAnchor={labelSide === "left" ? "end" : "start"} {...onChartText}>{label}</text>}
+    </>
   );
 });
 
@@ -105,6 +121,7 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
   const span = Math.max(to - from, 1);
   const edge = to + Math.max(span * 0.03, span > 6 * 3_600_000 ? 10 * 60_000 : 0); // aire a la derecha: el último sismo no queda cortado
   // Solo se dibujan los que caen en la ventana (con un margen): al acercar hay muchos menos puntos que pintar.
+  const start = from - span * 0.03; // y a la izquierda: el sismo principal tampoco
   const margin = span * 0.15;
   const visible = useMemo(() => points.filter((point) => point.time >= from - margin && point.time <= edge + margin), [points, from, edge, margin]);
   // Los destacados se dibujan al final para que no los tape ningún punto común.
@@ -112,15 +129,21 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
     () => [...visible].sort((a, b) => Number(a.role !== "normal") - Number(b.role !== "normal") || Number(a.id === selectedId) - Number(b.id === selectedId)),
     [visible, selectedId],
   );
+  // Tamaño de los puntos según cuántos se ven: completo hasta ~200 y hasta la mitad con más de 800. Va en pasos para que,
+  // al reproducir, no cambie con cada sismo (cada cambio vuelve a dibujar todos los puntos).
+  const scale = Math.round(Math.max(0.5, Math.min(1, Math.sqrt(200 / Math.max(1, visible.length)))) * 10) / 10;
 
   const shape = (props: unknown) => {
     const { cx, cy, payload } = props as { cx?: number; cy?: number; payload?: TimelinePoint };
     if (cx === undefined || cy === undefined || !payload) return <g />;
     // Al cargar, los puntos entran en orden cronológico (el más antiguo primero) a lo largo de ~0.9 s.
+    // El rótulo va hacia el centro de la gráfica: a la derecha si el punto está en la mitad izquierda, y al revés.
+    const label = payload.role === "main" ? `Principal · M ${payload.mag.toFixed(1)}` : payload.role === "latest" ? `Último · M ${payload.mag.toFixed(1)}` : undefined;
+    const labelSide = payload.time > (start + edge) / 2 ? "left" : "right";
     const delay = staggering ? Math.round(((rank.get(payload.id) ?? 0) / Math.max(1, points.length)) * DOTS_MS) : 0;
     return (
       <TimelineDot cx={cx} cy={cy} id={payload.id} mag={payload.mag} role={payload.role} selected={payload.id === selectedId}
-        dim={dimmed?.(payload) ?? false} fresh={freshIds?.has(payload.id) ?? false} ripple={rippleId === payload.id} delay={delay} onPick={pick} />
+        dim={dimmed?.(payload) ?? false} fresh={freshIds?.has(payload.id) ?? false} ripple={rippleId === payload.id} delay={delay} scale={scale} label={label} labelSide={labelSide} onPick={pick} />
     );
   };
 
@@ -130,7 +153,7 @@ export function TimelineChart({ points, domain, magRange, selectedId, onSelect, 
       <ResponsiveContainer width="100%" height={fill ? "100%" : 320}>
         <ScatterChart margin={{ top: 10, right: 18, bottom: 22, left: 4 }}>
           <CartesianGrid stroke="var(--an-grid)" vertical={false} />
-          <XAxis type="number" dataKey="time" domain={[from, edge]} ticks={ticks} allowDataOverflow tick={tick} tickLine={false} axisLine={axisLine}
+          <XAxis type="number" dataKey="time" domain={[start, edge]} ticks={ticks} allowDataOverflow tick={tick} tickLine={false} axisLine={axisLine}
             tickFormatter={(value: number) => tickLabel(value, step, to - from)} />
           <YAxis type="number" dataKey="mag" domain={[low, high]} ticks={Array.from({ length: high - low + 1 }, (_, i) => low + i)} tick={tick} tickLine={false} axisLine={false} width={44}
             label={axisLabel("Magnitud", -90)} />
@@ -183,9 +206,24 @@ export function ActivityChart({ buckets, size, mode, selectedStart, onPick }: {
   const report = useCallback((bucket: Bucket | null) => { active.current = bucket; }, []);
   if (!buckets.length || buckets[buckets.length - 1].cumulative === 0) return <p className="an-empty">No hay sismos con estos filtros.</p>;
   const label = (start: number) => (size >= 24 * 3_600_000 ? fmtDay.format(start) : size >= 3 * 3_600_000 ? `${fmtDay.format(start)} ${fmtClock.format(start)}` : fmtClock.format(start));
-  const common = { data: buckets, margin: { top: 10, right: 18, bottom: 4, left: 4 } };
+  const common = { data: buckets, margin: { top: 24, right: 18, bottom: 4, left: 4 } };
+  // Rótulos directos, sin tener que pasar el cursor: el intervalo con más sismos y el total acumulado al final.
+  const peak = buckets.reduce((best, bucket, index) => (bucket.count > buckets[best].count ? index : best), 0);
+  const last = buckets.length - 1;
+  const peakLabel = (props: unknown) => {
+    const { x, y, width, index } = props as { x?: number; y?: number; width?: number; index?: number };
+    if (index !== peak || x === undefined || y === undefined) return null;
+    const middle = x + (width ?? 0) / 2;
+    // Cerca del borde izquierdo el texto se ancla a la izquierda para no cortarse.
+    return <text x={peak < 3 ? x : middle} y={y - 8} textAnchor={peak < 3 ? "start" : "middle"} {...onChartText}>{`Máximo: ${fmtInt.format(buckets[peak].count)}`}</text>;
+  };
+  const totalLabel = (props: unknown) => {
+    const { x, y, index } = props as { x?: number; y?: number; index?: number };
+    if (index !== last || x === undefined || y === undefined) return null;
+    return <text x={x} y={y - 10} textAnchor="end" {...onChartText}>{`${fmtInt.format(buckets[last].cumulative)} en total`}</text>;
+  };
   const xAxis = <XAxis dataKey="start" tickFormatter={label} tick={tick} tickLine={false} axisLine={axisLine} minTickGap={28} />;
-  const yAxis = <YAxis allowDecimals={false} tick={tick} tickLine={false} axisLine={false} width={44} />;
+  const yAxis = <YAxis allowDecimals={false} tick={tick} tickLine={false} axisLine={false} width={52} label={axisLabel("Sismos", -90)} />;
   const tooltip = <Tooltip cursor={{ fill: "var(--an-hover)" }} isAnimationActive={false} content={<BucketTip size={size} report={report} />} />;
   const pick = (bucket: Bucket | null | undefined) => { if (bucket && bucket.count > 0 && onPick) onPick(bucket); };
   const onKey = (event: KeyboardEvent) => {
@@ -204,6 +242,7 @@ export function ActivityChart({ buckets, size, mode, selectedStart, onPick }: {
             <CartesianGrid stroke="var(--an-grid)" vertical={false} />
             {xAxis}{yAxis}{tooltip}
             <Bar dataKey="count" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={!reduced} animationDuration={ENTER_MS} animationEasing="ease-out">
+              <LabelList dataKey="count" content={peakLabel} />
               {buckets.map((bucket) => {
                 const chosen = selectedStart !== undefined && selectedStart !== null;
                 const isChosen = bucket.start === selectedStart;
@@ -218,7 +257,9 @@ export function ActivityChart({ buckets, size, mode, selectedStart, onPick }: {
           <AreaChart {...common}>
             <CartesianGrid stroke="var(--an-grid)" vertical={false} />
             {xAxis}{yAxis}{tooltip}
-            <Area dataKey="cumulative" type="stepAfter" stroke="var(--an-s1)" strokeWidth={2} fill="var(--an-s1)" fillOpacity={0.1} dot={false} isAnimationActive={!reduced} animationDuration={ENTER_MS + 200} animationEasing="ease-out" activeDot={{ r: 5, stroke: "var(--an-surface)", strokeWidth: 2, fill: "var(--an-s1)" }} />
+            <Area dataKey="cumulative" type="stepAfter" stroke="var(--an-s1)" strokeWidth={2} fill="var(--an-s1)" fillOpacity={0.1} dot={false} isAnimationActive={!reduced} animationDuration={ENTER_MS + 200} animationEasing="ease-out" activeDot={{ r: 5, stroke: "var(--an-surface)", strokeWidth: 2, fill: "var(--an-s1)" }}>
+              <LabelList dataKey="cumulative" content={totalLabel} />
+            </Area>
           </AreaChart>
         )}
       </ResponsiveContainer>

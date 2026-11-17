@@ -11,6 +11,7 @@ import "./responsive.css";
 import "./usgs-layers.css";
 import "./accessibility.css";
 import "./theme.css";
+import "./transitions.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

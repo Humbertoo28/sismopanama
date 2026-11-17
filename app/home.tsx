@@ -47,6 +47,7 @@ import { createPortal } from "react-dom";
 import { FAR_OFFSHORE, PROVINCE_BY_ID, provinceKey, provinceLabel } from "../lib/province-of";
 import { PROVINCES } from "../lib/provinces";
 import { MAINSHOCK_ID, awaitsConfirmation, independentEventNote, isAftershock, isBeforeMainshock, isIndependentEvent, isUnconfirmed, sameEvent, type Earthquake, type EarthquakeResponse, type FocusRequest, type LiveAlert, type MainshockResponse, type ReplayStep } from "../lib/earthquakes";
+import PageTransition from "./page-transition";
 
 // La lista de sismos en tiempo real se consulta cada 60 s.
 // El sismo principal histórico y conteo de réplicas se consulta cada 5 min (300 s) para proteger cuotas del servidor.
@@ -650,7 +651,7 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
         </nav>
       </header>
 
-      <main id="inicio" className="main-content">
+      <PageTransition><main id="inicio" className="main-content">
         <div className="content-wrap">
           <InAppBrowserNotice />
           <InstallCard />
@@ -761,7 +762,7 @@ export default function Home({ latestFallback }: { latestFallback?: ReactNode })
             <span><a href="/privacidad">Privacidad</a></span>
           </footer>
         </div>
-      </main>
+      </main></PageTransition>
 
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       <AlertModal

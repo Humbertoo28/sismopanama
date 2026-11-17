@@ -10,6 +10,7 @@ import { agoLabel } from "../../lib/quake-facts";
 import { placeTitle as quakePlace } from "../../lib/quake-summary";
 import FeltReport from "../felt-report";
 import ReportsMap from "./reports-map";
+import PageTransition from "../page-transition";
 
 // Página «Reportes»: lo que contaron las personas que sintieron (o no) cada sismo, más lo que publica el USGS de su propio
 // formulario «¿Lo sentiste?». Todo está agrupado por localidad; ningún reporte se muestra suelto.
@@ -144,7 +145,7 @@ export default function ReportsDashboardView({ children }: { children?: ReactNod
 
   const shown = detail?.event;
   return (
-    <main className="rp content-wrap" id="contenido">
+    <PageTransition><main className="rp content-wrap" id="contenido">
       <header className="rp-head">
         <div>
           <h1>Reportes de quienes lo sintieron</h1>
@@ -281,6 +282,6 @@ export default function ReportsDashboardView({ children }: { children?: ReactNod
       )}
       {children}
       {reportFor && <FeltReport event={reportFor} onClose={() => setReportFor(null)} />}
-    </main>
+    </main></PageTransition>
   );
 }

@@ -13,6 +13,7 @@ import SceneSection from "./scene-section";
 import SlipIllustration from "./slip-illustration";
 import "../privacidad/privacidad.css";
 import "./falla.css";
+import PageTransition from "../page-transition";
 
 // Cada afirmación de esta página tiene su fuente enlazada en el mismo párrafo o en «Fuentes». Lo que se verificó al escribirla:
 // - Registro de la falla en la base de datos de GEM (gem_active_faults_harmonized.geojson, 4 de noviembre de 2026): tipo «Dextral», inclinación
@@ -143,7 +144,7 @@ export default async function FallaPedroMiguelPage() {
     <>
       <BreadcrumbStructuredData trail={[{ name: SITE_NAME, path: "/" }, { name: TITLE, path: "/falla-pedro-miguel" }]} />
       <PageHeader current="/falla-pedro-miguel" />
-      <main className="pv-main fp-main">
+      <PageTransition><main className="pv-main fp-main">
         <h1>{TITLE}</h1>
         <p className="pv-updated">Datos publicados, con su fuente. Nada de lo que se ve es un pronóstico: nadie puede predecir cuándo habrá un sismo.</p>
         <p className="fp-prose">
@@ -257,7 +258,7 @@ export default async function FallaPedroMiguelPage() {
             <li>Sismos: <a href={LINKS.igc} {...ext}>IGC-UP</a>, <a href="https://earthquake.usgs.gov/" {...ext}>USGS</a> y <a href="https://www.emsc-csem.org/" {...ext}>EMSC</a>. Nombres de lugares (localidades, esclusas, puentes, aeropuertos, parques): <a href="https://www.geonames.org/" {...ext}>GeoNames</a> (CC BY 4.0). Imágenes del satélite: Esri, Maxar, Earthstar Geographics.</li>
           </ul>
         </section>
-      </main>
+      </main></PageTransition>
     </>
   );
 }

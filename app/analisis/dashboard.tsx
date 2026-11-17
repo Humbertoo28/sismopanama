@@ -13,6 +13,7 @@ import { DepthBars, Legend, MagnitudeBars } from "./bars";
 import type { TimelinePoint } from "./charts";
 import { fmtClock, fmtFull, fmtInt } from "./format";
 import type { Zoom } from "./timeline-panel";
+import PageTransition from "../page-transition";
 
 // Recharts pesa ~115 KB comprimidos y solo lo usan estas dos gráficas: va en un archivo aparte para que filtros, indicadores y
 // barras no tengan que esperarlo. La descarga empieza al abrir la página (efecto de «precarga» del panel), en paralelo con la consulta
@@ -306,7 +307,7 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
         </div>
       )}
 
-      <main className="an-wrap">
+      <PageTransition><main className="an-wrap">
         <section className="an-intro" aria-labelledby="an-title">
           <h1 id="an-title">Sismos registrados</h1>
           <p>Gráficos interactivos con los sismos que publican USGS, IGC y EMSC, tal como los publican. Se actualizan solos: cada vez que entra un sismo nuevo aparece un aviso y los gráficos se ponen al día.</p>
@@ -485,7 +486,7 @@ export default function Dashboard({ children }: { children?: ReactNode }) {
           </>
         )}
         {children}
-      </main>
+      </main></PageTransition>
       <div className="an-sr" aria-live="polite">{announcement}</div>
     </div>
   );

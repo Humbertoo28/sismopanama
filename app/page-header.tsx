@@ -18,6 +18,8 @@ const PAGES = [
 // `children`: algo propio de la página que va en la barra, junto al botón del tema (por ejemplo, «En vivo» en Gráficos).
 // `current`: la página en la que se está (si no está en el menú, como el resumen, ninguna queda marcada).
 export default function PageHeader({ current, children }: { current: string; children?: ReactNode }) {
+  // El contenido se desliza hacia el lado del menú al que se va (transitions.css). Desde una página que no está en el menú, solo sube.
+  const at = PAGES.findIndex(([href]) => href === current);
   return (
     <header className="site-header page-header">
       <div className="site-header-bar">
@@ -31,8 +33,8 @@ export default function PageHeader({ current, children }: { current: string; chi
         </div>
       </div>
       <nav className="page-nav" aria-label="Páginas">
-        {PAGES.map(([href, Icon, label]) => (
-          <Link key={href} href={href} className={href === current ? "active" : ""} aria-current={href === current ? "page" : undefined}>
+        {PAGES.map(([href, Icon, label], index) => (
+          <Link key={href} href={href} transitionTypes={at < 0 || index === at ? undefined : [index > at ? "nav-forward" : "nav-back"]} className={href === current ? "active" : ""} aria-current={href === current ? "page" : undefined}>
             <Icon aria-hidden="true" size={20} /><span>{label}</span>
           </Link>
         ))}

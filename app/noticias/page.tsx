@@ -6,6 +6,7 @@ import { OFFICIAL_ACCOUNTS, type OfficialAccount } from "../../lib/official-acco
 import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import "./noticias.css";
+import PageTransition from "../page-transition";
 
 const { sinaproc: SINAPROC, meduca: MEDUCA } = SOURCES;
 
@@ -133,7 +134,7 @@ export default async function NoticiasPage() {
       <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Noticias sobre el sismo", path: "/noticias" }]} />
       <PageHeader current="/noticias" />
 
-      <main className="nw-wrap">
+      <PageTransition><main className="nw-wrap">
         <section className="nw-intro" aria-labelledby="nw-title">
           <h1 id="nw-title">Noticias sobre el sismo</h1>
           <p>
@@ -262,7 +263,7 @@ export default async function NoticiasPage() {
             </p>
           </section>
         )}
-      </main>
+      </main></PageTransition>
     </div>
   );
 }

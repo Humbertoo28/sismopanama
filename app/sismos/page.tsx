@@ -9,6 +9,7 @@ import { SITE_NAME, SITE_URL, pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData, jsonLd } from "../structured-data";
 import { isoTime, longDate, magText, plural, shortDate } from "./format";
 import "./sismos.css";
+import PageTransition from "../page-transition";
 
 const TITLE = "Sismos por provincia y comarca en Panamá";
 const DESCRIPTION = `El último sismo y los conteos de cada provincia y comarca de Panamá desde el ${SEQUENCE_START_TEXT}, con datos del IGC-UP, el USGS y el EMSC.`;
@@ -37,7 +38,7 @@ export default async function ProvincesIndexPage() {
         itemListElement: PROVINCES.map((province, index) => ({ "@type": "ListItem", position: index + 1, name: `Sismos en ${provinceNoun(province)}`, url: `${SITE_URL}/sismos/${province.id}` })),
       })}
       <PageHeader current="/sismos" />
-      <main className="pr-main">
+      <PageTransition><main className="pr-main">
         <nav className="pr-crumbs" aria-label="Ruta de navegación">
           <Link href="/">Inicio</Link> › <span aria-current="page">Sismos por provincia</span>
         </nav>
@@ -88,7 +89,7 @@ export default async function ProvincesIndexPage() {
           duplicados; las magnitudes pueden cambiar cuando las agencias las revisan. Esta página no predice sismos ni reemplaza los avisos oficiales de{" "}
           <a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC</a>. Mapa completo en la <Link href="/">portada</Link>.
         </p>
-      </main>
+      </main></PageTransition>
     </>
   );
 }

@@ -1,0 +1,73 @@
+/* Transiciones entre pantallas y entrada de las páginas de texto.
+   - Enlaces <Link> (navegación sin recargar): las anima React con <ViewTransition> (page-transition.tsx).
+   - Enlaces <a> (cargan la página entera): las anima el navegador con @view-transition.
+   En navegadores sin soporte no pasa nada: la página cambia como antes.
+   Todo se apaga con prefers-reduced-motion y con «Reducir animaciones» (al final del archivo). */
+
+@view-transition { navigation: auto; types: doc; }
+
+/* Lo que no se mueve: el encabezado, la barra inferior del celular y el botón de accesibilidad quedan por encima del contenido. */
+.site-header { view-transition-name: site-header; }
+.a11y-fab { view-transition-name: a11y-fab; }
+@media (max-width: 700px) {
+  .site-nav, .page-nav { view-transition-name: site-nav; }
+}
+::view-transition-group(site-header), ::view-transition-group(site-nav), ::view-transition-group(a11y-fab) { z-index: 10; animation-duration: .22s; }
+/* Mientras dura, los toques pasan a la página (si no, se pierden). */
+::view-transition { pointer-events: none; }
+
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translate(var(--vt-x, 0), var(--vt-y, 0)); } }
+@keyframes vt-slide-out { to { opacity: 0; transform: translateX(var(--vt-x, 0)); } }
+
+/* Por defecto: lo viejo se va rápido y lo nuevo sube un poco. (El fondo de la página vieja también se va rápido.) */
+::view-transition-old(root) { animation-duration: .16s; }
+::view-transition-old(.page) { animation: .14s ease-in both vt-out; }
+::view-transition-new(.page) { --vt-y: 14px; animation: .34s cubic-bezier(.2, .7, .2, 1) .08s both vt-in; }
+html:active-view-transition-type(doc)::view-transition-old(root) { animation: .14s ease-in both vt-out; }
+html:active-view-transition-type(doc)::view-transition-new(root) { --vt-y: 14px; animation: .34s cubic-bezier(.2, .7, .2, 1) .08s both vt-in; }
+
+/* Entre las pestañas del menú: hacia la derecha del menú el contenido entra por la derecha, y al revés. */
+::view-transition-old(.nav-forward) { --vt-x: -40px; animation: .16s ease-in both vt-slide-out; }
+::view-transition-new(.nav-forward) { --vt-x: 40px; animation: .36s cubic-bezier(.2, .7, .2, 1) .07s both vt-in; }
+::view-transition-old(.nav-back) { --vt-x: 40px; animation: .16s ease-in both vt-slide-out; }
+::view-transition-new(.nav-back) { --vt-x: -40px; animation: .36s cubic-bezier(.2, .7, .2, 1) .07s both vt-in; }
+
+/* ---------- Páginas que no tenían movimiento: provincias, noticias, resumen, acerca, privacidad y la falla ---------- */
+
+/* Al abrir: el título y lo primero entran escalonados. */
+:is(.pr-main, .pv-main, .rs-main, .nw-wrap) > :nth-child(-n+5) { animation: rise .6s cubic-bezier(.2, .7, .2, 1) backwards; }
+:is(.pr-main, .pv-main, .rs-main, .nw-wrap) > :nth-child(2) { animation-delay: .06s; }
+:is(.pr-main, .pv-main, .rs-main, .nw-wrap) > :nth-child(3) { animation-delay: .12s; }
+:is(.pr-main, .pv-main, .rs-main, .nw-wrap) > :nth-child(4) { animation-delay: .18s; }
+:is(.pr-main, .pv-main, .rs-main, .nw-wrap) > :nth-child(5) { animation-delay: .24s; }
+/* La raya roja bajo el título se dibuja de izquierda a derecha. */
+@keyframes vt-rule { from { transform: scaleX(0); } }
+:is(.pr-main, .pv-main, .rs-main, .nw-intro) h1::after { transform-origin: left; animation: vt-rule .6s .25s cubic-bezier(.2, .7, .2, 1) backwards; }
+
+/* Al bajar: las tarjetas y las filas aparecen cuando llegan a la pantalla (solo donde el navegador lo permite; si no, ya están). */
+@keyframes vt-reveal { from { opacity: 0; transform: translateY(18px); } }
+@supports (animation-timeline: view()) {
+  :is(.pr-main > .pr-card:nth-child(n+6), .pr-grid > li, .nw-wrap > .nw-section:nth-child(n+6), .nw-item, .rs-main > :nth-child(n+6), .rs-card) {
+    animation: vt-reveal linear both; animation-timeline: view(); animation-range: entry 0% entry 45%;
+  }
+}
+
+/* Al tocar o pasar el cursor: las tarjetas y los botones responden. */
+.pr-province, .pr-links a, .nw-item { transition: transform .18s cubic-bezier(.2, .7, .2, 1), border-color .18s, box-shadow .18s, background-color .18s; }
+@media (hover: hover) {
+  .pr-province:hover { transform: translateY(-3px); box-shadow: 0 10px 24px #0b2a5b1f; }
+  .pr-links a:hover { transform: translateY(-2px); }
+}
+.pr-province:active, .pr-links a:active { transform: scale(.98); }
+
+/* ---------- Sin movimiento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  :is(.pr-main, .pv-main, .rs-main, .nw-wrap) :is(*, *::after) { animation: none !important; }
+  .pr-province, .pr-links a, .nw-item { transition: none; transform: none !important; }
+}
+html[data-a11y-motion="reduce"]::view-transition-group(*), html[data-a11y-motion="reduce"]::view-transition-old(*), html[data-a11y-motion="reduce"]::view-transition-new(*) { animation: none !important; }
+html[data-a11y-motion="reduce"] :is(.pr-main, .pv-main, .rs-main, .nw-wrap) :is(*, *::after) { animation: none !important; }
+html[data-a11y-motion="reduce"] :is(.pr-province, .pr-links a, .nw-item) { transform: none !important; }

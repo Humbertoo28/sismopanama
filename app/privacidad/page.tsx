@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "../page-header";
 import { pageSocial } from "../../lib/site";
 import "./privacidad.css";
+import PageTransition from "../page-transition";
 
 const TITLE = "Política de privacidad";
 const DESCRIPTION = "Qué datos usa Ojo Panamá (la web y la app), para qué, dónde se guardan y cómo borrarlos.";
@@ -19,7 +20,7 @@ export default function PrivacidadPage() {
   return (
     <>
       <PageHeader current="/privacidad" />
-      <main className="pv-main">
+      <PageTransition><main className="pv-main">
         <h1>{TITLE}</h1>
         <p className="pv-updated">Última actualización: 12 de octubre de 2026.</p>
         <p>
@@ -88,7 +89,7 @@ export default function PrivacidadPage() {
 
         <h2>Cambios</h2>
         <p>Si cambia lo que hacemos con los datos, lo actualizaremos en esta página con la fecha del cambio.</p>
-      </main>
+      </main></PageTransition>
     </>
   );
 }

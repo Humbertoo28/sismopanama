@@ -16,6 +16,7 @@ import { outlinePath, px, py } from "./frame";
 import TopMap from "./top-map";
 import { subsetIndex, type PlaceIndex } from "./place-index";
 import "./historia.css";
+import PageTransition from "../page-transition";
 
 const TITLE = "Historia sísmica de Panamá: sismos grandes desde 1900";
 const DESCRIPTION =
@@ -95,10 +96,10 @@ export default async function HistoriaPage() {
     <>
       <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Historia sísmica", path: "/historia" }]} />
       <PageHeader current="/historia" />
-      <main className="hs-main" id="contenido">
+      <PageTransition><main className="hs-main" id="contenido">
         <h1>Sismos grandes en Panamá desde 1900</h1>
         {data ? <Body summary={data.summary} panama={data.panama} noaa={data.noaa} provinceTexts={data.provinceTexts} placeIndex={data.placeIndex} /> : <Unavailable />}
-      </main>
+      </main></PageTransition>
     </>
   );
 }

@@ -3,6 +3,7 @@ import PageHeader from "../page-header";
 import { INSTAGRAM_URL, SITE_NAME, SITE_URL, pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData, jsonLd } from "../structured-data";
 import "../privacidad/privacidad.css";
+import PageTransition from "../page-transition";
 
 const TITLE = "Acerca del proyecto y sus fuentes de datos";
 const DESCRIPTION = "Quién hace Ojo Panamá, de dónde salen sus datos de sismos, cada cuánto se actualizan, qué no hace y cómo contactarnos.";
@@ -30,7 +31,7 @@ export default function AcercaPage() {
         mainEntity: { "@id": `${SITE_URL}/#organization` },
       })}
       <PageHeader current="/acerca" />
-      <main className="pv-main">
+      <PageTransition><main className="pv-main">
         <h1>Acerca de Ojo Panamá</h1>
         <p className="pv-updated">Última actualización: 28 de octubre de 2026.</p>
         <p>
@@ -94,7 +95,7 @@ export default function AcercaPage() {
         <p>
           Escríbenos por Instagram a <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer me">@ojopanama507</a>.
         </p>
-      </main>
+      </main></PageTransition>
     </>
   );
 }

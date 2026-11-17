@@ -6,6 +6,7 @@ import { pageSocial } from "../../lib/site";
 import { BreadcrumbStructuredData } from "../structured-data";
 import LiveSummary from "./live-summary";
 import "./resumen.css";
+import PageTransition from "../page-transition";
 
 const TITLE = "Resumen de sismos en texto sencillo";
 const DESCRIPTION = "Los sismos y réplicas de Panamá en frases cortas y sin símbolos, fáciles de leer, con descarga en texto.";
@@ -30,10 +31,10 @@ export default async function ResumenPage() {
     <>
       <BreadcrumbStructuredData trail={[{ name: "Ojo Panamá", path: "/" }, { name: "Resumen en texto sencillo", path: "/resumen" }]} />
       <PageHeader current="/resumen" />
-      <main className="rs-main">
+      <PageTransition><main className="rs-main">
         <h1>Resumen de sismos en Panamá</h1>
         <LiveSummary initial={summary} />
-      </main>
+      </main></PageTransition>
     </>
   );
 }

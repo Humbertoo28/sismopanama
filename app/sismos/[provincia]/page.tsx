@@ -13,6 +13,7 @@ import { SITE_NAME, pageSocial } from "../../../lib/site";
 import { BreadcrumbStructuredData } from "../../structured-data";
 import { depthText, isoTime, longDate, magLevel, magText, plural, shortDate } from "../format";
 import "../sismos.css";
+import PageTransition from "../../page-transition";
 
 // Se regenera como mucho cada minuto, igual que /resumen. Solo existen las 13 provincias y comarcas: cualquier otra dirección da 404.
 export const revalidate = 60;
@@ -82,7 +83,7 @@ export default async function ProvincePage({ params }: Props) {
     <>
       <BreadcrumbStructuredData trail={[{ name: SITE_NAME, path: "/" }, { name: "Sismos por provincia", path: "/sismos" }, { name: province.name, path: `/sismos/${province.id}` }]} />
       <PageHeader current="/sismos" />
-      <main className="pr-main">
+      <PageTransition><main className="pr-main">
         <nav className="pr-crumbs" aria-label="Ruta de navegación">
           <Link href="/">Inicio</Link> › <Link href="/sismos">Sismos por provincia</Link> › <span aria-current="page">{province.name}</span>
         </nav>
@@ -223,7 +224,7 @@ export default async function ProvincePage({ params }: Props) {
           comarcas: © colaboradores de OpenStreetMap (ODbL), vía geoBoundaries; localidades: GeoNames (CC BY 4.0). Esta página no predice sismos ni reemplaza
           los avisos oficiales de <a href="https://www.sinaproc.gob.pa/" target="_blank" rel="noopener noreferrer">SINAPROC</a>. Si hay peligro para la vida, llama al 911.
         </p>
-      </main>
+      </main></PageTransition>
     </>
   );
 }
